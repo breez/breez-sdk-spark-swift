@@ -857,9 +857,9 @@ public protocol BreezSdkProtocol : AnyObject {
     /**
      * Returns the balance of the wallet in satoshis
      */
-    func getInfo(request: GetInfoRequest) throws  -> GetInfoResponse
+    func getInfo(request: GetInfoRequest) async throws  -> GetInfoResponse
     
-    func getPayment(request: GetPaymentRequest) throws  -> GetPaymentResponse
+    func getPayment(request: GetPaymentRequest) async throws  -> GetPaymentResponse
     
     /**
      * Lists payments from the storage with pagination
@@ -877,9 +877,9 @@ public protocol BreezSdkProtocol : AnyObject {
      * * `Err(SdkError)` - If there was an error accessing the storage
 
      */
-    func listPayments(request: ListPaymentsRequest) throws  -> ListPaymentsResponse
+    func listPayments(request: ListPaymentsRequest) async throws  -> ListPaymentsResponse
     
-    func listUnclaimedDeposits(request: ListUnclaimedDepositsRequest) throws  -> ListUnclaimedDepositsResponse
+    func listUnclaimedDeposits(request: ListUnclaimedDepositsRequest) async throws  -> ListUnclaimedDepositsResponse
     
     func lnurlPay(request: LnurlPayRequest) async throws  -> LnurlPayResponse
     
@@ -1026,20 +1026,38 @@ open func disconnect()throws  {try rustCallWithError(FfiConverterTypeSdkError.li
     /**
      * Returns the balance of the wallet in satoshis
      */
-open func getInfo(request: GetInfoRequest)throws  -> GetInfoResponse {
-    return try  FfiConverterTypeGetInfoResponse.lift(try rustCallWithError(FfiConverterTypeSdkError.lift) {
-    uniffi_breez_sdk_spark_fn_method_breezsdk_get_info(self.uniffiClonePointer(),
-        FfiConverterTypeGetInfoRequest.lower(request),$0
-    )
-})
+open func getInfo(request: GetInfoRequest)async throws  -> GetInfoResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_get_info(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeGetInfoRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeGetInfoResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
 }
     
-open func getPayment(request: GetPaymentRequest)throws  -> GetPaymentResponse {
-    return try  FfiConverterTypeGetPaymentResponse.lift(try rustCallWithError(FfiConverterTypeSdkError.lift) {
-    uniffi_breez_sdk_spark_fn_method_breezsdk_get_payment(self.uniffiClonePointer(),
-        FfiConverterTypeGetPaymentRequest.lower(request),$0
-    )
-})
+open func getPayment(request: GetPaymentRequest)async throws  -> GetPaymentResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_get_payment(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeGetPaymentRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeGetPaymentResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
 }
     
     /**
@@ -1058,20 +1076,38 @@ open func getPayment(request: GetPaymentRequest)throws  -> GetPaymentResponse {
      * * `Err(SdkError)` - If there was an error accessing the storage
 
      */
-open func listPayments(request: ListPaymentsRequest)throws  -> ListPaymentsResponse {
-    return try  FfiConverterTypeListPaymentsResponse.lift(try rustCallWithError(FfiConverterTypeSdkError.lift) {
-    uniffi_breez_sdk_spark_fn_method_breezsdk_list_payments(self.uniffiClonePointer(),
-        FfiConverterTypeListPaymentsRequest.lower(request),$0
-    )
-})
+open func listPayments(request: ListPaymentsRequest)async throws  -> ListPaymentsResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_list_payments(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeListPaymentsRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeListPaymentsResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
 }
     
-open func listUnclaimedDeposits(request: ListUnclaimedDepositsRequest)throws  -> ListUnclaimedDepositsResponse {
-    return try  FfiConverterTypeListUnclaimedDepositsResponse.lift(try rustCallWithError(FfiConverterTypeSdkError.lift) {
-    uniffi_breez_sdk_spark_fn_method_breezsdk_list_unclaimed_deposits(self.uniffiClonePointer(),
-        FfiConverterTypeListUnclaimedDepositsRequest.lower(request),$0
-    )
-})
+open func listUnclaimedDeposits(request: ListUnclaimedDepositsRequest)async throws  -> ListUnclaimedDepositsResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_list_unclaimed_deposits(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeListUnclaimedDepositsRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeListUnclaimedDepositsResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
 }
     
 open func lnurlPay(request: LnurlPayRequest)async throws  -> LnurlPayResponse {
@@ -1534,9 +1570,9 @@ public func FfiConverterTypeSdkBuilder_lower(_ value: SdkBuilder) -> UnsafeMutab
  */
 public protocol Storage : AnyObject {
     
-    func getCachedItem(key: String) throws  -> String?
+    func getCachedItem(key: String) async throws  -> String?
     
-    func setCachedItem(key: String, value: String) throws 
+    func setCachedItem(key: String, value: String) async throws 
     
     /**
      * Lists payments with pagination
@@ -1550,7 +1586,7 @@ public protocol Storage : AnyObject {
      *
      * A vector of payments or a `StorageError`
      */
-    func listPayments(offset: UInt32?, limit: UInt32?) throws  -> [Payment]
+    func listPayments(offset: UInt32?, limit: UInt32?) async throws  -> [Payment]
     
     /**
      * Inserts a payment into storage
@@ -1563,7 +1599,7 @@ public protocol Storage : AnyObject {
      *
      * Success or a `StorageError`
      */
-    func insertPayment(payment: Payment) throws 
+    func insertPayment(payment: Payment) async throws 
     
     /**
      * Inserts payment metadata into storage
@@ -1577,7 +1613,7 @@ public protocol Storage : AnyObject {
      *
      * Success or a `StorageError`
      */
-    func setPaymentMetadata(paymentId: String, metadata: PaymentMetadata) throws 
+    func setPaymentMetadata(paymentId: String, metadata: PaymentMetadata) async throws 
     
     /**
      * Gets a payment by its ID
@@ -1589,7 +1625,7 @@ public protocol Storage : AnyObject {
      *
      * The payment if found or None if not found
      */
-    func getPaymentById(id: String) throws  -> Payment
+    func getPaymentById(id: String) async throws  -> Payment
     
     /**
      * Add a deposit to storage
@@ -1603,7 +1639,7 @@ public protocol Storage : AnyObject {
      *
      * Success or a `StorageError`
      */
-    func addDeposit(txid: String, vout: UInt32, amountSats: UInt64) throws 
+    func addDeposit(txid: String, vout: UInt32, amountSats: UInt64) async throws 
     
     /**
      * Removes an unclaimed deposit from storage
@@ -1616,7 +1652,7 @@ public protocol Storage : AnyObject {
      *
      * Success or a `StorageError`
      */
-    func deleteDeposit(txid: String, vout: UInt32) throws 
+    func deleteDeposit(txid: String, vout: UInt32) async throws 
     
     /**
      * Lists all unclaimed deposits from storage
@@ -1624,7 +1660,7 @@ public protocol Storage : AnyObject {
      *
      * A vector of `DepositInfo` or a `StorageError`
      */
-    func listDeposits() throws  -> [DepositInfo]
+    func listDeposits() async throws  -> [DepositInfo]
     
     /**
      * Updates or inserts unclaimed deposit details
@@ -1638,7 +1674,7 @@ public protocol Storage : AnyObject {
      *
      * Success or a `StorageError`
      */
-    func updateDeposit(txid: String, vout: UInt32, payload: UpdateDepositPayload) throws 
+    func updateDeposit(txid: String, vout: UInt32, payload: UpdateDepositPayload) async throws 
     
 }
 
@@ -1695,20 +1731,38 @@ open class StorageImpl:
     
 
     
-open func getCachedItem(key: String)throws  -> String? {
-    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeStorageError.lift) {
-    uniffi_breez_sdk_spark_fn_method_storage_get_cached_item(self.uniffiClonePointer(),
-        FfiConverterString.lower(key),$0
-    )
-})
+open func getCachedItem(key: String)async throws  -> String? {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_get_cached_item(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(key)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionString.lift,
+            errorHandler: FfiConverterTypeStorageError.lift
+        )
 }
     
-open func setCachedItem(key: String, value: String)throws  {try rustCallWithError(FfiConverterTypeStorageError.lift) {
-    uniffi_breez_sdk_spark_fn_method_storage_set_cached_item(self.uniffiClonePointer(),
-        FfiConverterString.lower(key),
-        FfiConverterString.lower(value),$0
-    )
-}
+open func setCachedItem(key: String, value: String)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_set_cached_item(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(key),FfiConverterString.lower(value)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeStorageError.lift
+        )
 }
     
     /**
@@ -1723,13 +1777,21 @@ open func setCachedItem(key: String, value: String)throws  {try rustCallWithErro
      *
      * A vector of payments or a `StorageError`
      */
-open func listPayments(offset: UInt32?, limit: UInt32?)throws  -> [Payment] {
-    return try  FfiConverterSequenceTypePayment.lift(try rustCallWithError(FfiConverterTypeStorageError.lift) {
-    uniffi_breez_sdk_spark_fn_method_storage_list_payments(self.uniffiClonePointer(),
-        FfiConverterOptionUInt32.lower(offset),
-        FfiConverterOptionUInt32.lower(limit),$0
-    )
-})
+open func listPayments(offset: UInt32?, limit: UInt32?)async throws  -> [Payment] {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_list_payments(
+                    self.uniffiClonePointer(),
+                    FfiConverterOptionUInt32.lower(offset),FfiConverterOptionUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypePayment.lift,
+            errorHandler: FfiConverterTypeStorageError.lift
+        )
 }
     
     /**
@@ -1743,11 +1805,21 @@ open func listPayments(offset: UInt32?, limit: UInt32?)throws  -> [Payment] {
      *
      * Success or a `StorageError`
      */
-open func insertPayment(payment: Payment)throws  {try rustCallWithError(FfiConverterTypeStorageError.lift) {
-    uniffi_breez_sdk_spark_fn_method_storage_insert_payment(self.uniffiClonePointer(),
-        FfiConverterTypePayment.lower(payment),$0
-    )
-}
+open func insertPayment(payment: Payment)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_insert_payment(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePayment.lower(payment)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeStorageError.lift
+        )
 }
     
     /**
@@ -1762,12 +1834,21 @@ open func insertPayment(payment: Payment)throws  {try rustCallWithError(FfiConve
      *
      * Success or a `StorageError`
      */
-open func setPaymentMetadata(paymentId: String, metadata: PaymentMetadata)throws  {try rustCallWithError(FfiConverterTypeStorageError.lift) {
-    uniffi_breez_sdk_spark_fn_method_storage_set_payment_metadata(self.uniffiClonePointer(),
-        FfiConverterString.lower(paymentId),
-        FfiConverterTypePaymentMetadata.lower(metadata),$0
-    )
-}
+open func setPaymentMetadata(paymentId: String, metadata: PaymentMetadata)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_set_payment_metadata(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(paymentId),FfiConverterTypePaymentMetadata.lower(metadata)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeStorageError.lift
+        )
 }
     
     /**
@@ -1780,12 +1861,21 @@ open func setPaymentMetadata(paymentId: String, metadata: PaymentMetadata)throws
      *
      * The payment if found or None if not found
      */
-open func getPaymentById(id: String)throws  -> Payment {
-    return try  FfiConverterTypePayment.lift(try rustCallWithError(FfiConverterTypeStorageError.lift) {
-    uniffi_breez_sdk_spark_fn_method_storage_get_payment_by_id(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
-    )
-})
+open func getPaymentById(id: String)async throws  -> Payment {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_get_payment_by_id(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(id)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePayment.lift,
+            errorHandler: FfiConverterTypeStorageError.lift
+        )
 }
     
     /**
@@ -1800,13 +1890,21 @@ open func getPaymentById(id: String)throws  -> Payment {
      *
      * Success or a `StorageError`
      */
-open func addDeposit(txid: String, vout: UInt32, amountSats: UInt64)throws  {try rustCallWithError(FfiConverterTypeStorageError.lift) {
-    uniffi_breez_sdk_spark_fn_method_storage_add_deposit(self.uniffiClonePointer(),
-        FfiConverterString.lower(txid),
-        FfiConverterUInt32.lower(vout),
-        FfiConverterUInt64.lower(amountSats),$0
-    )
-}
+open func addDeposit(txid: String, vout: UInt32, amountSats: UInt64)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_add_deposit(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(txid),FfiConverterUInt32.lower(vout),FfiConverterUInt64.lower(amountSats)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeStorageError.lift
+        )
 }
     
     /**
@@ -1820,12 +1918,21 @@ open func addDeposit(txid: String, vout: UInt32, amountSats: UInt64)throws  {try
      *
      * Success or a `StorageError`
      */
-open func deleteDeposit(txid: String, vout: UInt32)throws  {try rustCallWithError(FfiConverterTypeStorageError.lift) {
-    uniffi_breez_sdk_spark_fn_method_storage_delete_deposit(self.uniffiClonePointer(),
-        FfiConverterString.lower(txid),
-        FfiConverterUInt32.lower(vout),$0
-    )
-}
+open func deleteDeposit(txid: String, vout: UInt32)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_delete_deposit(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(txid),FfiConverterUInt32.lower(vout)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeStorageError.lift
+        )
 }
     
     /**
@@ -1834,11 +1941,21 @@ open func deleteDeposit(txid: String, vout: UInt32)throws  {try rustCallWithErro
      *
      * A vector of `DepositInfo` or a `StorageError`
      */
-open func listDeposits()throws  -> [DepositInfo] {
-    return try  FfiConverterSequenceTypeDepositInfo.lift(try rustCallWithError(FfiConverterTypeStorageError.lift) {
-    uniffi_breez_sdk_spark_fn_method_storage_list_deposits(self.uniffiClonePointer(),$0
-    )
-})
+open func listDeposits()async throws  -> [DepositInfo] {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_list_deposits(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeDepositInfo.lift,
+            errorHandler: FfiConverterTypeStorageError.lift
+        )
 }
     
     /**
@@ -1853,13 +1970,21 @@ open func listDeposits()throws  -> [DepositInfo] {
      *
      * Success or a `StorageError`
      */
-open func updateDeposit(txid: String, vout: UInt32, payload: UpdateDepositPayload)throws  {try rustCallWithError(FfiConverterTypeStorageError.lift) {
-    uniffi_breez_sdk_spark_fn_method_storage_update_deposit(self.uniffiClonePointer(),
-        FfiConverterString.lower(txid),
-        FfiConverterUInt32.lower(vout),
-        FfiConverterTypeUpdateDepositPayload.lower(payload),$0
-    )
-}
+open func updateDeposit(txid: String, vout: UInt32, payload: UpdateDepositPayload)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_update_deposit(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(txid),FfiConverterUInt32.lower(vout),FfiConverterTypeUpdateDepositPayload.lower(payload)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeStorageError.lift
+        )
 }
     
 
@@ -1875,266 +2000,434 @@ fileprivate struct UniffiCallbackInterfaceStorage {
         getCachedItem: { (
             uniffiHandle: UInt64,
             key: RustBuffer,
-            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () throws -> String? in
+                () async throws -> String? in
                 guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.getCachedItem(
+                return try await uniffiObj.getCachedItem(
                      key: try FfiConverterString.lift(key)
                 )
             }
 
-            
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterOptionString.lower($0) }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: String?) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterOptionString.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
                 lowerError: FfiConverterTypeStorageError.lower
             )
+            uniffiOutReturn.pointee = uniffiForeignFuture
         },
         setCachedItem: { (
             uniffiHandle: UInt64,
             key: RustBuffer,
             value: RustBuffer,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () throws -> () in
+                () async throws -> () in
                 guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.setCachedItem(
+                return try await uniffiObj.setCachedItem(
                      key: try FfiConverterString.lift(key),
                      value: try FfiConverterString.lift(value)
                 )
             }
 
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
                 lowerError: FfiConverterTypeStorageError.lower
             )
+            uniffiOutReturn.pointee = uniffiForeignFuture
         },
         listPayments: { (
             uniffiHandle: UInt64,
             offset: RustBuffer,
             limit: RustBuffer,
-            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () throws -> [Payment] in
+                () async throws -> [Payment] in
                 guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.listPayments(
+                return try await uniffiObj.listPayments(
                      offset: try FfiConverterOptionUInt32.lift(offset),
                      limit: try FfiConverterOptionUInt32.lift(limit)
                 )
             }
 
-            
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterSequenceTypePayment.lower($0) }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: [Payment]) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterSequenceTypePayment.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
                 lowerError: FfiConverterTypeStorageError.lower
             )
+            uniffiOutReturn.pointee = uniffiForeignFuture
         },
         insertPayment: { (
             uniffiHandle: UInt64,
             payment: RustBuffer,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () throws -> () in
+                () async throws -> () in
                 guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.insertPayment(
+                return try await uniffiObj.insertPayment(
                      payment: try FfiConverterTypePayment.lift(payment)
                 )
             }
 
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
                 lowerError: FfiConverterTypeStorageError.lower
             )
+            uniffiOutReturn.pointee = uniffiForeignFuture
         },
         setPaymentMetadata: { (
             uniffiHandle: UInt64,
             paymentId: RustBuffer,
             metadata: RustBuffer,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () throws -> () in
+                () async throws -> () in
                 guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.setPaymentMetadata(
+                return try await uniffiObj.setPaymentMetadata(
                      paymentId: try FfiConverterString.lift(paymentId),
                      metadata: try FfiConverterTypePaymentMetadata.lift(metadata)
                 )
             }
 
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
                 lowerError: FfiConverterTypeStorageError.lower
             )
+            uniffiOutReturn.pointee = uniffiForeignFuture
         },
         getPaymentById: { (
             uniffiHandle: UInt64,
             id: RustBuffer,
-            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () throws -> Payment in
+                () async throws -> Payment in
                 guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.getPaymentById(
+                return try await uniffiObj.getPaymentById(
                      id: try FfiConverterString.lift(id)
                 )
             }
 
-            
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypePayment.lower($0) }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: Payment) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterTypePayment.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
                 lowerError: FfiConverterTypeStorageError.lower
             )
+            uniffiOutReturn.pointee = uniffiForeignFuture
         },
         addDeposit: { (
             uniffiHandle: UInt64,
             txid: RustBuffer,
             vout: UInt32,
             amountSats: UInt64,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () throws -> () in
+                () async throws -> () in
                 guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.addDeposit(
+                return try await uniffiObj.addDeposit(
                      txid: try FfiConverterString.lift(txid),
                      vout: try FfiConverterUInt32.lift(vout),
                      amountSats: try FfiConverterUInt64.lift(amountSats)
                 )
             }
 
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
                 lowerError: FfiConverterTypeStorageError.lower
             )
+            uniffiOutReturn.pointee = uniffiForeignFuture
         },
         deleteDeposit: { (
             uniffiHandle: UInt64,
             txid: RustBuffer,
             vout: UInt32,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () throws -> () in
+                () async throws -> () in
                 guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.deleteDeposit(
+                return try await uniffiObj.deleteDeposit(
                      txid: try FfiConverterString.lift(txid),
                      vout: try FfiConverterUInt32.lift(vout)
                 )
             }
 
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
                 lowerError: FfiConverterTypeStorageError.lower
             )
+            uniffiOutReturn.pointee = uniffiForeignFuture
         },
         listDeposits: { (
             uniffiHandle: UInt64,
-            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () throws -> [DepositInfo] in
+                () async throws -> [DepositInfo] in
                 guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.listDeposits(
+                return try await uniffiObj.listDeposits(
                 )
             }
 
-            
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterSequenceTypeDepositInfo.lower($0) }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: [DepositInfo]) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterSequenceTypeDepositInfo.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
                 lowerError: FfiConverterTypeStorageError.lower
             )
+            uniffiOutReturn.pointee = uniffiForeignFuture
         },
         updateDeposit: { (
             uniffiHandle: UInt64,
             txid: RustBuffer,
             vout: UInt32,
             payload: RustBuffer,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () throws -> () in
+                () async throws -> () in
                 guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.updateDeposit(
+                return try await uniffiObj.updateDeposit(
                      txid: try FfiConverterString.lift(txid),
                      vout: try FfiConverterUInt32.lift(vout),
                      payload: try FfiConverterTypeUpdateDepositPayload.lift(payload)
                 )
             }
 
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
                 lowerError: FfiConverterTypeStorageError.lower
             )
+            uniffiOutReturn.pointee = uniffiForeignFuture
         },
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             let result = try? FfiConverterTypeStorage.handleMap.remove(handle: uniffiHandle)
@@ -2338,13 +2631,15 @@ public func FfiConverterTypeClaimDepositResponse_lower(_ value: ClaimDepositResp
 
 
 public struct Config {
+    public var apiKey: String?
     public var network: Network
     public var syncIntervalSecs: UInt32
     public var maxDepositClaimFee: Fee?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(network: Network, syncIntervalSecs: UInt32, maxDepositClaimFee: Fee?) {
+    public init(apiKey: String?, network: Network, syncIntervalSecs: UInt32, maxDepositClaimFee: Fee?) {
+        self.apiKey = apiKey
         self.network = network
         self.syncIntervalSecs = syncIntervalSecs
         self.maxDepositClaimFee = maxDepositClaimFee
@@ -2355,6 +2650,9 @@ public struct Config {
 
 extension Config: Equatable, Hashable {
     public static func ==(lhs: Config, rhs: Config) -> Bool {
+        if lhs.apiKey != rhs.apiKey {
+            return false
+        }
         if lhs.network != rhs.network {
             return false
         }
@@ -2368,6 +2666,7 @@ extension Config: Equatable, Hashable {
     }
 
     public func hash(into hasher: inout Hasher) {
+        hasher.combine(apiKey)
         hasher.combine(network)
         hasher.combine(syncIntervalSecs)
         hasher.combine(maxDepositClaimFee)
@@ -2382,6 +2681,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Config {
         return
             try Config(
+                apiKey: FfiConverterOptionString.read(from: &buf), 
                 network: FfiConverterTypeNetwork.read(from: &buf), 
                 syncIntervalSecs: FfiConverterUInt32.read(from: &buf), 
                 maxDepositClaimFee: FfiConverterOptionTypeFee.read(from: &buf)
@@ -2389,6 +2689,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
     }
 
     public static func write(_ value: Config, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.apiKey, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterUInt32.write(value.syncIntervalSecs, into: &buf)
         FfiConverterOptionTypeFee.write(value.maxDepositClaimFee, into: &buf)
@@ -6038,9 +6339,6 @@ public enum StorageError {
 
     
     
-    /**
-     * `SQLite` error
-     */
     case Implementation(String
     )
     /**
@@ -6983,16 +7281,16 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_disconnect() != 30986) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_info() != 6945) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_info() != 6771) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_payment() != 14489) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_payment() != 11540) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_list_payments() != 35179) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_list_payments() != 16156) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_list_unclaimed_deposits() != 24746) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_list_unclaimed_deposits() != 22486) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_lnurl_pay() != 10147) {
@@ -7037,34 +7335,34 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_rest_chain_service() != 56288) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_cached_item() != 13172) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_cached_item() != 11423) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_set_cached_item() != 27060) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_set_cached_item() != 17965) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_list_payments() != 26316) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_list_payments() != 55103) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_insert_payment() != 41310) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_insert_payment() != 35649) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_set_payment_metadata() != 23022) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_set_payment_metadata() != 780) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_payment_by_id() != 37884) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_payment_by_id() != 32084) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_add_deposit() != 57479) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_add_deposit() != 31647) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_delete_deposit() != 57536) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_delete_deposit() != 19211) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_list_deposits() != 18836) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_list_deposits() != 11262) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_update_deposit() != 2289) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_update_deposit() != 58400) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_constructor_sdkbuilder_new() != 52744) {
