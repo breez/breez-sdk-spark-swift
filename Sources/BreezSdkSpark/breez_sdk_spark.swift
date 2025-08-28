@@ -885,8 +885,6 @@ public protocol BreezSdkProtocol : AnyObject {
     
     func prepareLnurlPay(request: PrepareLnurlPayRequest) async throws  -> PrepareLnurlPayResponse
     
-    func prepareReceivePayment(request: PrepareReceivePaymentRequest) throws  -> PrepareReceivePaymentResponse
-    
     func prepareSendPayment(request: PrepareSendPaymentRequest) async throws  -> PrepareSendPaymentResponse
     
     func receivePayment(request: ReceivePaymentRequest) async throws  -> ReceivePaymentResponse
@@ -1142,14 +1140,6 @@ open func prepareLnurlPay(request: PrepareLnurlPayRequest)async throws  -> Prepa
             liftFunc: FfiConverterTypePrepareLnurlPayResponse.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
-}
-    
-open func prepareReceivePayment(request: PrepareReceivePaymentRequest)throws  -> PrepareReceivePaymentResponse {
-    return try  FfiConverterTypePrepareReceivePaymentResponse.lift(try rustCallWithError(FfiConverterTypeSdkError.lift) {
-    uniffi_breez_sdk_spark_fn_method_breezsdk_prepare_receive_payment(self.uniffiClonePointer(),
-        FfiConverterTypePrepareReceivePaymentRequest.lower(request),$0
-    )
-})
 }
     
 open func prepareSendPayment(request: PrepareSendPaymentRequest)async throws  -> PrepareSendPaymentResponse {
@@ -4065,130 +4055,6 @@ public func FfiConverterTypePrepareLnurlPayResponse_lower(_ value: PrepareLnurlP
 }
 
 
-public struct PrepareReceivePaymentRequest {
-    public var paymentMethod: ReceivePaymentMethod
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(paymentMethod: ReceivePaymentMethod) {
-        self.paymentMethod = paymentMethod
-    }
-}
-
-
-
-extension PrepareReceivePaymentRequest: Equatable, Hashable {
-    public static func ==(lhs: PrepareReceivePaymentRequest, rhs: PrepareReceivePaymentRequest) -> Bool {
-        if lhs.paymentMethod != rhs.paymentMethod {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(paymentMethod)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypePrepareReceivePaymentRequest: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrepareReceivePaymentRequest {
-        return
-            try PrepareReceivePaymentRequest(
-                paymentMethod: FfiConverterTypeReceivePaymentMethod.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: PrepareReceivePaymentRequest, into buf: inout [UInt8]) {
-        FfiConverterTypeReceivePaymentMethod.write(value.paymentMethod, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePrepareReceivePaymentRequest_lift(_ buf: RustBuffer) throws -> PrepareReceivePaymentRequest {
-    return try FfiConverterTypePrepareReceivePaymentRequest.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePrepareReceivePaymentRequest_lower(_ value: PrepareReceivePaymentRequest) -> RustBuffer {
-    return FfiConverterTypePrepareReceivePaymentRequest.lower(value)
-}
-
-
-public struct PrepareReceivePaymentResponse {
-    public var paymentMethod: ReceivePaymentMethod
-    public var feeSats: UInt64
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(paymentMethod: ReceivePaymentMethod, feeSats: UInt64) {
-        self.paymentMethod = paymentMethod
-        self.feeSats = feeSats
-    }
-}
-
-
-
-extension PrepareReceivePaymentResponse: Equatable, Hashable {
-    public static func ==(lhs: PrepareReceivePaymentResponse, rhs: PrepareReceivePaymentResponse) -> Bool {
-        if lhs.paymentMethod != rhs.paymentMethod {
-            return false
-        }
-        if lhs.feeSats != rhs.feeSats {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(paymentMethod)
-        hasher.combine(feeSats)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypePrepareReceivePaymentResponse: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrepareReceivePaymentResponse {
-        return
-            try PrepareReceivePaymentResponse(
-                paymentMethod: FfiConverterTypeReceivePaymentMethod.read(from: &buf), 
-                feeSats: FfiConverterUInt64.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: PrepareReceivePaymentResponse, into buf: inout [UInt8]) {
-        FfiConverterTypeReceivePaymentMethod.write(value.paymentMethod, into: &buf)
-        FfiConverterUInt64.write(value.feeSats, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePrepareReceivePaymentResponse_lift(_ buf: RustBuffer) throws -> PrepareReceivePaymentResponse {
-    return try FfiConverterTypePrepareReceivePaymentResponse.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePrepareReceivePaymentResponse_lower(_ value: PrepareReceivePaymentResponse) -> RustBuffer {
-    return FfiConverterTypePrepareReceivePaymentResponse.lower(value)
-}
-
-
 public struct PrepareSendPaymentRequest {
     public var paymentRequest: String
     public var amountSats: UInt64?
@@ -4322,12 +4188,12 @@ public func FfiConverterTypePrepareSendPaymentResponse_lower(_ value: PrepareSen
 
 
 public struct ReceivePaymentRequest {
-    public var prepareResponse: PrepareReceivePaymentResponse
+    public var paymentMethod: ReceivePaymentMethod
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(prepareResponse: PrepareReceivePaymentResponse) {
-        self.prepareResponse = prepareResponse
+    public init(paymentMethod: ReceivePaymentMethod) {
+        self.paymentMethod = paymentMethod
     }
 }
 
@@ -4335,14 +4201,14 @@ public struct ReceivePaymentRequest {
 
 extension ReceivePaymentRequest: Equatable, Hashable {
     public static func ==(lhs: ReceivePaymentRequest, rhs: ReceivePaymentRequest) -> Bool {
-        if lhs.prepareResponse != rhs.prepareResponse {
+        if lhs.paymentMethod != rhs.paymentMethod {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(prepareResponse)
+        hasher.combine(paymentMethod)
     }
 }
 
@@ -4354,12 +4220,12 @@ public struct FfiConverterTypeReceivePaymentRequest: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReceivePaymentRequest {
         return
             try ReceivePaymentRequest(
-                prepareResponse: FfiConverterTypePrepareReceivePaymentResponse.read(from: &buf)
+                paymentMethod: FfiConverterTypeReceivePaymentMethod.read(from: &buf)
         )
     }
 
     public static func write(_ value: ReceivePaymentRequest, into buf: inout [UInt8]) {
-        FfiConverterTypePrepareReceivePaymentResponse.write(value.prepareResponse, into: &buf)
+        FfiConverterTypeReceivePaymentMethod.write(value.paymentMethod, into: &buf)
     }
 }
 
@@ -4381,11 +4247,13 @@ public func FfiConverterTypeReceivePaymentRequest_lower(_ value: ReceivePaymentR
 
 public struct ReceivePaymentResponse {
     public var paymentRequest: String
+    public var feeSats: UInt64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(paymentRequest: String) {
+    public init(paymentRequest: String, feeSats: UInt64) {
         self.paymentRequest = paymentRequest
+        self.feeSats = feeSats
     }
 }
 
@@ -4396,11 +4264,15 @@ extension ReceivePaymentResponse: Equatable, Hashable {
         if lhs.paymentRequest != rhs.paymentRequest {
             return false
         }
+        if lhs.feeSats != rhs.feeSats {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(paymentRequest)
+        hasher.combine(feeSats)
     }
 }
 
@@ -4412,12 +4284,14 @@ public struct FfiConverterTypeReceivePaymentResponse: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReceivePaymentResponse {
         return
             try ReceivePaymentResponse(
-                paymentRequest: FfiConverterString.read(from: &buf)
+                paymentRequest: FfiConverterString.read(from: &buf), 
+                feeSats: FfiConverterUInt64.read(from: &buf)
         )
     }
 
     public static func write(_ value: ReceivePaymentResponse, into buf: inout [UInt8]) {
         FfiConverterString.write(value.paymentRequest, into: &buf)
+        FfiConverterUInt64.write(value.feeSats, into: &buf)
     }
 }
 
@@ -7297,9 +7171,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_lnurl_pay() != 37691) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_receive_payment() != 53300) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_send_payment() != 34185) {
