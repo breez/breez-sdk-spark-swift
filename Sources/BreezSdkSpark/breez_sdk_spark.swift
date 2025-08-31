@@ -883,6 +883,8 @@ public protocol BreezSdkProtocol : AnyObject {
     
     func lnurlPay(request: LnurlPayRequest) async throws  -> LnurlPayResponse
     
+    func pollLightningSendPayment(paymentId: String) 
+    
     func prepareLnurlPay(request: PrepareLnurlPayRequest) async throws  -> PrepareLnurlPayResponse
     
     func prepareSendPayment(request: PrepareSendPaymentRequest) async throws  -> PrepareSendPaymentResponse
@@ -1123,6 +1125,13 @@ open func lnurlPay(request: LnurlPayRequest)async throws  -> LnurlPayResponse {
             liftFunc: FfiConverterTypeLnurlPayResponse.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
+}
+    
+open func pollLightningSendPayment(paymentId: String) {try! rustCall() {
+    uniffi_breez_sdk_spark_fn_method_breezsdk_poll_lightning_send_payment(self.uniffiClonePointer(),
+        FfiConverterString.lower(paymentId),$0
+    )
+}
 }
     
 open func prepareLnurlPay(request: PrepareLnurlPayRequest)async throws  -> PrepareLnurlPayResponse {
@@ -7168,6 +7177,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_lnurl_pay() != 10147) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_poll_lightning_send_payment() != 5478) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_lnurl_pay() != 37691) {
