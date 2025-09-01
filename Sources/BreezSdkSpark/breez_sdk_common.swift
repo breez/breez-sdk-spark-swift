@@ -3209,6 +3209,64 @@ public func FfiConverterTypeRestResponse_lower(_ value: RestResponse) -> RustBuf
 }
 
 
+public struct SatsPayment {
+    public var amount: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(amount: UInt64?) {
+        self.amount = amount
+    }
+}
+
+
+
+extension SatsPayment: Equatable, Hashable {
+    public static func ==(lhs: SatsPayment, rhs: SatsPayment) -> Bool {
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(amount)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSatsPayment: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsPayment {
+        return
+            try SatsPayment(
+                amount: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SatsPayment, into buf: inout [UInt8]) {
+        FfiConverterOptionUInt64.write(value.amount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsPayment_lift(_ buf: RustBuffer) throws -> SatsPayment {
+    return try FfiConverterTypeSatsPayment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsPayment_lower(_ value: SatsPayment) -> RustBuffer {
+    return FfiConverterTypeSatsPayment.lower(value)
+}
+
+
 public struct SilentPaymentAddressDetails {
     public var address: String
     public var network: BitcoinNetwork
@@ -3280,6 +3338,260 @@ public func FfiConverterTypeSilentPaymentAddressDetails_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeSilentPaymentAddressDetails_lower(_ value: SilentPaymentAddressDetails) -> RustBuffer {
     return FfiConverterTypeSilentPaymentAddressDetails.lower(value)
+}
+
+
+public struct SparkAddress {
+    public var identityPublicKey: String
+    public var network: BitcoinNetwork
+    public var sparkInvoiceFields: SparkInvoiceFields?
+    public var signature: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(identityPublicKey: String, network: BitcoinNetwork, sparkInvoiceFields: SparkInvoiceFields?, signature: String?) {
+        self.identityPublicKey = identityPublicKey
+        self.network = network
+        self.sparkInvoiceFields = sparkInvoiceFields
+        self.signature = signature
+    }
+}
+
+
+
+extension SparkAddress: Equatable, Hashable {
+    public static func ==(lhs: SparkAddress, rhs: SparkAddress) -> Bool {
+        if lhs.identityPublicKey != rhs.identityPublicKey {
+            return false
+        }
+        if lhs.network != rhs.network {
+            return false
+        }
+        if lhs.sparkInvoiceFields != rhs.sparkInvoiceFields {
+            return false
+        }
+        if lhs.signature != rhs.signature {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(identityPublicKey)
+        hasher.combine(network)
+        hasher.combine(sparkInvoiceFields)
+        hasher.combine(signature)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSparkAddress: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SparkAddress {
+        return
+            try SparkAddress(
+                identityPublicKey: FfiConverterString.read(from: &buf), 
+                network: FfiConverterTypeBitcoinNetwork.read(from: &buf), 
+                sparkInvoiceFields: FfiConverterOptionTypeSparkInvoiceFields.read(from: &buf), 
+                signature: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SparkAddress, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.identityPublicKey, into: &buf)
+        FfiConverterTypeBitcoinNetwork.write(value.network, into: &buf)
+        FfiConverterOptionTypeSparkInvoiceFields.write(value.sparkInvoiceFields, into: &buf)
+        FfiConverterOptionString.write(value.signature, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkAddress_lift(_ buf: RustBuffer) throws -> SparkAddress {
+    return try FfiConverterTypeSparkAddress.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkAddress_lower(_ value: SparkAddress) -> RustBuffer {
+    return FfiConverterTypeSparkAddress.lower(value)
+}
+
+
+public struct SparkAddressDetails {
+    public var address: String
+    public var decodedAddress: SparkAddress
+    public var source: PaymentRequestSource
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(address: String, decodedAddress: SparkAddress, source: PaymentRequestSource) {
+        self.address = address
+        self.decodedAddress = decodedAddress
+        self.source = source
+    }
+}
+
+
+
+extension SparkAddressDetails: Equatable, Hashable {
+    public static func ==(lhs: SparkAddressDetails, rhs: SparkAddressDetails) -> Bool {
+        if lhs.address != rhs.address {
+            return false
+        }
+        if lhs.decodedAddress != rhs.decodedAddress {
+            return false
+        }
+        if lhs.source != rhs.source {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(address)
+        hasher.combine(decodedAddress)
+        hasher.combine(source)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSparkAddressDetails: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SparkAddressDetails {
+        return
+            try SparkAddressDetails(
+                address: FfiConverterString.read(from: &buf), 
+                decodedAddress: FfiConverterTypeSparkAddress.read(from: &buf), 
+                source: FfiConverterTypePaymentRequestSource.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SparkAddressDetails, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.address, into: &buf)
+        FfiConverterTypeSparkAddress.write(value.decodedAddress, into: &buf)
+        FfiConverterTypePaymentRequestSource.write(value.source, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkAddressDetails_lift(_ buf: RustBuffer) throws -> SparkAddressDetails {
+    return try FfiConverterTypeSparkAddressDetails.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkAddressDetails_lower(_ value: SparkAddressDetails) -> RustBuffer {
+    return FfiConverterTypeSparkAddressDetails.lower(value)
+}
+
+
+public struct SparkInvoiceFields {
+    public var id: String
+    public var version: UInt32
+    public var memo: String?
+    public var senderPublicKey: String?
+    public var expiryTime: UInt64?
+    public var paymentType: SparkAddressPaymentType?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, version: UInt32, memo: String?, senderPublicKey: String?, expiryTime: UInt64?, paymentType: SparkAddressPaymentType?) {
+        self.id = id
+        self.version = version
+        self.memo = memo
+        self.senderPublicKey = senderPublicKey
+        self.expiryTime = expiryTime
+        self.paymentType = paymentType
+    }
+}
+
+
+
+extension SparkInvoiceFields: Equatable, Hashable {
+    public static func ==(lhs: SparkInvoiceFields, rhs: SparkInvoiceFields) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.version != rhs.version {
+            return false
+        }
+        if lhs.memo != rhs.memo {
+            return false
+        }
+        if lhs.senderPublicKey != rhs.senderPublicKey {
+            return false
+        }
+        if lhs.expiryTime != rhs.expiryTime {
+            return false
+        }
+        if lhs.paymentType != rhs.paymentType {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(version)
+        hasher.combine(memo)
+        hasher.combine(senderPublicKey)
+        hasher.combine(expiryTime)
+        hasher.combine(paymentType)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSparkInvoiceFields: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SparkInvoiceFields {
+        return
+            try SparkInvoiceFields(
+                id: FfiConverterString.read(from: &buf), 
+                version: FfiConverterUInt32.read(from: &buf), 
+                memo: FfiConverterOptionString.read(from: &buf), 
+                senderPublicKey: FfiConverterOptionString.read(from: &buf), 
+                expiryTime: FfiConverterOptionUInt64.read(from: &buf), 
+                paymentType: FfiConverterOptionTypeSparkAddressPaymentType.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SparkInvoiceFields, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterUInt32.write(value.version, into: &buf)
+        FfiConverterOptionString.write(value.memo, into: &buf)
+        FfiConverterOptionString.write(value.senderPublicKey, into: &buf)
+        FfiConverterOptionUInt64.write(value.expiryTime, into: &buf)
+        FfiConverterOptionTypeSparkAddressPaymentType.write(value.paymentType, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkInvoiceFields_lift(_ buf: RustBuffer) throws -> SparkInvoiceFields {
+    return try FfiConverterTypeSparkInvoiceFields.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkInvoiceFields_lower(_ value: SparkInvoiceFields) -> RustBuffer {
+    return FfiConverterTypeSparkInvoiceFields.lower(value)
 }
 
 
@@ -3365,6 +3677,72 @@ public func FfiConverterTypeSymbol_lift(_ buf: RustBuffer) throws -> Symbol {
 #endif
 public func FfiConverterTypeSymbol_lower(_ value: Symbol) -> RustBuffer {
     return FfiConverterTypeSymbol.lower(value)
+}
+
+
+public struct TokensPayment {
+    public var tokenIdentifier: String?
+    public var amount: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(tokenIdentifier: String?, amount: UInt64?) {
+        self.tokenIdentifier = tokenIdentifier
+        self.amount = amount
+    }
+}
+
+
+
+extension TokensPayment: Equatable, Hashable {
+    public static func ==(lhs: TokensPayment, rhs: TokensPayment) -> Bool {
+        if lhs.tokenIdentifier != rhs.tokenIdentifier {
+            return false
+        }
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(tokenIdentifier)
+        hasher.combine(amount)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTokensPayment: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TokensPayment {
+        return
+            try TokensPayment(
+                tokenIdentifier: FfiConverterOptionString.read(from: &buf), 
+                amount: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TokensPayment, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.tokenIdentifier, into: &buf)
+        FfiConverterOptionUInt64.write(value.amount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokensPayment_lift(_ buf: RustBuffer) throws -> TokensPayment {
+    return try FfiConverterTypeTokensPayment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokensPayment_lower(_ value: TokensPayment) -> RustBuffer {
+    return FfiConverterTypeTokensPayment.lower(value)
 }
 
 
@@ -3733,6 +4111,8 @@ public enum InputType {
     )
     case lnurlWithdraw(LnurlWithdrawRequestDetails
     )
+    case sparkAddress(SparkAddressDetails
+    )
 }
 
 
@@ -3780,6 +4160,9 @@ public struct FfiConverterTypeInputType: FfiConverterRustBuffer {
         )
         
         case 12: return .lnurlWithdraw(try FfiConverterTypeLnurlWithdrawRequestDetails.read(from: &buf)
+        )
+        
+        case 13: return .sparkAddress(try FfiConverterTypeSparkAddressDetails.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -3848,6 +4231,11 @@ public struct FfiConverterTypeInputType: FfiConverterRustBuffer {
         case let .lnurlWithdraw(v1):
             writeInt(&buf, Int32(12))
             FfiConverterTypeLnurlWithdrawRequestDetails.write(v1, into: &buf)
+            
+        
+        case let .sparkAddress(v1):
+            writeInt(&buf, Int32(13))
+            FfiConverterTypeSparkAddressDetails.write(v1, into: &buf)
             
         }
     }
@@ -4104,6 +4492,76 @@ extension ServiceConnectivityError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum SparkAddressPaymentType {
+    
+    case tokensPayment(TokensPayment
+    )
+    case satsPayment(SatsPayment
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSparkAddressPaymentType: FfiConverterRustBuffer {
+    typealias SwiftType = SparkAddressPaymentType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SparkAddressPaymentType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .tokensPayment(try FfiConverterTypeTokensPayment.read(from: &buf)
+        )
+        
+        case 2: return .satsPayment(try FfiConverterTypeSatsPayment.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SparkAddressPaymentType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .tokensPayment(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeTokensPayment.write(v1, into: &buf)
+            
+        
+        case let .satsPayment(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeSatsPayment.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkAddressPaymentType_lift(_ buf: RustBuffer) throws -> SparkAddressPaymentType {
+    return try FfiConverterTypeSparkAddressPaymentType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkAddressPaymentType_lower(_ value: SparkAddressPaymentType) -> RustBuffer {
+    return FfiConverterTypeSparkAddressPaymentType.lower(value)
+}
+
+
+
+extension SparkAddressPaymentType: Equatable, Hashable {}
+
+
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -4395,6 +4853,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeSparkInvoiceFields: FfiConverterRustBuffer {
+    typealias SwiftType = SparkInvoiceFields?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSparkInvoiceFields.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSparkInvoiceFields.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeSymbol: FfiConverterRustBuffer {
     typealias SwiftType = Symbol?
 
@@ -4435,6 +4917,30 @@ fileprivate struct FfiConverterOptionTypeAmount: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeAmount.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeSparkAddressPaymentType: FfiConverterRustBuffer {
+    typealias SwiftType = SparkAddressPaymentType?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSparkAddressPaymentType.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSparkAddressPaymentType.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }

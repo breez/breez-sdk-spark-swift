@@ -2504,7 +2504,7 @@ public struct ClaimDepositRequest {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(txid: String, vout: UInt32, maxFee: Fee?) {
+    public init(txid: String, vout: UInt32, maxFee: Fee? = nil) {
         self.txid = txid
         self.vout = vout
         self.maxFee = maxFee
@@ -2708,6 +2708,80 @@ public func FfiConverterTypeConfig_lift(_ buf: RustBuffer) throws -> Config {
 #endif
 public func FfiConverterTypeConfig_lower(_ value: Config) -> RustBuffer {
     return FfiConverterTypeConfig.lower(value)
+}
+
+
+public struct ConnectRequest {
+    public var config: Config
+    public var mnemonic: String
+    public var storageDir: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(config: Config, mnemonic: String, storageDir: String) {
+        self.config = config
+        self.mnemonic = mnemonic
+        self.storageDir = storageDir
+    }
+}
+
+
+
+extension ConnectRequest: Equatable, Hashable {
+    public static func ==(lhs: ConnectRequest, rhs: ConnectRequest) -> Bool {
+        if lhs.config != rhs.config {
+            return false
+        }
+        if lhs.mnemonic != rhs.mnemonic {
+            return false
+        }
+        if lhs.storageDir != rhs.storageDir {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(config)
+        hasher.combine(mnemonic)
+        hasher.combine(storageDir)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConnectRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConnectRequest {
+        return
+            try ConnectRequest(
+                config: FfiConverterTypeConfig.read(from: &buf), 
+                mnemonic: FfiConverterString.read(from: &buf), 
+                storageDir: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ConnectRequest, into buf: inout [UInt8]) {
+        FfiConverterTypeConfig.write(value.config, into: &buf)
+        FfiConverterString.write(value.mnemonic, into: &buf)
+        FfiConverterString.write(value.storageDir, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConnectRequest_lift(_ buf: RustBuffer) throws -> ConnectRequest {
+    return try FfiConverterTypeConnectRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConnectRequest_lower(_ value: ConnectRequest) -> RustBuffer {
+    return FfiConverterTypeConnectRequest.lower(value)
 }
 
 
@@ -3128,10 +3202,10 @@ public struct ListPaymentsRequest {
     public init(
         /**
          * Number of records to skip
-         */offset: UInt32?, 
+         */offset: UInt32? = nil, 
         /**
          * Maximum number of records to return
-         */limit: UInt32?) {
+         */limit: UInt32? = nil) {
         self.offset = offset
         self.limit = limit
     }
@@ -3886,16 +3960,16 @@ public func FfiConverterTypePaymentMetadata_lower(_ value: PaymentMetadata) -> R
 
 public struct PrepareLnurlPayRequest {
     public var amountSats: UInt64
-    public var comment: String?
     public var payRequest: LnurlPayRequestDetails
+    public var comment: String?
     public var validateSuccessActionUrl: Bool?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(amountSats: UInt64, comment: String?, payRequest: LnurlPayRequestDetails, validateSuccessActionUrl: Bool?) {
+    public init(amountSats: UInt64, payRequest: LnurlPayRequestDetails, comment: String? = nil, validateSuccessActionUrl: Bool? = nil) {
         self.amountSats = amountSats
-        self.comment = comment
         self.payRequest = payRequest
+        self.comment = comment
         self.validateSuccessActionUrl = validateSuccessActionUrl
     }
 }
@@ -3907,10 +3981,10 @@ extension PrepareLnurlPayRequest: Equatable, Hashable {
         if lhs.amountSats != rhs.amountSats {
             return false
         }
-        if lhs.comment != rhs.comment {
+        if lhs.payRequest != rhs.payRequest {
             return false
         }
-        if lhs.payRequest != rhs.payRequest {
+        if lhs.comment != rhs.comment {
             return false
         }
         if lhs.validateSuccessActionUrl != rhs.validateSuccessActionUrl {
@@ -3921,8 +3995,8 @@ extension PrepareLnurlPayRequest: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(amountSats)
-        hasher.combine(comment)
         hasher.combine(payRequest)
+        hasher.combine(comment)
         hasher.combine(validateSuccessActionUrl)
     }
 }
@@ -3936,16 +4010,16 @@ public struct FfiConverterTypePrepareLnurlPayRequest: FfiConverterRustBuffer {
         return
             try PrepareLnurlPayRequest(
                 amountSats: FfiConverterUInt64.read(from: &buf), 
-                comment: FfiConverterOptionString.read(from: &buf), 
                 payRequest: FfiConverterTypeLnurlPayRequestDetails.read(from: &buf), 
+                comment: FfiConverterOptionString.read(from: &buf), 
                 validateSuccessActionUrl: FfiConverterOptionBool.read(from: &buf)
         )
     }
 
     public static func write(_ value: PrepareLnurlPayRequest, into buf: inout [UInt8]) {
         FfiConverterUInt64.write(value.amountSats, into: &buf)
-        FfiConverterOptionString.write(value.comment, into: &buf)
         FfiConverterTypeLnurlPayRequestDetails.write(value.payRequest, into: &buf)
+        FfiConverterOptionString.write(value.comment, into: &buf)
         FfiConverterOptionBool.write(value.validateSuccessActionUrl, into: &buf)
     }
 }
@@ -4070,7 +4144,7 @@ public struct PrepareSendPaymentRequest {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(paymentRequest: String, amountSats: UInt64?) {
+    public init(paymentRequest: String, amountSats: UInt64? = nil) {
         self.paymentRequest = paymentRequest
         self.amountSats = amountSats
     }
@@ -4630,7 +4704,7 @@ public struct SendPaymentRequest {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(prepareResponse: PrepareSendPaymentResponse, options: SendPaymentOptions?) {
+    public init(prepareResponse: PrepareSendPaymentResponse, options: SendPaymentOptions? = nil) {
         self.prepareResponse = prepareResponse
         self.options = options
     }
@@ -7082,6 +7156,31 @@ private func uniffiForeignFutureFree(handle: UInt64) {
 public func uniffiForeignFutureHandleCountBreezSdkSpark() -> Int {
     UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.count
 }
+/**
+ * Connects to the Spark network using the provided configuration and mnemonic.
+ *
+ * # Arguments
+ *
+ * * `request` - The connection request object
+ *
+ * # Returns
+ *
+ * Result containing either the initialized `BreezSdk` or an `SdkError`
+ */
+public func connect(request: ConnectRequest)async throws  -> BreezSdk {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_func_connect(FfiConverterTypeConnectRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_pointer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_pointer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeBreezSdk.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
 public func defaultConfig(network: Network) -> Config {
     return try!  FfiConverterTypeConfig.lift(try! rustCall() {
     uniffi_breez_sdk_spark_fn_func_default_config(
@@ -7133,6 +7232,9 @@ private var initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_breez_sdk_spark_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_func_connect() != 40345) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_default_config() != 62194) {
         return InitializationResult.apiChecksumMismatch
