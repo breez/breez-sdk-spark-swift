@@ -3209,7 +3209,7 @@ public func FfiConverterTypeRestResponse_lower(_ value: RestResponse) -> RustBuf
 }
 
 
-public struct SatsPayment {
+public struct SatsPaymentDetails {
     public var amount: UInt64?
 
     // Default memberwise initializers are never public by default, so we
@@ -3221,8 +3221,8 @@ public struct SatsPayment {
 
 
 
-extension SatsPayment: Equatable, Hashable {
-    public static func ==(lhs: SatsPayment, rhs: SatsPayment) -> Bool {
+extension SatsPaymentDetails: Equatable, Hashable {
+    public static func ==(lhs: SatsPaymentDetails, rhs: SatsPaymentDetails) -> Bool {
         if lhs.amount != rhs.amount {
             return false
         }
@@ -3238,15 +3238,15 @@ extension SatsPayment: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeSatsPayment: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsPayment {
+public struct FfiConverterTypeSatsPaymentDetails: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsPaymentDetails {
         return
-            try SatsPayment(
+            try SatsPaymentDetails(
                 amount: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
-    public static func write(_ value: SatsPayment, into buf: inout [UInt8]) {
+    public static func write(_ value: SatsPaymentDetails, into buf: inout [UInt8]) {
         FfiConverterOptionUInt64.write(value.amount, into: &buf)
     }
 }
@@ -3255,15 +3255,15 @@ public struct FfiConverterTypeSatsPayment: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeSatsPayment_lift(_ buf: RustBuffer) throws -> SatsPayment {
-    return try FfiConverterTypeSatsPayment.lift(buf)
+public func FfiConverterTypeSatsPaymentDetails_lift(_ buf: RustBuffer) throws -> SatsPaymentDetails {
+    return try FfiConverterTypeSatsPaymentDetails.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeSatsPayment_lower(_ value: SatsPayment) -> RustBuffer {
-    return FfiConverterTypeSatsPayment.lower(value)
+public func FfiConverterTypeSatsPaymentDetails_lower(_ value: SatsPaymentDetails) -> RustBuffer {
+    return FfiConverterTypeSatsPaymentDetails.lower(value)
 }
 
 
@@ -3680,7 +3680,7 @@ public func FfiConverterTypeSymbol_lower(_ value: Symbol) -> RustBuffer {
 }
 
 
-public struct TokensPayment {
+public struct TokensPaymentDetails {
     public var tokenIdentifier: String?
     public var amount: UInt64?
 
@@ -3694,8 +3694,8 @@ public struct TokensPayment {
 
 
 
-extension TokensPayment: Equatable, Hashable {
-    public static func ==(lhs: TokensPayment, rhs: TokensPayment) -> Bool {
+extension TokensPaymentDetails: Equatable, Hashable {
+    public static func ==(lhs: TokensPaymentDetails, rhs: TokensPaymentDetails) -> Bool {
         if lhs.tokenIdentifier != rhs.tokenIdentifier {
             return false
         }
@@ -3715,16 +3715,16 @@ extension TokensPayment: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeTokensPayment: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TokensPayment {
+public struct FfiConverterTypeTokensPaymentDetails: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TokensPaymentDetails {
         return
-            try TokensPayment(
+            try TokensPaymentDetails(
                 tokenIdentifier: FfiConverterOptionString.read(from: &buf), 
                 amount: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
-    public static func write(_ value: TokensPayment, into buf: inout [UInt8]) {
+    public static func write(_ value: TokensPaymentDetails, into buf: inout [UInt8]) {
         FfiConverterOptionString.write(value.tokenIdentifier, into: &buf)
         FfiConverterOptionUInt64.write(value.amount, into: &buf)
     }
@@ -3734,15 +3734,15 @@ public struct FfiConverterTypeTokensPayment: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeTokensPayment_lift(_ buf: RustBuffer) throws -> TokensPayment {
-    return try FfiConverterTypeTokensPayment.lift(buf)
+public func FfiConverterTypeTokensPaymentDetails_lift(_ buf: RustBuffer) throws -> TokensPaymentDetails {
+    return try FfiConverterTypeTokensPaymentDetails.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeTokensPayment_lower(_ value: TokensPayment) -> RustBuffer {
-    return FfiConverterTypeTokensPayment.lower(value)
+public func FfiConverterTypeTokensPaymentDetails_lower(_ value: TokensPaymentDetails) -> RustBuffer {
+    return FfiConverterTypeTokensPaymentDetails.lower(value)
 }
 
 
@@ -4498,9 +4498,9 @@ extension ServiceConnectivityError: Foundation.LocalizedError {
 
 public enum SparkAddressPaymentType {
     
-    case tokensPayment(TokensPayment
+    case tokensPayment(TokensPaymentDetails
     )
-    case satsPayment(SatsPayment
+    case satsPayment(SatsPaymentDetails
     )
 }
 
@@ -4515,10 +4515,10 @@ public struct FfiConverterTypeSparkAddressPaymentType: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .tokensPayment(try FfiConverterTypeTokensPayment.read(from: &buf)
+        case 1: return .tokensPayment(try FfiConverterTypeTokensPaymentDetails.read(from: &buf)
         )
         
-        case 2: return .satsPayment(try FfiConverterTypeSatsPayment.read(from: &buf)
+        case 2: return .satsPayment(try FfiConverterTypeSatsPaymentDetails.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -4531,12 +4531,12 @@ public struct FfiConverterTypeSparkAddressPaymentType: FfiConverterRustBuffer {
         
         case let .tokensPayment(v1):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeTokensPayment.write(v1, into: &buf)
+            FfiConverterTypeTokensPaymentDetails.write(v1, into: &buf)
             
         
         case let .satsPayment(v1):
             writeInt(&buf, Int32(2))
-            FfiConverterTypeSatsPayment.write(v1, into: &buf)
+            FfiConverterTypeSatsPaymentDetails.write(v1, into: &buf)
             
         }
     }
