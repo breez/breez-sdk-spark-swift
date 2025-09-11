@@ -13,7 +13,7 @@ let package = Package(
         .library(name: "BreezSdkSpark", targets: ["breez_sdk_sparkFFI", "BreezSdkSpark"]),
     ],
     targets: [
-        .binaryTarget(name: "breez_sdk_sparkFFI", url: "https://github.com/breez/breez-sdk-spark-swift/releases/download/0.1.4/breez_sdk_sparkFFI.xcframework.zip", checksum: "8f36df09c64121a1e82b625a117aa2bcbd89b055845fb05f3bb9fd50248a14cf"),
+        .binaryTarget(name: "breez_sdk_sparkFFI", url: "https://github.com/breez/breez-sdk-spark-swift/releases/download/0.1.5/breez_sdk_sparkFFI.xcframework.zip", checksum: "4c8e16c57ceae4838543ef74490d052f0d1d85b45853e67058f81d0c7c690b27"),
         .target(name: "BreezSdkSpark", dependencies: ["breez_sdk_sparkFFI"]),
     ]
 )
