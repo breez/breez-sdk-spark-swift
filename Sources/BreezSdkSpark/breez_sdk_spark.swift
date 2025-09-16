@@ -7188,12 +7188,19 @@ public func defaultConfig(network: Network) -> Config {
     )
 })
 }
-public func defaultStorage(dataDir: String)throws  -> Storage {
-    return try  FfiConverterTypeStorage.lift(try rustCallWithError(FfiConverterTypeSdkError.lift) {
-    uniffi_breez_sdk_spark_fn_func_default_storage(
-        FfiConverterString.lower(dataDir),$0
-    )
-})
+public func defaultStorage(dataDir: String)async throws  -> Storage {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_func_default_storage(FfiConverterString.lower(dataDir)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_pointer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_pointer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeStorage.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
 }
 public func initLogging(logDir: String?, appLogger: Logger?, logFilter: String?)throws  {try rustCallWithError(FfiConverterTypeSdkError.lift) {
     uniffi_breez_sdk_spark_fn_func_init_logging(
@@ -7239,7 +7246,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_default_config() != 62194) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_func_default_storage() != 46285) {
+    if (uniffi_breez_sdk_spark_checksum_func_default_storage() != 30804) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_init_logging() != 8518) {

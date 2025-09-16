@@ -2538,7 +2538,7 @@ public struct LnurlPayRequestDetails {
      *
      * See <https://github.com/nostr-protocol/nips/blob/master/57.md>
      */
-    public var allowsNostr: Bool
+    public var allowsNostr: Bool?
     /**
      * Optional recipient's lnurl provider's Nostr pubkey for NIP-57. If it exists it should be a
      * valid BIP 340 public key in hex.
@@ -2579,7 +2579,7 @@ public struct LnurlPayRequestDetails {
          * Value indicating whether the recipient supports Nostr Zaps through NIP-57.
          *
          * See <https://github.com/nostr-protocol/nips/blob/master/57.md>
-         */allowsNostr: Bool, 
+         */allowsNostr: Bool?, 
         /**
          * Optional recipient's lnurl provider's Nostr pubkey for NIP-57. If it exists it should be a
          * valid BIP 340 public key in hex.
@@ -2667,7 +2667,7 @@ public struct FfiConverterTypeLnurlPayRequestDetails: FfiConverterRustBuffer {
                 domain: FfiConverterString.read(from: &buf), 
                 url: FfiConverterString.read(from: &buf), 
                 address: FfiConverterOptionString.read(from: &buf), 
-                allowsNostr: FfiConverterBool.read(from: &buf), 
+                allowsNostr: FfiConverterOptionBool.read(from: &buf), 
                 nostrPubkey: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -2681,7 +2681,7 @@ public struct FfiConverterTypeLnurlPayRequestDetails: FfiConverterRustBuffer {
         FfiConverterString.write(value.domain, into: &buf)
         FfiConverterString.write(value.url, into: &buf)
         FfiConverterOptionString.write(value.address, into: &buf)
-        FfiConverterBool.write(value.allowsNostr, into: &buf)
+        FfiConverterOptionBool.write(value.allowsNostr, into: &buf)
         FfiConverterOptionString.write(value.nostrPubkey, into: &buf)
     }
 }
