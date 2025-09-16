@@ -840,7 +840,11 @@ public protocol BreezSdkProtocol : AnyObject {
      */
     func addEventListener(listener: EventListener)  -> String
     
+    func checkLightningAddressAvailable(req: CheckLightningAddressRequest) async throws  -> Bool
+    
     func claimDeposit(request: ClaimDepositRequest) async throws  -> ClaimDepositResponse
+    
+    func deleteLightningAddress() async throws 
     
     /**
      * Stops the SDK's background tasks
@@ -858,6 +862,8 @@ public protocol BreezSdkProtocol : AnyObject {
      * Returns the balance of the wallet in satoshis
      */
     func getInfo(request: GetInfoRequest) async throws  -> GetInfoResponse
+    
+    func getLightningAddress() async throws  -> LightningAddressInfo?
     
     func getPayment(request: GetPaymentRequest) async throws  -> GetPaymentResponse
     
@@ -891,7 +897,14 @@ public protocol BreezSdkProtocol : AnyObject {
     
     func receivePayment(request: ReceivePaymentRequest) async throws  -> ReceivePaymentResponse
     
+    /**
+     * Attempts to recover a lightning address from the lnurl server.
+     */
+    func recoverLightningAddress() async throws  -> LightningAddressInfo?
+    
     func refundDeposit(request: RefundDepositRequest) async throws  -> RefundDepositResponse
+    
+    func registerLightningAddress(request: RegisterLightningAddressRequest) async throws  -> LightningAddressInfo
     
     /**
      * Removes a previously registered event listener
@@ -990,6 +1003,23 @@ open func addEventListener(listener: EventListener) -> String {
 })
 }
     
+open func checkLightningAddressAvailable(req: CheckLightningAddressRequest)async throws  -> Bool {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_check_lightning_address_available(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeCheckLightningAddressRequest.lower(req)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_i8,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_i8,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
 open func claimDeposit(request: ClaimDepositRequest)async throws  -> ClaimDepositResponse {
     return
         try  await uniffiRustCallAsync(
@@ -1003,6 +1033,23 @@ open func claimDeposit(request: ClaimDepositRequest)async throws  -> ClaimDeposi
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeClaimDepositResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+open func deleteLightningAddress()async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_delete_lightning_address(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeSdkError.lift
         )
 }
@@ -1039,6 +1086,23 @@ open func getInfo(request: GetInfoRequest)async throws  -> GetInfoResponse {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeGetInfoResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+open func getLightningAddress()async throws  -> LightningAddressInfo? {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_get_lightning_address(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeLightningAddressInfo.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
 }
@@ -1185,6 +1249,26 @@ open func receivePayment(request: ReceivePaymentRequest)async throws  -> Receive
         )
 }
     
+    /**
+     * Attempts to recover a lightning address from the lnurl server.
+     */
+open func recoverLightningAddress()async throws  -> LightningAddressInfo? {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_recover_lightning_address(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeLightningAddressInfo.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
 open func refundDeposit(request: RefundDepositRequest)async throws  -> RefundDepositResponse {
     return
         try  await uniffiRustCallAsync(
@@ -1198,6 +1282,23 @@ open func refundDeposit(request: RefundDepositRequest)async throws  -> RefundDep
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRefundDepositResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+open func registerLightningAddress(request: RegisterLightningAddressRequest)async throws  -> LightningAddressInfo {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_register_lightning_address(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeRegisterLightningAddressRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeLightningAddressInfo.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
 }
@@ -1569,6 +1670,8 @@ public func FfiConverterTypeSdkBuilder_lower(_ value: SdkBuilder) -> UnsafeMutab
  */
 public protocol Storage : AnyObject {
     
+    func deleteCachedItem(key: String) async throws 
+    
     func getCachedItem(key: String) async throws  -> String?
     
     func setCachedItem(key: String, value: String) async throws 
@@ -1729,6 +1832,23 @@ open class StorageImpl:
 
     
 
+    
+open func deleteCachedItem(key: String)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_delete_cached_item(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(key)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeStorageError.lift
+        )
+}
     
 open func getCachedItem(key: String)async throws  -> String? {
     return
@@ -1996,6 +2116,47 @@ fileprivate struct UniffiCallbackInterfaceStorage {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     static var vtable: UniffiVTableCallbackInterfaceStorage = UniffiVTableCallbackInterfaceStorage(
+        deleteCachedItem: { (
+            uniffiHandle: UInt64,
+            key: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.deleteCachedItem(
+                     key: try FfiConverterString.lift(key)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeStorageError.lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
         getCachedItem: { (
             uniffiHandle: UInt64,
             key: RustBuffer,
@@ -2497,6 +2658,64 @@ public func FfiConverterTypeStorage_lower(_ value: Storage) -> UnsafeMutableRawP
 }
 
 
+public struct CheckLightningAddressRequest {
+    public var username: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(username: String) {
+        self.username = username
+    }
+}
+
+
+
+extension CheckLightningAddressRequest: Equatable, Hashable {
+    public static func ==(lhs: CheckLightningAddressRequest, rhs: CheckLightningAddressRequest) -> Bool {
+        if lhs.username != rhs.username {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(username)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCheckLightningAddressRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CheckLightningAddressRequest {
+        return
+            try CheckLightningAddressRequest(
+                username: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CheckLightningAddressRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.username, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCheckLightningAddressRequest_lift(_ buf: RustBuffer) throws -> CheckLightningAddressRequest {
+    return try FfiConverterTypeCheckLightningAddressRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCheckLightningAddressRequest_lower(_ value: CheckLightningAddressRequest) -> RustBuffer {
+    return FfiConverterTypeCheckLightningAddressRequest.lower(value)
+}
+
+
 public struct ClaimDepositRequest {
     public var txid: String
     public var vout: UInt32
@@ -2634,14 +2853,22 @@ public struct Config {
     public var network: Network
     public var syncIntervalSecs: UInt32
     public var maxDepositClaimFee: Fee?
+    /**
+     * The domain used for receiving through lnurl-pay and lightning address.
+     */
+    public var lnurlDomain: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(apiKey: String?, network: Network, syncIntervalSecs: UInt32, maxDepositClaimFee: Fee?) {
+    public init(apiKey: String?, network: Network, syncIntervalSecs: UInt32, maxDepositClaimFee: Fee?, 
+        /**
+         * The domain used for receiving through lnurl-pay and lightning address.
+         */lnurlDomain: String?) {
         self.apiKey = apiKey
         self.network = network
         self.syncIntervalSecs = syncIntervalSecs
         self.maxDepositClaimFee = maxDepositClaimFee
+        self.lnurlDomain = lnurlDomain
     }
 }
 
@@ -2661,6 +2888,9 @@ extension Config: Equatable, Hashable {
         if lhs.maxDepositClaimFee != rhs.maxDepositClaimFee {
             return false
         }
+        if lhs.lnurlDomain != rhs.lnurlDomain {
+            return false
+        }
         return true
     }
 
@@ -2669,6 +2899,7 @@ extension Config: Equatable, Hashable {
         hasher.combine(network)
         hasher.combine(syncIntervalSecs)
         hasher.combine(maxDepositClaimFee)
+        hasher.combine(lnurlDomain)
     }
 }
 
@@ -2683,7 +2914,8 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
                 apiKey: FfiConverterOptionString.read(from: &buf), 
                 network: FfiConverterTypeNetwork.read(from: &buf), 
                 syncIntervalSecs: FfiConverterUInt32.read(from: &buf), 
-                maxDepositClaimFee: FfiConverterOptionTypeFee.read(from: &buf)
+                maxDepositClaimFee: FfiConverterOptionTypeFee.read(from: &buf), 
+                lnurlDomain: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -2692,6 +2924,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterUInt32.write(value.syncIntervalSecs, into: &buf)
         FfiConverterOptionTypeFee.write(value.maxDepositClaimFee, into: &buf)
+        FfiConverterOptionString.write(value.lnurlDomain, into: &buf)
     }
 }
 
@@ -3181,6 +3414,88 @@ public func FfiConverterTypeGetPaymentResponse_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeGetPaymentResponse_lower(_ value: GetPaymentResponse) -> RustBuffer {
     return FfiConverterTypeGetPaymentResponse.lower(value)
+}
+
+
+public struct LightningAddressInfo {
+    public var description: String
+    public var lightningAddress: String
+    public var lnurl: String
+    public var username: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(description: String, lightningAddress: String, lnurl: String, username: String) {
+        self.description = description
+        self.lightningAddress = lightningAddress
+        self.lnurl = lnurl
+        self.username = username
+    }
+}
+
+
+
+extension LightningAddressInfo: Equatable, Hashable {
+    public static func ==(lhs: LightningAddressInfo, rhs: LightningAddressInfo) -> Bool {
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.lightningAddress != rhs.lightningAddress {
+            return false
+        }
+        if lhs.lnurl != rhs.lnurl {
+            return false
+        }
+        if lhs.username != rhs.username {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(description)
+        hasher.combine(lightningAddress)
+        hasher.combine(lnurl)
+        hasher.combine(username)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLightningAddressInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LightningAddressInfo {
+        return
+            try LightningAddressInfo(
+                description: FfiConverterString.read(from: &buf), 
+                lightningAddress: FfiConverterString.read(from: &buf), 
+                lnurl: FfiConverterString.read(from: &buf), 
+                username: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LightningAddressInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.description, into: &buf)
+        FfiConverterString.write(value.lightningAddress, into: &buf)
+        FfiConverterString.write(value.lnurl, into: &buf)
+        FfiConverterString.write(value.username, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLightningAddressInfo_lift(_ buf: RustBuffer) throws -> LightningAddressInfo {
+    return try FfiConverterTypeLightningAddressInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLightningAddressInfo_lower(_ value: LightningAddressInfo) -> RustBuffer {
+    return FfiConverterTypeLightningAddressInfo.lower(value)
 }
 
 
@@ -4539,6 +4854,72 @@ public func FfiConverterTypeRefundDepositResponse_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypeRefundDepositResponse_lower(_ value: RefundDepositResponse) -> RustBuffer {
     return FfiConverterTypeRefundDepositResponse.lower(value)
+}
+
+
+public struct RegisterLightningAddressRequest {
+    public var username: String
+    public var description: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(username: String, description: String) {
+        self.username = username
+        self.description = description
+    }
+}
+
+
+
+extension RegisterLightningAddressRequest: Equatable, Hashable {
+    public static func ==(lhs: RegisterLightningAddressRequest, rhs: RegisterLightningAddressRequest) -> Bool {
+        if lhs.username != rhs.username {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(username)
+        hasher.combine(description)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRegisterLightningAddressRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RegisterLightningAddressRequest {
+        return
+            try RegisterLightningAddressRequest(
+                username: FfiConverterString.read(from: &buf), 
+                description: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RegisterLightningAddressRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.username, into: &buf)
+        FfiConverterString.write(value.description, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRegisterLightningAddressRequest_lift(_ buf: RustBuffer) throws -> RegisterLightningAddressRequest {
+    return try FfiConverterTypeRegisterLightningAddressRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRegisterLightningAddressRequest_lower(_ value: RegisterLightningAddressRequest) -> RustBuffer {
+    return FfiConverterTypeRegisterLightningAddressRequest.lower(value)
 }
 
 
@@ -6767,6 +7148,30 @@ fileprivate struct FfiConverterOptionTypeCredentials: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeLightningAddressInfo: FfiConverterRustBuffer {
+    typealias SwiftType = LightningAddressInfo?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeLightningAddressInfo.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeLightningAddressInfo.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeLnurlPayInfo: FfiConverterRustBuffer {
     typealias SwiftType = LnurlPayInfo?
 
@@ -7267,13 +7672,22 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_add_event_listener() != 61844) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_check_lightning_address_available() != 31624) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_claim_deposit() != 43529) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_delete_lightning_address() != 44132) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_disconnect() != 30986) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_info() != 6771) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_lightning_address() != 36552) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_payment() != 11540) {
@@ -7300,7 +7714,13 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_receive_payment() != 36984) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_recover_lightning_address() != 43367) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_refund_deposit() != 33646) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_register_lightning_address() != 530) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_remove_event_listener() != 60980) {
@@ -7327,34 +7747,37 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_rest_chain_service() != 56288) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_cached_item() != 11423) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_delete_cached_item() != 6883) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_set_cached_item() != 17965) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_cached_item() != 30248) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_list_payments() != 55103) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_set_cached_item() != 7970) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_insert_payment() != 35649) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_list_payments() != 35678) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_set_payment_metadata() != 780) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_insert_payment() != 28075) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_payment_by_id() != 32084) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_set_payment_metadata() != 45500) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_add_deposit() != 31647) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_payment_by_id() != 35394) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_delete_deposit() != 19211) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_add_deposit() != 55082) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_list_deposits() != 11262) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_delete_deposit() != 13111) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_update_deposit() != 58400) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_list_deposits() != 22806) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_storage_update_deposit() != 48478) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_constructor_sdkbuilder_new() != 52744) {
