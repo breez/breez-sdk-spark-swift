@@ -889,7 +889,7 @@ public protocol BreezSdkProtocol : AnyObject {
     
     func lnurlPay(request: LnurlPayRequest) async throws  -> LnurlPayResponse
     
-    func pollLightningSendPayment(paymentId: String) 
+    func pollLightningSendPayment(payment: Payment, sspId: String) 
     
     func prepareLnurlPay(request: PrepareLnurlPayRequest) async throws  -> PrepareLnurlPayResponse
     
@@ -1191,9 +1191,10 @@ open func lnurlPay(request: LnurlPayRequest)async throws  -> LnurlPayResponse {
         )
 }
     
-open func pollLightningSendPayment(paymentId: String) {try! rustCall() {
+open func pollLightningSendPayment(payment: Payment, sspId: String) {try! rustCall() {
     uniffi_breez_sdk_spark_fn_method_breezsdk_poll_lightning_send_payment(self.uniffiClonePointer(),
-        FfiConverterString.lower(paymentId),$0
+        FfiConverterTypePayment.lower(payment),
+        FfiConverterString.lower(sspId),$0
     )
 }
 }
@@ -1441,6 +1442,14 @@ public protocol SdkBuilderProtocol : AnyObject {
      */
     func withChainService(chainService: BitcoinChainService) async 
     
+    /**
+     * Sets the key set type to be used by the SDK.
+     * Arguments:
+     * - `key_set_type`: The key set type which determines the derivation path.
+     * - `use_address_index`: Controls the structure of the BIP derivation path.
+     */
+    func withKeySet(keySetType: KeySetType, useAddressIndex: Bool) async 
+    
     func withLnurlClient(lnurlClient: RestClient) async 
     
     /**
@@ -1555,6 +1564,30 @@ open func withChainService(chainService: BitcoinChainService)async  {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_chain_service(
                     self.uniffiClonePointer(),
                     FfiConverterTypeBitcoinChainService.lower(chainService)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
+}
+    
+    /**
+     * Sets the key set type to be used by the SDK.
+     * Arguments:
+     * - `key_set_type`: The key set type which determines the derivation path.
+     * - `use_address_index`: Controls the structure of the BIP derivation path.
+     */
+open func withKeySet(keySetType: KeySetType, useAddressIndex: Bool)async  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_key_set(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeKeySetType.lower(keySetType),FfiConverterBool.lower(useAddressIndex)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -2857,18 +2890,30 @@ public struct Config {
      * The domain used for receiving through lnurl-pay and lightning address.
      */
     public var lnurlDomain: String?
+    /**
+     * When this is set to `true` we will prefer to use spark payments over
+     * lightning when sending and receiving. This has the benefit of lower fees
+     * but is at the cost of privacy.
+     */
+    public var preferSparkOverLightning: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(apiKey: String?, network: Network, syncIntervalSecs: UInt32, maxDepositClaimFee: Fee?, 
         /**
          * The domain used for receiving through lnurl-pay and lightning address.
-         */lnurlDomain: String?) {
+         */lnurlDomain: String?, 
+        /**
+         * When this is set to `true` we will prefer to use spark payments over
+         * lightning when sending and receiving. This has the benefit of lower fees
+         * but is at the cost of privacy.
+         */preferSparkOverLightning: Bool) {
         self.apiKey = apiKey
         self.network = network
         self.syncIntervalSecs = syncIntervalSecs
         self.maxDepositClaimFee = maxDepositClaimFee
         self.lnurlDomain = lnurlDomain
+        self.preferSparkOverLightning = preferSparkOverLightning
     }
 }
 
@@ -2891,6 +2936,9 @@ extension Config: Equatable, Hashable {
         if lhs.lnurlDomain != rhs.lnurlDomain {
             return false
         }
+        if lhs.preferSparkOverLightning != rhs.preferSparkOverLightning {
+            return false
+        }
         return true
     }
 
@@ -2900,6 +2948,7 @@ extension Config: Equatable, Hashable {
         hasher.combine(syncIntervalSecs)
         hasher.combine(maxDepositClaimFee)
         hasher.combine(lnurlDomain)
+        hasher.combine(preferSparkOverLightning)
     }
 }
 
@@ -2915,7 +2964,8 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
                 network: FfiConverterTypeNetwork.read(from: &buf), 
                 syncIntervalSecs: FfiConverterUInt32.read(from: &buf), 
                 maxDepositClaimFee: FfiConverterOptionTypeFee.read(from: &buf), 
-                lnurlDomain: FfiConverterOptionString.read(from: &buf)
+                lnurlDomain: FfiConverterOptionString.read(from: &buf), 
+                preferSparkOverLightning: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -2925,6 +2975,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.syncIntervalSecs, into: &buf)
         FfiConverterOptionTypeFee.write(value.maxDepositClaimFee, into: &buf)
         FfiConverterOptionString.write(value.lnurlDomain, into: &buf)
+        FfiConverterBool.write(value.preferSparkOverLightning, into: &buf)
     }
 }
 
@@ -5694,6 +5745,91 @@ extension Fee: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum KeySetType {
+    
+    case `default`
+    case taproot
+    case nativeSegwit
+    case wrappedSegwit
+    case legacy
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeySetType: FfiConverterRustBuffer {
+    typealias SwiftType = KeySetType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeySetType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .`default`
+        
+        case 2: return .taproot
+        
+        case 3: return .nativeSegwit
+        
+        case 4: return .wrappedSegwit
+        
+        case 5: return .legacy
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KeySetType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .`default`:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .taproot:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .nativeSegwit:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .wrappedSegwit:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .legacy:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeySetType_lift(_ buf: RustBuffer) throws -> KeySetType {
+    return try FfiConverterTypeKeySetType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeySetType_lower(_ value: KeySetType) -> RustBuffer {
+    return FfiConverterTypeKeySetType.lower(value)
+}
+
+
+
+extension KeySetType: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum Network {
     
     case mainnet
@@ -6440,6 +6576,8 @@ public enum SdkEvent {
     )
     case paymentSucceeded(payment: Payment
     )
+    case paymentFailed(payment: Payment
+    )
 }
 
 
@@ -6462,6 +6600,9 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
         )
         
         case 4: return .paymentSucceeded(payment: try FfiConverterTypePayment.read(from: &buf)
+        )
+        
+        case 5: return .paymentFailed(payment: try FfiConverterTypePayment.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -6488,6 +6629,11 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
         
         case let .paymentSucceeded(payment):
             writeInt(&buf, Int32(4))
+            FfiConverterTypePayment.write(payment, into: &buf)
+            
+        
+        case let .paymentFailed(payment):
+            writeInt(&buf, Int32(5))
             FfiConverterTypePayment.write(payment, into: &buf)
             
         }
@@ -7593,19 +7739,12 @@ public func defaultConfig(network: Network) -> Config {
     )
 })
 }
-public func defaultStorage(dataDir: String)async throws  -> Storage {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_func_default_storage(FfiConverterString.lower(dataDir)
-                )
-            },
-            pollFunc: ffi_breez_sdk_spark_rust_future_poll_pointer,
-            completeFunc: ffi_breez_sdk_spark_rust_future_complete_pointer,
-            freeFunc: ffi_breez_sdk_spark_rust_future_free_pointer,
-            liftFunc: FfiConverterTypeStorage.lift,
-            errorHandler: FfiConverterTypeSdkError.lift
-        )
+public func defaultStorage(dataDir: String)throws  -> Storage {
+    return try  FfiConverterTypeStorage.lift(try rustCallWithError(FfiConverterTypeSdkError.lift) {
+    uniffi_breez_sdk_spark_fn_func_default_storage(
+        FfiConverterString.lower(dataDir),$0
+    )
+})
 }
 public func initLogging(logDir: String?, appLogger: Logger?, logFilter: String?)throws  {try rustCallWithError(FfiConverterTypeSdkError.lift) {
     uniffi_breez_sdk_spark_fn_func_init_logging(
@@ -7651,7 +7790,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_default_config() != 62194) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_func_default_storage() != 30804) {
+    if (uniffi_breez_sdk_spark_checksum_func_default_storage() != 46285) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_init_logging() != 8518) {
@@ -7702,7 +7841,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_lnurl_pay() != 10147) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_poll_lightning_send_payment() != 5478) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_poll_lightning_send_payment() != 57601) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_lnurl_pay() != 37691) {
@@ -7739,6 +7878,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_chain_service() != 2848) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_key_set() != 55523) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_lnurl_client() != 61720) {

@@ -536,7 +536,7 @@ public protocol RestClient : AnyObject {
      * - `url`: the URL on which GET will be called
      * - `headers`: optional headers that will be set on the request
      */
-    func get(url: String, headers: [String: String]?) async throws  -> RestResponse
+    func getRequest(url: String, headers: [String: String]?) async throws  -> RestResponse
     
     /**
      * Makes a POST request, and logs on DEBUG.
@@ -545,7 +545,7 @@ public protocol RestClient : AnyObject {
      * - `headers`: the optional POST headers
      * - `body`: the optional POST body
      */
-    func post(url: String, headers: [String: String]?, body: String?) async throws  -> RestResponse
+    func postRequest(url: String, headers: [String: String]?, body: String?) async throws  -> RestResponse
     
     /**
      * Makes a DELETE request, and logs on DEBUG.
@@ -554,7 +554,7 @@ public protocol RestClient : AnyObject {
      * - `headers`: the optional DELETE headers
      * - `body`: the optional DELETE body
      */
-    func delete(url: String, headers: [String: String]?, body: String?) async throws  -> RestResponse
+    func deleteRequest(url: String, headers: [String: String]?, body: String?) async throws  -> RestResponse
     
 }
 
@@ -614,11 +614,11 @@ open class RestClientImpl:
      * - `url`: the URL on which GET will be called
      * - `headers`: optional headers that will be set on the request
      */
-open func get(url: String, headers: [String: String]?)async throws  -> RestResponse {
+open func getRequest(url: String, headers: [String: String]?)async throws  -> RestResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_common_fn_method_restclient_get(
+                uniffi_breez_sdk_common_fn_method_restclient_get_request(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(url),FfiConverterOptionDictionaryStringString.lower(headers)
                 )
@@ -638,11 +638,11 @@ open func get(url: String, headers: [String: String]?)async throws  -> RestRespo
      * - `headers`: the optional POST headers
      * - `body`: the optional POST body
      */
-open func post(url: String, headers: [String: String]?, body: String?)async throws  -> RestResponse {
+open func postRequest(url: String, headers: [String: String]?, body: String?)async throws  -> RestResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_common_fn_method_restclient_post(
+                uniffi_breez_sdk_common_fn_method_restclient_post_request(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(url),FfiConverterOptionDictionaryStringString.lower(headers),FfiConverterOptionString.lower(body)
                 )
@@ -662,11 +662,11 @@ open func post(url: String, headers: [String: String]?, body: String?)async thro
      * - `headers`: the optional DELETE headers
      * - `body`: the optional DELETE body
      */
-open func delete(url: String, headers: [String: String]?, body: String?)async throws  -> RestResponse {
+open func deleteRequest(url: String, headers: [String: String]?, body: String?)async throws  -> RestResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_common_fn_method_restclient_delete(
+                uniffi_breez_sdk_common_fn_method_restclient_delete_request(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(url),FfiConverterOptionDictionaryStringString.lower(headers),FfiConverterOptionString.lower(body)
                 )
@@ -695,7 +695,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     static var vtable: UniffiVTableCallbackInterfaceRestClient = UniffiVTableCallbackInterfaceRestClient(
-        get: { (
+        getRequest: { (
             uniffiHandle: UInt64,
             url: RustBuffer,
             headers: RustBuffer,
@@ -708,7 +708,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
                 guard let uniffiObj = try? FfiConverterTypeRestClient.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try await uniffiObj.get(
+                return try await uniffiObj.getRequest(
                      url: try FfiConverterString.lift(url),
                      headers: try FfiConverterOptionDictionaryStringString.lift(headers)
                 )
@@ -740,7 +740,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
-        post: { (
+        postRequest: { (
             uniffiHandle: UInt64,
             url: RustBuffer,
             headers: RustBuffer,
@@ -754,7 +754,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
                 guard let uniffiObj = try? FfiConverterTypeRestClient.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try await uniffiObj.post(
+                return try await uniffiObj.postRequest(
                      url: try FfiConverterString.lift(url),
                      headers: try FfiConverterOptionDictionaryStringString.lift(headers),
                      body: try FfiConverterOptionString.lift(body)
@@ -787,7 +787,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
-        delete: { (
+        deleteRequest: { (
             uniffiHandle: UInt64,
             url: RustBuffer,
             headers: RustBuffer,
@@ -801,7 +801,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
                 guard let uniffiObj = try? FfiConverterTypeRestClient.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try await uniffiObj.delete(
+                return try await uniffiObj.deleteRequest(
                      url: try FfiConverterString.lift(url),
                      headers: try FfiConverterOptionDictionaryStringString.lift(headers),
                      body: try FfiConverterOptionString.lift(body)
@@ -5403,13 +5403,13 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_breez_sdk_common_checksum_method_restclient_get() != 32450) {
+    if (uniffi_breez_sdk_common_checksum_method_restclient_get_request() != 1702) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_common_checksum_method_restclient_post() != 14213) {
+    if (uniffi_breez_sdk_common_checksum_method_restclient_post_request() != 38998) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_common_checksum_method_restclient_delete() != 56210) {
+    if (uniffi_breez_sdk_common_checksum_method_restclient_delete_request() != 26893) {
         return InitializationResult.apiChecksumMismatch
     }
 
