@@ -493,6 +493,24 @@ fileprivate struct FfiConverterString: FfiConverter {
     }
 }
 
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterData: FfiConverterRustBuffer {
+    typealias SwiftType = Data
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        let len: Int32 = try readInt(&buf)
+        return Data(try readBytes(&buf, count: Int(len)))
+    }
+
+    public static func write(_ value: Data, into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        writeBytes(&buf, value)
+    }
+}
+
 
 
 
@@ -868,6 +886,17 @@ public protocol BreezSdkProtocol : AnyObject {
     func getPayment(request: GetPaymentRequest) async throws  -> GetPaymentResponse
     
     /**
+     * List fiat currencies for which there is a known exchange rate,
+     * sorted by the canonical name of the currency.
+     */
+    func listFiatCurrencies() async throws  -> ListFiatCurrenciesResponse
+    
+    /**
+     * List the latest rates of fiat currencies, sorted by name.
+     */
+    func listFiatRates() async throws  -> ListFiatRatesResponse
+    
+    /**
      * Lists payments from the storage with pagination
      *
      * This method provides direct access to the payment history stored in the database.
@@ -1120,6 +1149,47 @@ open func getPayment(request: GetPaymentRequest)async throws  -> GetPaymentRespo
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeGetPaymentResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+    /**
+     * List fiat currencies for which there is a known exchange rate,
+     * sorted by the canonical name of the currency.
+     */
+open func listFiatCurrencies()async throws  -> ListFiatCurrenciesResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_list_fiat_currencies(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeListFiatCurrenciesResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+    /**
+     * List the latest rates of fiat currencies, sorted by name.
+     */
+open func listFiatRates()async throws  -> ListFiatRatesResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_list_fiat_rates(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeListFiatRatesResponse.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
 }
@@ -1443,6 +1513,13 @@ public protocol SdkBuilderProtocol : AnyObject {
     func withChainService(chainService: BitcoinChainService) async 
     
     /**
+     * Sets the fiat service to be used by the SDK.
+     * Arguments:
+     * - `fiat_service`: The fiat service to be used.
+     */
+    func withFiatService(fiatService: FiatService) async 
+    
+    /**
      * Sets the key set type to be used by the SDK.
      * Arguments:
      * - `key_set_type`: The key set type which determines the derivation path.
@@ -1506,15 +1583,15 @@ open class SdkBuilder:
      * Creates a new `SdkBuilder` with the provided configuration.
      * Arguments:
      * - `config`: The configuration to be used.
-     * - `mnemonic`: The mnemonic phrase for the wallet.
+     * - `seed`: The seed for wallet generation.
      * - `storage`: The storage backend to be used.
      */
-public convenience init(config: Config, mnemonic: String, storage: Storage) {
+public convenience init(config: Config, seed: Seed, storage: Storage) {
     let pointer =
         try! rustCall() {
     uniffi_breez_sdk_spark_fn_constructor_sdkbuilder_new(
         FfiConverterTypeConfig.lower(config),
-        FfiConverterString.lower(mnemonic),
+        FfiConverterTypeSeed.lower(seed),
         FfiConverterTypeStorage.lower(storage),$0
     )
 }
@@ -1564,6 +1641,29 @@ open func withChainService(chainService: BitcoinChainService)async  {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_chain_service(
                     self.uniffiClonePointer(),
                     FfiConverterTypeBitcoinChainService.lower(chainService)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
+}
+    
+    /**
+     * Sets the fiat service to be used by the SDK.
+     * Arguments:
+     * - `fiat_service`: The fiat service to be used.
+     */
+open func withFiatService(fiatService: FiatService)async  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_fiat_service(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeFiatService_lower(fiatService)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -2997,14 +3097,14 @@ public func FfiConverterTypeConfig_lower(_ value: Config) -> RustBuffer {
 
 public struct ConnectRequest {
     public var config: Config
-    public var mnemonic: String
+    public var seed: Seed
     public var storageDir: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(config: Config, mnemonic: String, storageDir: String) {
+    public init(config: Config, seed: Seed, storageDir: String) {
         self.config = config
-        self.mnemonic = mnemonic
+        self.seed = seed
         self.storageDir = storageDir
     }
 }
@@ -3016,7 +3116,7 @@ extension ConnectRequest: Equatable, Hashable {
         if lhs.config != rhs.config {
             return false
         }
-        if lhs.mnemonic != rhs.mnemonic {
+        if lhs.seed != rhs.seed {
             return false
         }
         if lhs.storageDir != rhs.storageDir {
@@ -3027,7 +3127,7 @@ extension ConnectRequest: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(config)
-        hasher.combine(mnemonic)
+        hasher.combine(seed)
         hasher.combine(storageDir)
     }
 }
@@ -3041,14 +3141,14 @@ public struct FfiConverterTypeConnectRequest: FfiConverterRustBuffer {
         return
             try ConnectRequest(
                 config: FfiConverterTypeConfig.read(from: &buf), 
-                mnemonic: FfiConverterString.read(from: &buf), 
+                seed: FfiConverterTypeSeed.read(from: &buf), 
                 storageDir: FfiConverterString.read(from: &buf)
         )
     }
 
     public static func write(_ value: ConnectRequest, into buf: inout [UInt8]) {
         FfiConverterTypeConfig.write(value.config, into: &buf)
-        FfiConverterString.write(value.mnemonic, into: &buf)
+        FfiConverterTypeSeed.write(value.seed, into: &buf)
         FfiConverterString.write(value.storageDir, into: &buf)
     }
 }
@@ -3547,6 +3647,140 @@ public func FfiConverterTypeLightningAddressInfo_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeLightningAddressInfo_lower(_ value: LightningAddressInfo) -> RustBuffer {
     return FfiConverterTypeLightningAddressInfo.lower(value)
+}
+
+
+/**
+ * Response from listing fiat currencies
+ */
+public struct ListFiatCurrenciesResponse {
+    /**
+     * The list of fiat currencies
+     */
+    public var currencies: [FiatCurrency]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The list of fiat currencies
+         */currencies: [FiatCurrency]) {
+        self.currencies = currencies
+    }
+}
+
+
+
+extension ListFiatCurrenciesResponse: Equatable, Hashable {
+    public static func ==(lhs: ListFiatCurrenciesResponse, rhs: ListFiatCurrenciesResponse) -> Bool {
+        if lhs.currencies != rhs.currencies {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(currencies)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeListFiatCurrenciesResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ListFiatCurrenciesResponse {
+        return
+            try ListFiatCurrenciesResponse(
+                currencies: FfiConverterSequenceTypeFiatCurrency.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ListFiatCurrenciesResponse, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeFiatCurrency.write(value.currencies, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeListFiatCurrenciesResponse_lift(_ buf: RustBuffer) throws -> ListFiatCurrenciesResponse {
+    return try FfiConverterTypeListFiatCurrenciesResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeListFiatCurrenciesResponse_lower(_ value: ListFiatCurrenciesResponse) -> RustBuffer {
+    return FfiConverterTypeListFiatCurrenciesResponse.lower(value)
+}
+
+
+/**
+ * Response from listing fiat rates
+ */
+public struct ListFiatRatesResponse {
+    /**
+     * The list of fiat rates
+     */
+    public var rates: [Rate]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The list of fiat rates
+         */rates: [Rate]) {
+        self.rates = rates
+    }
+}
+
+
+
+extension ListFiatRatesResponse: Equatable, Hashable {
+    public static func ==(lhs: ListFiatRatesResponse, rhs: ListFiatRatesResponse) -> Bool {
+        if lhs.rates != rhs.rates {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rates)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeListFiatRatesResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ListFiatRatesResponse {
+        return
+            try ListFiatRatesResponse(
+                rates: FfiConverterSequenceTypeRate.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ListFiatRatesResponse, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRate.write(value.rates, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeListFiatRatesResponse_lift(_ buf: RustBuffer) throws -> ListFiatRatesResponse {
+    return try FfiConverterTypeListFiatRatesResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeListFiatRatesResponse_lower(_ value: ListFiatRatesResponse) -> RustBuffer {
+    return FfiConverterTypeListFiatRatesResponse.lower(value)
 }
 
 
@@ -6663,6 +6897,93 @@ extension SdkEvent: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Represents the seed for wallet generation, either as a mnemonic phrase with an optional
+ * passphrase or as raw entropy bytes.
+ */
+
+public enum Seed {
+    
+    /**
+     * A BIP-39 mnemonic phrase with an optional passphrase.
+     */
+    case mnemonic(
+        /**
+         * The mnemonic phrase. 12 or 24 words.
+         */mnemonic: String, 
+        /**
+         * An optional passphrase for the mnemonic.
+         */passphrase: String?
+    )
+    /**
+     * Raw entropy bytes.
+     */
+    case entropy(Data
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSeed: FfiConverterRustBuffer {
+    typealias SwiftType = Seed
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Seed {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .mnemonic(mnemonic: try FfiConverterString.read(from: &buf), passphrase: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 2: return .entropy(try FfiConverterData.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Seed, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .mnemonic(mnemonic,passphrase):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(mnemonic, into: &buf)
+            FfiConverterOptionString.write(passphrase, into: &buf)
+            
+        
+        case let .entropy(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterData.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSeed_lift(_ buf: RustBuffer) throws -> Seed {
+    return try FfiConverterTypeSeed.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSeed_lower(_ value: Seed) -> RustBuffer {
+    return FfiConverterTypeSeed.lower(value)
+}
+
+
+
+extension Seed: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum SendPaymentMethod {
     
@@ -6752,7 +7073,7 @@ public enum SendPaymentOptions {
     
     case bitcoinAddress(confirmationSpeed: OnchainConfirmationSpeed
     )
-    case bolt11Invoice(useSpark: Bool
+    case bolt11Invoice(preferSpark: Bool
     )
 }
 
@@ -6770,7 +7091,7 @@ public struct FfiConverterTypeSendPaymentOptions: FfiConverterRustBuffer {
         case 1: return .bitcoinAddress(confirmationSpeed: try FfiConverterTypeOnchainConfirmationSpeed.read(from: &buf)
         )
         
-        case 2: return .bolt11Invoice(useSpark: try FfiConverterBool.read(from: &buf)
+        case 2: return .bolt11Invoice(preferSpark: try FfiConverterBool.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -6786,9 +7107,9 @@ public struct FfiConverterTypeSendPaymentOptions: FfiConverterRustBuffer {
             FfiConverterTypeOnchainConfirmationSpeed.write(confirmationSpeed, into: &buf)
             
         
-        case let .bolt11Invoice(useSpark):
+        case let .bolt11Invoice(preferSpark):
             writeInt(&buf, Int32(2))
-            FfiConverterBool.write(useSpark, into: &buf)
+            FfiConverterBool.write(preferSpark, into: &buf)
             
         }
     }
@@ -7582,6 +7903,62 @@ fileprivate struct FfiConverterSequenceTypeUtxo: FfiConverterRustBuffer {
     }
 }
 
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFiatCurrency: FfiConverterRustBuffer {
+    typealias SwiftType = [FiatCurrency]
+
+    public static func write(_ value: [FiatCurrency], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFiatCurrency.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FiatCurrency] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FiatCurrency]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFiatCurrency.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRate: FfiConverterRustBuffer {
+    typealias SwiftType = [Rate]
+
+    public static func write(_ value: [Rate], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRate.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Rate] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Rate]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRate.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+
+
+
+
+
+
 
 
 
@@ -7832,6 +8209,12 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_payment() != 11540) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_list_fiat_currencies() != 63366) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_list_fiat_rates() != 5904) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_list_payments() != 16156) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7880,6 +8263,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_chain_service() != 2848) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_fiat_service() != 41113) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_key_set() != 55523) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7922,7 +8308,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_storage_update_deposit() != 48478) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_constructor_sdkbuilder_new() != 52744) {
+    if (uniffi_breez_sdk_spark_checksum_constructor_sdkbuilder_new() != 53882) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_eventlistener_on_event() != 10824) {

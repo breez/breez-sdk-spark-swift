@@ -528,6 +528,285 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 
 
+/**
+ * Trait covering fiat-related functionality
+ */
+public protocol FiatService : AnyObject {
+    
+    /**
+     * List all supported fiat currencies for which there is a known exchange rate.
+     */
+    func fetchFiatCurrencies() async throws  -> [FiatCurrency]
+    
+    /**
+     * Get the live rates from the server.
+     */
+    func fetchFiatRates() async throws  -> [Rate]
+    
+}
+
+/**
+ * Trait covering fiat-related functionality
+ */
+open class FiatServiceImpl:
+    FiatService {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_breez_sdk_common_fn_clone_fiatservice(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_breez_sdk_common_fn_free_fiatservice(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * List all supported fiat currencies for which there is a known exchange rate.
+     */
+open func fetchFiatCurrencies()async throws  -> [FiatCurrency] {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_common_fn_method_fiatservice_fetch_fiat_currencies(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_common_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_common_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_common_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeFiatCurrency.lift,
+            errorHandler: FfiConverterTypeServiceConnectivityError.lift
+        )
+}
+    
+    /**
+     * Get the live rates from the server.
+     */
+open func fetchFiatRates()async throws  -> [Rate] {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_common_fn_method_fiatservice_fetch_fiat_rates(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_common_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_common_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_common_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeRate.lift,
+            errorHandler: FfiConverterTypeServiceConnectivityError.lift
+        )
+}
+    
+
+}
+// Magic number for the Rust proxy to call using the same mechanism as every other method,
+// to free the callback once it's dropped by Rust.
+private let IDX_CALLBACK_FREE: Int32 = 0
+// Callback return codes
+private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
+private let UNIFFI_CALLBACK_ERROR: Int32 = 1
+private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceFiatService {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    static var vtable: UniffiVTableCallbackInterfaceFiatService = UniffiVTableCallbackInterfaceFiatService(
+        fetchFiatCurrencies: { (
+            uniffiHandle: UInt64,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> [FiatCurrency] in
+                guard let uniffiObj = try? FfiConverterTypeFiatService.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.fetchFiatCurrencies(
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: [FiatCurrency]) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterSequenceTypeFiatCurrency.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeServiceConnectivityError.lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        fetchFiatRates: { (
+            uniffiHandle: UInt64,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> [Rate] in
+                guard let uniffiObj = try? FfiConverterTypeFiatService.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.fetchFiatRates(
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: [Rate]) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterSequenceTypeRate.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeServiceConnectivityError.lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterTypeFiatService.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface FiatService: handle missing in uniffiFree")
+            }
+        }
+    )
+}
+
+private func uniffiCallbackInitFiatService() {
+    uniffi_breez_sdk_common_fn_init_callback_vtable_fiatservice(&UniffiCallbackInterfaceFiatService.vtable)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFiatService: FfiConverter {
+    fileprivate static var handleMap = UniffiHandleMap<FiatService>()
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = FiatService
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FiatService {
+        return FiatServiceImpl(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: FiatService) -> UnsafeMutableRawPointer {
+        guard let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: handleMap.insert(obj: value))) else {
+            fatalError("Cast to UnsafeMutableRawPointer failed")
+        }
+        return ptr
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FiatService {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: FiatService, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFiatService_lift(_ pointer: UnsafeMutableRawPointer) throws -> FiatService {
+    return try FfiConverterTypeFiatService.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFiatService_lower(_ value: FiatService) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeFiatService.lower(value)
+}
+
+
+
+
 public protocol RestClient : AnyObject {
     
     /**
@@ -681,13 +960,7 @@ open func deleteRequest(url: String, headers: [String: String]?, body: String?)a
     
 
 }
-// Magic number for the Rust proxy to call using the same mechanism as every other method,
-// to free the callback once it's dropped by Rust.
-private let IDX_CALLBACK_FREE: Int32 = 0
-// Callback return codes
-private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
-private let UNIFFI_CALLBACK_ERROR: Int32 = 1
-private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
+
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
 fileprivate struct UniffiCallbackInterfaceRestClient {
@@ -5178,6 +5451,31 @@ fileprivate struct FfiConverterSequenceTypeBolt12OfferBlindedPath: FfiConverterR
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFiatCurrency: FfiConverterRustBuffer {
+    typealias SwiftType = [FiatCurrency]
+
+    public static func write(_ value: [FiatCurrency], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFiatCurrency.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FiatCurrency] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FiatCurrency]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFiatCurrency.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeLocaleOverrides: FfiConverterRustBuffer {
     typealias SwiftType = [LocaleOverrides]
 
@@ -5220,6 +5518,31 @@ fileprivate struct FfiConverterSequenceTypeLocalizedName: FfiConverterRustBuffer
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeLocalizedName.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRate: FfiConverterRustBuffer {
+    typealias SwiftType = [Rate]
+
+    public static func write(_ value: [Rate], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRate.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Rate] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Rate]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRate.read(from: &buf))
         }
         return seq
     }
@@ -5403,6 +5726,12 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_breez_sdk_common_checksum_method_fiatservice_fetch_fiat_currencies() != 63089) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_common_checksum_method_fiatservice_fetch_fiat_rates() != 48636) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_common_checksum_method_restclient_get_request() != 1702) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5413,6 +5742,7 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
 
+    uniffiCallbackInitFiatService()
     uniffiCallbackInitRestClient()
     return InitializationResult.ok
 }()
