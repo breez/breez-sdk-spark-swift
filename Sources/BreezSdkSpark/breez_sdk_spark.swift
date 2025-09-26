@@ -4502,11 +4502,13 @@ public func FfiConverterTypePayment_lower(_ value: Payment) -> RustBuffer {
  */
 public struct PaymentMetadata {
     public var lnurlPayInfo: LnurlPayInfo?
+    public var lnurlDescription: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(lnurlPayInfo: LnurlPayInfo?) {
+    public init(lnurlPayInfo: LnurlPayInfo?, lnurlDescription: String?) {
         self.lnurlPayInfo = lnurlPayInfo
+        self.lnurlDescription = lnurlDescription
     }
 }
 
@@ -4517,11 +4519,15 @@ extension PaymentMetadata: Equatable, Hashable {
         if lhs.lnurlPayInfo != rhs.lnurlPayInfo {
             return false
         }
+        if lhs.lnurlDescription != rhs.lnurlDescription {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(lnurlPayInfo)
+        hasher.combine(lnurlDescription)
     }
 }
 
@@ -4533,12 +4539,14 @@ public struct FfiConverterTypePaymentMetadata: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PaymentMetadata {
         return
             try PaymentMetadata(
-                lnurlPayInfo: FfiConverterOptionTypeLnurlPayInfo.read(from: &buf)
+                lnurlPayInfo: FfiConverterOptionTypeLnurlPayInfo.read(from: &buf), 
+                lnurlDescription: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: PaymentMetadata, into buf: inout [UInt8]) {
         FfiConverterOptionTypeLnurlPayInfo.write(value.lnurlPayInfo, into: &buf)
+        FfiConverterOptionString.write(value.lnurlDescription, into: &buf)
     }
 }
 
@@ -5144,11 +5152,11 @@ public func FfiConverterTypeRefundDepositResponse_lower(_ value: RefundDepositRe
 
 public struct RegisterLightningAddressRequest {
     public var username: String
-    public var description: String
+    public var description: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(username: String, description: String) {
+    public init(username: String, description: String? = nil) {
         self.username = username
         self.description = description
     }
@@ -5182,13 +5190,13 @@ public struct FfiConverterTypeRegisterLightningAddressRequest: FfiConverterRustB
         return
             try RegisterLightningAddressRequest(
                 username: FfiConverterString.read(from: &buf), 
-                description: FfiConverterString.read(from: &buf)
+                description: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: RegisterLightningAddressRequest, into buf: inout [UInt8]) {
         FfiConverterString.write(value.username, into: &buf)
-        FfiConverterString.write(value.description, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
     }
 }
 
