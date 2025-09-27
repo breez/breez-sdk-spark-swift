@@ -518,6 +518,8 @@ public protocol BitcoinChainService : AnyObject {
     
     func getAddressUtxos(address: String) async throws  -> [Utxo]
     
+    func getTransactionStatus(txid: String) async throws  -> TxStatus
+    
     func getTransactionHex(txid: String) async throws  -> String
     
     func broadcastTransaction(tx: String) async throws 
@@ -587,6 +589,23 @@ open func getAddressUtxos(address: String)async throws  -> [Utxo] {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeUtxo.lift,
+            errorHandler: FfiConverterTypeChainServiceError.lift
+        )
+}
+    
+open func getTransactionStatus(txid: String)async throws  -> TxStatus {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_bitcoinchainservice_get_transaction_status(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(txid)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTxStatus.lift,
             errorHandler: FfiConverterTypeChainServiceError.lift
         )
 }
@@ -663,6 +682,49 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
                         returnValue: FfiConverterSequenceTypeUtxo.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeChainServiceError.lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        getTransactionStatus: { (
+            uniffiHandle: UInt64,
+            txid: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> TxStatus in
+                guard let uniffiObj = try? FfiConverterTypeBitcoinChainService.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.getTransactionStatus(
+                     txid: try FfiConverterString.lift(txid)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: TxStatus) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterTypeTxStatus.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -8187,10 +8249,13 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_address_utxos() != 20959) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_transaction_hex() != 19571) {
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_transaction_status() != 23018) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_broadcast_transaction() != 61083) {
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_transaction_hex() != 59376) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_broadcast_transaction() != 65179) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_add_event_listener() != 61844) {
