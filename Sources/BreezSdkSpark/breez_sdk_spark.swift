@@ -1587,7 +1587,7 @@ public protocol SdkBuilderProtocol : AnyObject {
      * - `key_set_type`: The key set type which determines the derivation path.
      * - `use_address_index`: Controls the structure of the BIP derivation path.
      */
-    func withKeySet(keySetType: KeySetType, useAddressIndex: Bool) async 
+    func withKeySet(keySetType: KeySetType, useAddressIndex: Bool, accountNumber: UInt32?) async 
     
     func withLnurlClient(lnurlClient: RestClient) async 
     
@@ -1743,13 +1743,13 @@ open func withFiatService(fiatService: FiatService)async  {
      * - `key_set_type`: The key set type which determines the derivation path.
      * - `use_address_index`: Controls the structure of the BIP derivation path.
      */
-open func withKeySet(keySetType: KeySetType, useAddressIndex: Bool)async  {
+open func withKeySet(keySetType: KeySetType, useAddressIndex: Bool, accountNumber: UInt32?)async  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_key_set(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeKeySetType.lower(keySetType),FfiConverterBool.lower(useAddressIndex)
+                    FfiConverterTypeKeySetType.lower(keySetType),FfiConverterBool.lower(useAddressIndex),FfiConverterOptionUInt32.lower(accountNumber)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -8339,7 +8339,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_fiat_service() != 41113) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_key_set() != 55523) {
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_key_set() != 42926) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_lnurl_client() != 61720) {
