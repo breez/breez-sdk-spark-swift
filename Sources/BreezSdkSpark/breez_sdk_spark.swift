@@ -918,7 +918,7 @@ public protocol BreezSdkProtocol : AnyObject {
      *
      * A unique identifier for the listener, which can be used to remove it later
      */
-    func addEventListener(listener: EventListener)  -> String
+    func addEventListener(listener: EventListener) async  -> String
     
     func checkLightningAddressAvailable(req: CheckLightningAddressRequest) async throws  -> Bool
     
@@ -1008,7 +1008,7 @@ public protocol BreezSdkProtocol : AnyObject {
      *
      * `true` if the listener was found and removed, `false` otherwise
      */
-    func removeEventListener(id: String)  -> Bool
+    func removeEventListener(id: String) async  -> Bool
     
     func sendPayment(request: SendPaymentRequest) async throws  -> SendPaymentResponse
     
@@ -1017,7 +1017,7 @@ public protocol BreezSdkProtocol : AnyObject {
     /**
      * Synchronizes the wallet with the Spark network
      */
-    func syncWallet(request: SyncWalletRequest) throws  -> SyncWalletResponse
+    func syncWallet(request: SyncWalletRequest) async throws  -> SyncWalletResponse
     
 }
 
@@ -1086,12 +1086,22 @@ open class BreezSdk:
      *
      * A unique identifier for the listener, which can be used to remove it later
      */
-open func addEventListener(listener: EventListener) -> String {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_breez_sdk_spark_fn_method_breezsdk_add_event_listener(self.uniffiClonePointer(),
-        FfiConverterCallbackInterfaceEventListener.lower(listener),$0
-    )
-})
+open func addEventListener(listener: EventListener)async  -> String {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_add_event_listener(
+                    self.uniffiClonePointer(),
+                    FfiConverterCallbackInterfaceEventListener.lower(listener)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: nil
+            
+        )
 }
     
 open func checkLightningAddressAvailable(req: CheckLightningAddressRequest)async throws  -> Bool {
@@ -1447,12 +1457,22 @@ open func registerLightningAddress(request: RegisterLightningAddressRequest)asyn
      *
      * `true` if the listener was found and removed, `false` otherwise
      */
-open func removeEventListener(id: String) -> Bool {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_breez_sdk_spark_fn_method_breezsdk_remove_event_listener(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
-    )
-})
+open func removeEventListener(id: String)async  -> Bool {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_remove_event_listener(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(id)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_i8,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_i8,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: nil
+            
+        )
 }
     
 open func sendPayment(request: SendPaymentRequest)async throws  -> SendPaymentResponse {
@@ -1492,12 +1512,21 @@ open func sendPaymentInternal(request: SendPaymentRequest, suppressPaymentEvent:
     /**
      * Synchronizes the wallet with the Spark network
      */
-open func syncWallet(request: SyncWalletRequest)throws  -> SyncWalletResponse {
-    return try  FfiConverterTypeSyncWalletResponse.lift(try rustCallWithError(FfiConverterTypeSdkError.lift) {
-    uniffi_breez_sdk_spark_fn_method_breezsdk_sync_wallet(self.uniffiClonePointer(),
-        FfiConverterTypeSyncWalletRequest.lower(request),$0
-    )
-})
+open func syncWallet(request: SyncWalletRequest)async throws  -> SyncWalletResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_sync_wallet(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSyncWalletRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSyncWalletResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
 }
     
 
@@ -3399,10 +3428,12 @@ public func FfiConverterTypeDepositInfo_lower(_ value: DepositInfo) -> RustBuffe
  * Request to get the balance of the wallet
  */
 public struct GetInfoRequest {
+    public var ensureSynced: Bool?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init() {
+    public init(ensureSynced: Bool?) {
+        self.ensureSynced = ensureSynced
     }
 }
 
@@ -3410,10 +3441,14 @@ public struct GetInfoRequest {
 
 extension GetInfoRequest: Equatable, Hashable {
     public static func ==(lhs: GetInfoRequest, rhs: GetInfoRequest) -> Bool {
+        if lhs.ensureSynced != rhs.ensureSynced {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
+        hasher.combine(ensureSynced)
     }
 }
 
@@ -3424,10 +3459,13 @@ extension GetInfoRequest: Equatable, Hashable {
 public struct FfiConverterTypeGetInfoRequest: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GetInfoRequest {
         return
-            GetInfoRequest()
+            try GetInfoRequest(
+                ensureSynced: FfiConverterOptionBool.read(from: &buf)
+        )
     }
 
     public static func write(_ value: GetInfoRequest, into buf: inout [UInt8]) {
+        FfiConverterOptionBool.write(value.ensureSynced, into: &buf)
     }
 }
 
@@ -7369,7 +7407,7 @@ public protocol EventListener : AnyObject {
     /**
      * Called when an event occurs
      */
-    func onEvent(event: SdkEvent) 
+    func onEvent(event: SdkEvent) async 
     
 }
 
@@ -7384,26 +7422,42 @@ fileprivate struct UniffiCallbackInterfaceEventListener {
         onEvent: { (
             uniffiHandle: UInt64,
             event: RustBuffer,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () throws -> () in
+                () async throws -> () in
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceEventListener.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return uniffiObj.onEvent(
+                return await uniffiObj.onEvent(
                      event: try FfiConverterTypeSdkEvent.lift(event)
                 )
             }
 
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCall(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsync(
                 makeCall: makeCall,
-                writeReturn: writeReturn
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError
             )
+            uniffiOutReturn.pointee = uniffiForeignFuture
         },
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             let result = try? FfiConverterCallbackInterfaceEventListener.handleMap.remove(handle: uniffiHandle)
@@ -8258,7 +8312,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_broadcast_transaction() != 65179) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_add_event_listener() != 61844) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_add_event_listener() != 37737) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_check_lightning_address_available() != 31624) {
@@ -8318,7 +8372,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_register_lightning_address() != 530) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_remove_event_listener() != 60980) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_remove_event_listener() != 41066) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_send_payment() != 54349) {
@@ -8327,7 +8381,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_send_payment_internal() != 37855) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_sync_wallet() != 36066) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_sync_wallet() != 30368) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_build() != 8126) {
@@ -8384,7 +8438,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_constructor_sdkbuilder_new() != 53882) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_eventlistener_on_event() != 10824) {
+    if (uniffi_breez_sdk_spark_checksum_method_eventlistener_on_event() != 24807) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_logger_log() != 11839) {
