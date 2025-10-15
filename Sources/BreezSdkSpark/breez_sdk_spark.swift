@@ -3,6 +3,7 @@
 
 // swiftlint:disable all
 import Foundation
+import BigInt
 
 // Depending on the consumer's build setup, the low-level FFI code
 // might be in a separate module, or it might be compiled inline into
@@ -948,6 +949,16 @@ public protocol BreezSdkProtocol : AnyObject {
     func getPayment(request: GetPaymentRequest) async throws  -> GetPaymentResponse
     
     /**
+     * Returns the metadata for the given token identifiers.
+     *
+     * Results are not guaranteed to be in the same order as the input token identifiers.
+     *
+     * If the metadata is not found locally in cache, it will be queried from
+     * the Spark network and then cached.
+     */
+    func getTokensMetadata(request: GetTokensMetadataRequest) async throws  -> GetTokensMetadataResponse
+    
+    /**
      * List fiat currencies for which there is a known exchange rate,
      * sorted by the canonical name of the currency.
      */
@@ -980,18 +991,11 @@ public protocol BreezSdkProtocol : AnyObject {
     
     func lnurlPay(request: LnurlPayRequest) async throws  -> LnurlPayResponse
     
-    func pollLightningSendPayment(payment: Payment, sspId: String) 
-    
     func prepareLnurlPay(request: PrepareLnurlPayRequest) async throws  -> PrepareLnurlPayResponse
     
     func prepareSendPayment(request: PrepareSendPaymentRequest) async throws  -> PrepareSendPaymentResponse
     
     func receivePayment(request: ReceivePaymentRequest) async throws  -> ReceivePaymentResponse
-    
-    /**
-     * Attempts to recover a lightning address from the lnurl server.
-     */
-    func recoverLightningAddress() async throws  -> LightningAddressInfo?
     
     func refundDeposit(request: RefundDepositRequest) async throws  -> RefundDepositResponse
     
@@ -1010,15 +1014,7 @@ public protocol BreezSdkProtocol : AnyObject {
      */
     func removeEventListener(id: String) async  -> Bool
     
-    func sendBitcoinAddress(address: BitcoinAddressDetails, feeQuote: SendOnchainFeeQuote, request: SendPaymentRequest) async throws  -> SendPaymentResponse
-    
-    func sendBolt11Invoice(invoiceDetails: Bolt11InvoiceDetails, sparkTransferFeeSats: UInt64?, lightningFeeSats: UInt64, request: SendPaymentRequest) async throws  -> SendPaymentResponse
-    
     func sendPayment(request: SendPaymentRequest) async throws  -> SendPaymentResponse
-    
-    func sendPaymentInternal(request: SendPaymentRequest, suppressPaymentEvent: Bool) async throws  -> SendPaymentResponse
-    
-    func sendSparkAddress(address: String, request: SendPaymentRequest) async throws  -> SendPaymentResponse
     
     /**
      * Synchronizes the wallet with the Spark network
@@ -1245,6 +1241,31 @@ open func getPayment(request: GetPaymentRequest)async throws  -> GetPaymentRespo
 }
     
     /**
+     * Returns the metadata for the given token identifiers.
+     *
+     * Results are not guaranteed to be in the same order as the input token identifiers.
+     *
+     * If the metadata is not found locally in cache, it will be queried from
+     * the Spark network and then cached.
+     */
+open func getTokensMetadata(request: GetTokensMetadataRequest)async throws  -> GetTokensMetadataResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_get_tokens_metadata(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeGetTokensMetadataRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeGetTokensMetadataResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+    /**
      * List fiat currencies for which there is a known exchange rate,
      * sorted by the canonical name of the currency.
      */
@@ -1352,14 +1373,6 @@ open func lnurlPay(request: LnurlPayRequest)async throws  -> LnurlPayResponse {
         )
 }
     
-open func pollLightningSendPayment(payment: Payment, sspId: String) {try! rustCall() {
-    uniffi_breez_sdk_spark_fn_method_breezsdk_poll_lightning_send_payment(self.uniffiClonePointer(),
-        FfiConverterTypePayment.lower(payment),
-        FfiConverterString.lower(sspId),$0
-    )
-}
-}
-    
 open func prepareLnurlPay(request: PrepareLnurlPayRequest)async throws  -> PrepareLnurlPayResponse {
     return
         try  await uniffiRustCallAsync(
@@ -1407,26 +1420,6 @@ open func receivePayment(request: ReceivePaymentRequest)async throws  -> Receive
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeReceivePaymentResponse.lift,
-            errorHandler: FfiConverterTypeSdkError.lift
-        )
-}
-    
-    /**
-     * Attempts to recover a lightning address from the lnurl server.
-     */
-open func recoverLightningAddress()async throws  -> LightningAddressInfo? {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_breezsdk_recover_lightning_address(
-                    self.uniffiClonePointer()
-                    
-                )
-            },
-            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
-            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
-            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterOptionTypeLightningAddressInfo.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
 }
@@ -1494,40 +1487,6 @@ open func removeEventListener(id: String)async  -> Bool {
         )
 }
     
-open func sendBitcoinAddress(address: BitcoinAddressDetails, feeQuote: SendOnchainFeeQuote, request: SendPaymentRequest)async throws  -> SendPaymentResponse {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_breezsdk_send_bitcoin_address(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeBitcoinAddressDetails_lower(address),FfiConverterTypeSendOnchainFeeQuote.lower(feeQuote),FfiConverterTypeSendPaymentRequest.lower(request)
-                )
-            },
-            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
-            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
-            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSendPaymentResponse.lift,
-            errorHandler: FfiConverterTypeSdkError.lift
-        )
-}
-    
-open func sendBolt11Invoice(invoiceDetails: Bolt11InvoiceDetails, sparkTransferFeeSats: UInt64?, lightningFeeSats: UInt64, request: SendPaymentRequest)async throws  -> SendPaymentResponse {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_breezsdk_send_bolt11_invoice(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeBolt11InvoiceDetails_lower(invoiceDetails),FfiConverterOptionUInt64.lower(sparkTransferFeeSats),FfiConverterUInt64.lower(lightningFeeSats),FfiConverterTypeSendPaymentRequest.lower(request)
-                )
-            },
-            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
-            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
-            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSendPaymentResponse.lift,
-            errorHandler: FfiConverterTypeSdkError.lift
-        )
-}
-    
 open func sendPayment(request: SendPaymentRequest)async throws  -> SendPaymentResponse {
     return
         try  await uniffiRustCallAsync(
@@ -1535,40 +1494,6 @@ open func sendPayment(request: SendPaymentRequest)async throws  -> SendPaymentRe
                 uniffi_breez_sdk_spark_fn_method_breezsdk_send_payment(
                     self.uniffiClonePointer(),
                     FfiConverterTypeSendPaymentRequest.lower(request)
-                )
-            },
-            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
-            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
-            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSendPaymentResponse.lift,
-            errorHandler: FfiConverterTypeSdkError.lift
-        )
-}
-    
-open func sendPaymentInternal(request: SendPaymentRequest, suppressPaymentEvent: Bool)async throws  -> SendPaymentResponse {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_breezsdk_send_payment_internal(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeSendPaymentRequest.lower(request),FfiConverterBool.lower(suppressPaymentEvent)
-                )
-            },
-            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
-            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
-            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSendPaymentResponse.lift,
-            errorHandler: FfiConverterTypeSdkError.lift
-        )
-}
-    
-open func sendSparkAddress(address: String, request: SendPaymentRequest)async throws  -> SendPaymentResponse {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_breezsdk_send_spark_address(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(address),FfiConverterTypeSendPaymentRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
@@ -1988,18 +1913,17 @@ public protocol Storage : AnyObject {
     func setCachedItem(key: String, value: String) async throws 
     
     /**
-     * Lists payments with pagination
+     * Lists payments with optional filters and pagination
      *
      * # Arguments
      *
-     * * `offset` - Number of records to skip
-     * * `limit` - Maximum number of records to return
+     * * `list_payments_request` - The request to list payments
      *
      * # Returns
      *
      * A vector of payments or a `StorageError`
      */
-    func listPayments(offset: UInt32?, limit: UInt32?) async throws  -> [Payment]
+    func listPayments(request: ListPaymentsRequest) async throws  -> [Payment]
     
     /**
      * Inserts a payment into storage
@@ -2207,24 +2131,23 @@ open func setCachedItem(key: String, value: String)async throws  {
 }
     
     /**
-     * Lists payments with pagination
+     * Lists payments with optional filters and pagination
      *
      * # Arguments
      *
-     * * `offset` - Number of records to skip
-     * * `limit` - Maximum number of records to return
+     * * `list_payments_request` - The request to list payments
      *
      * # Returns
      *
      * A vector of payments or a `StorageError`
      */
-open func listPayments(offset: UInt32?, limit: UInt32?)async throws  -> [Payment] {
+open func listPayments(request: ListPaymentsRequest)async throws  -> [Payment] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_storage_list_payments(
                     self.uniffiClonePointer(),
-                    FfiConverterOptionUInt32.lower(offset),FfiConverterOptionUInt32.lower(limit)
+                    FfiConverterTypeListPaymentsRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
@@ -2593,8 +2516,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
         },
         listPayments: { (
             uniffiHandle: UInt64,
-            offset: RustBuffer,
-            limit: RustBuffer,
+            request: RustBuffer,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
             uniffiCallbackData: UInt64,
             uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
@@ -2605,8 +2527,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.listPayments(
-                     offset: try FfiConverterOptionUInt32.lift(offset),
-                     limit: try FfiConverterOptionUInt32.lift(limit)
+                     request: try FfiConverterTypeListPaymentsRequest.lift(request)
                 )
             }
 
@@ -3660,14 +3581,22 @@ public struct GetInfoResponse {
      * The balance in satoshis
      */
     public var balanceSats: UInt64
+    /**
+     * The balances of the tokens in the wallet keyed by the token identifier
+     */
+    public var tokenBalances: [String: TokenBalance]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(
         /**
          * The balance in satoshis
-         */balanceSats: UInt64) {
+         */balanceSats: UInt64, 
+        /**
+         * The balances of the tokens in the wallet keyed by the token identifier
+         */tokenBalances: [String: TokenBalance]) {
         self.balanceSats = balanceSats
+        self.tokenBalances = tokenBalances
     }
 }
 
@@ -3678,11 +3607,15 @@ extension GetInfoResponse: Equatable, Hashable {
         if lhs.balanceSats != rhs.balanceSats {
             return false
         }
+        if lhs.tokenBalances != rhs.tokenBalances {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(balanceSats)
+        hasher.combine(tokenBalances)
     }
 }
 
@@ -3694,12 +3627,14 @@ public struct FfiConverterTypeGetInfoResponse: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GetInfoResponse {
         return
             try GetInfoResponse(
-                balanceSats: FfiConverterUInt64.read(from: &buf)
+                balanceSats: FfiConverterUInt64.read(from: &buf), 
+                tokenBalances: FfiConverterDictionaryStringTypeTokenBalance.read(from: &buf)
         )
     }
 
     public static func write(_ value: GetInfoResponse, into buf: inout [UInt8]) {
         FfiConverterUInt64.write(value.balanceSats, into: &buf)
+        FfiConverterDictionaryStringTypeTokenBalance.write(value.tokenBalances, into: &buf)
     }
 }
 
@@ -3832,6 +3767,122 @@ public func FfiConverterTypeGetPaymentResponse_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeGetPaymentResponse_lower(_ value: GetPaymentResponse) -> RustBuffer {
     return FfiConverterTypeGetPaymentResponse.lower(value)
+}
+
+
+public struct GetTokensMetadataRequest {
+    public var tokenIdentifiers: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(tokenIdentifiers: [String]) {
+        self.tokenIdentifiers = tokenIdentifiers
+    }
+}
+
+
+
+extension GetTokensMetadataRequest: Equatable, Hashable {
+    public static func ==(lhs: GetTokensMetadataRequest, rhs: GetTokensMetadataRequest) -> Bool {
+        if lhs.tokenIdentifiers != rhs.tokenIdentifiers {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(tokenIdentifiers)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGetTokensMetadataRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GetTokensMetadataRequest {
+        return
+            try GetTokensMetadataRequest(
+                tokenIdentifiers: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GetTokensMetadataRequest, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.tokenIdentifiers, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetTokensMetadataRequest_lift(_ buf: RustBuffer) throws -> GetTokensMetadataRequest {
+    return try FfiConverterTypeGetTokensMetadataRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetTokensMetadataRequest_lower(_ value: GetTokensMetadataRequest) -> RustBuffer {
+    return FfiConverterTypeGetTokensMetadataRequest.lower(value)
+}
+
+
+public struct GetTokensMetadataResponse {
+    public var tokensMetadata: [TokenMetadata]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(tokensMetadata: [TokenMetadata]) {
+        self.tokensMetadata = tokensMetadata
+    }
+}
+
+
+
+extension GetTokensMetadataResponse: Equatable, Hashable {
+    public static func ==(lhs: GetTokensMetadataResponse, rhs: GetTokensMetadataResponse) -> Bool {
+        if lhs.tokensMetadata != rhs.tokensMetadata {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(tokensMetadata)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGetTokensMetadataResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GetTokensMetadataResponse {
+        return
+            try GetTokensMetadataResponse(
+                tokensMetadata: FfiConverterSequenceTypeTokenMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GetTokensMetadataResponse, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeTokenMetadata.write(value.tokensMetadata, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetTokensMetadataResponse_lift(_ buf: RustBuffer) throws -> GetTokensMetadataResponse {
+    return try FfiConverterTypeGetTokensMetadataResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetTokensMetadataResponse_lower(_ value: GetTokensMetadataResponse) -> RustBuffer {
+    return FfiConverterTypeGetTokensMetadataResponse.lower(value)
 }
 
 
@@ -4052,9 +4103,20 @@ public func FfiConverterTypeListFiatRatesResponse_lower(_ value: ListFiatRatesRe
 
 
 /**
- * Request to list payments with pagination
+ * Request to list payments with optional filters and pagination
  */
 public struct ListPaymentsRequest {
+    public var typeFilter: [PaymentType]?
+    public var statusFilter: [PaymentStatus]?
+    public var assetFilter: AssetFilter?
+    /**
+     * Only include payments created after this timestamp (inclusive)
+     */
+    public var fromTimestamp: UInt64?
+    /**
+     * Only include payments created before this timestamp (exclusive)
+     */
+    public var toTimestamp: UInt64?
     /**
      * Number of records to skip
      */
@@ -4063,18 +4125,31 @@ public struct ListPaymentsRequest {
      * Maximum number of records to return
      */
     public var limit: UInt32?
+    public var sortAscending: Bool?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(
+    public init(typeFilter: [PaymentType]? = nil, statusFilter: [PaymentStatus]? = nil, assetFilter: AssetFilter? = nil, 
+        /**
+         * Only include payments created after this timestamp (inclusive)
+         */fromTimestamp: UInt64? = nil, 
+        /**
+         * Only include payments created before this timestamp (exclusive)
+         */toTimestamp: UInt64? = nil, 
         /**
          * Number of records to skip
          */offset: UInt32? = nil, 
         /**
          * Maximum number of records to return
-         */limit: UInt32? = nil) {
+         */limit: UInt32? = nil, sortAscending: Bool? = nil) {
+        self.typeFilter = typeFilter
+        self.statusFilter = statusFilter
+        self.assetFilter = assetFilter
+        self.fromTimestamp = fromTimestamp
+        self.toTimestamp = toTimestamp
         self.offset = offset
         self.limit = limit
+        self.sortAscending = sortAscending
     }
 }
 
@@ -4082,18 +4157,42 @@ public struct ListPaymentsRequest {
 
 extension ListPaymentsRequest: Equatable, Hashable {
     public static func ==(lhs: ListPaymentsRequest, rhs: ListPaymentsRequest) -> Bool {
+        if lhs.typeFilter != rhs.typeFilter {
+            return false
+        }
+        if lhs.statusFilter != rhs.statusFilter {
+            return false
+        }
+        if lhs.assetFilter != rhs.assetFilter {
+            return false
+        }
+        if lhs.fromTimestamp != rhs.fromTimestamp {
+            return false
+        }
+        if lhs.toTimestamp != rhs.toTimestamp {
+            return false
+        }
         if lhs.offset != rhs.offset {
             return false
         }
         if lhs.limit != rhs.limit {
             return false
         }
+        if lhs.sortAscending != rhs.sortAscending {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
+        hasher.combine(typeFilter)
+        hasher.combine(statusFilter)
+        hasher.combine(assetFilter)
+        hasher.combine(fromTimestamp)
+        hasher.combine(toTimestamp)
         hasher.combine(offset)
         hasher.combine(limit)
+        hasher.combine(sortAscending)
     }
 }
 
@@ -4105,14 +4204,26 @@ public struct FfiConverterTypeListPaymentsRequest: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ListPaymentsRequest {
         return
             try ListPaymentsRequest(
+                typeFilter: FfiConverterOptionSequenceTypePaymentType.read(from: &buf), 
+                statusFilter: FfiConverterOptionSequenceTypePaymentStatus.read(from: &buf), 
+                assetFilter: FfiConverterOptionTypeAssetFilter.read(from: &buf), 
+                fromTimestamp: FfiConverterOptionUInt64.read(from: &buf), 
+                toTimestamp: FfiConverterOptionUInt64.read(from: &buf), 
                 offset: FfiConverterOptionUInt32.read(from: &buf), 
-                limit: FfiConverterOptionUInt32.read(from: &buf)
+                limit: FfiConverterOptionUInt32.read(from: &buf), 
+                sortAscending: FfiConverterOptionBool.read(from: &buf)
         )
     }
 
     public static func write(_ value: ListPaymentsRequest, into buf: inout [UInt8]) {
+        FfiConverterOptionSequenceTypePaymentType.write(value.typeFilter, into: &buf)
+        FfiConverterOptionSequenceTypePaymentStatus.write(value.statusFilter, into: &buf)
+        FfiConverterOptionTypeAssetFilter.write(value.assetFilter, into: &buf)
+        FfiConverterOptionUInt64.write(value.fromTimestamp, into: &buf)
+        FfiConverterOptionUInt64.write(value.toTimestamp, into: &buf)
         FfiConverterOptionUInt32.write(value.offset, into: &buf)
         FfiConverterOptionUInt32.write(value.limit, into: &buf)
+        FfiConverterOptionBool.write(value.sortAscending, into: &buf)
     }
 }
 
@@ -4616,11 +4727,11 @@ public struct Payment {
     /**
      * Amount in satoshis
      */
-    public var amount: UInt64
+    public var amount: U128
     /**
      * Fee paid in satoshis
      */
-    public var fees: UInt64
+    public var fees: U128
     /**
      * Timestamp of when the payment was created
      */
@@ -4649,10 +4760,10 @@ public struct Payment {
          */status: PaymentStatus, 
         /**
          * Amount in satoshis
-         */amount: UInt64, 
+         */amount: U128, 
         /**
          * Fee paid in satoshis
-         */fees: UInt64, 
+         */fees: U128, 
         /**
          * Timestamp of when the payment was created
          */timestamp: UInt64, 
@@ -4728,8 +4839,8 @@ public struct FfiConverterTypePayment: FfiConverterRustBuffer {
                 id: FfiConverterString.read(from: &buf), 
                 paymentType: FfiConverterTypePaymentType.read(from: &buf), 
                 status: FfiConverterTypePaymentStatus.read(from: &buf), 
-                amount: FfiConverterUInt64.read(from: &buf), 
-                fees: FfiConverterUInt64.read(from: &buf), 
+                amount: FfiConverterTypeu128.read(from: &buf), 
+                fees: FfiConverterTypeu128.read(from: &buf), 
                 timestamp: FfiConverterUInt64.read(from: &buf), 
                 method: FfiConverterTypePaymentMethod.read(from: &buf), 
                 details: FfiConverterOptionTypePaymentDetails.read(from: &buf)
@@ -4740,8 +4851,8 @@ public struct FfiConverterTypePayment: FfiConverterRustBuffer {
         FfiConverterString.write(value.id, into: &buf)
         FfiConverterTypePaymentType.write(value.paymentType, into: &buf)
         FfiConverterTypePaymentStatus.write(value.status, into: &buf)
-        FfiConverterUInt64.write(value.amount, into: &buf)
-        FfiConverterUInt64.write(value.fees, into: &buf)
+        FfiConverterTypeu128.write(value.amount, into: &buf)
+        FfiConverterTypeu128.write(value.fees, into: &buf)
         FfiConverterUInt64.write(value.timestamp, into: &buf)
         FfiConverterTypePaymentMethod.write(value.method, into: &buf)
         FfiConverterOptionTypePaymentDetails.write(value.details, into: &buf)
@@ -5015,13 +5126,31 @@ public func FfiConverterTypePrepareLnurlPayResponse_lower(_ value: PrepareLnurlP
 
 public struct PrepareSendPaymentRequest {
     public var paymentRequest: String
-    public var amountSats: UInt64?
+    /**
+     * Amount to send. By default is denominated in sats.
+     * If a token identifier is provided, the amount will be denominated in the token base units.
+     */
+    public var amount: U128?
+    /**
+     * If provided, the payment will be for a token
+     * May only be provided if the payment request is a spark address
+     */
+    public var tokenIdentifier: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(paymentRequest: String, amountSats: UInt64? = nil) {
+    public init(paymentRequest: String, 
+        /**
+         * Amount to send. By default is denominated in sats.
+         * If a token identifier is provided, the amount will be denominated in the token base units.
+         */amount: U128? = nil, 
+        /**
+         * If provided, the payment will be for a token
+         * May only be provided if the payment request is a spark address
+         */tokenIdentifier: String? = nil) {
         self.paymentRequest = paymentRequest
-        self.amountSats = amountSats
+        self.amount = amount
+        self.tokenIdentifier = tokenIdentifier
     }
 }
 
@@ -5032,7 +5161,10 @@ extension PrepareSendPaymentRequest: Equatable, Hashable {
         if lhs.paymentRequest != rhs.paymentRequest {
             return false
         }
-        if lhs.amountSats != rhs.amountSats {
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        if lhs.tokenIdentifier != rhs.tokenIdentifier {
             return false
         }
         return true
@@ -5040,7 +5172,8 @@ extension PrepareSendPaymentRequest: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(paymentRequest)
-        hasher.combine(amountSats)
+        hasher.combine(amount)
+        hasher.combine(tokenIdentifier)
     }
 }
 
@@ -5053,13 +5186,15 @@ public struct FfiConverterTypePrepareSendPaymentRequest: FfiConverterRustBuffer 
         return
             try PrepareSendPaymentRequest(
                 paymentRequest: FfiConverterString.read(from: &buf), 
-                amountSats: FfiConverterOptionUInt64.read(from: &buf)
+                amount: FfiConverterOptionTypeu128.read(from: &buf), 
+                tokenIdentifier: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: PrepareSendPaymentRequest, into buf: inout [UInt8]) {
         FfiConverterString.write(value.paymentRequest, into: &buf)
-        FfiConverterOptionUInt64.write(value.amountSats, into: &buf)
+        FfiConverterOptionTypeu128.write(value.amount, into: &buf)
+        FfiConverterOptionString.write(value.tokenIdentifier, into: &buf)
     }
 }
 
@@ -5081,13 +5216,31 @@ public func FfiConverterTypePrepareSendPaymentRequest_lower(_ value: PrepareSend
 
 public struct PrepareSendPaymentResponse {
     public var paymentMethod: SendPaymentMethod
-    public var amountSats: UInt64
+    /**
+     * Amount to send. By default is denominated in sats.
+     * If a token identifier is provided, the amount will be denominated in the token base units.
+     */
+    public var amount: U128
+    /**
+     * The presence of this field indicates that the payment is for a token
+     * If empty, it is a Bitcoin payment
+     */
+    public var tokenIdentifier: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(paymentMethod: SendPaymentMethod, amountSats: UInt64) {
+    public init(paymentMethod: SendPaymentMethod, 
+        /**
+         * Amount to send. By default is denominated in sats.
+         * If a token identifier is provided, the amount will be denominated in the token base units.
+         */amount: U128, 
+        /**
+         * The presence of this field indicates that the payment is for a token
+         * If empty, it is a Bitcoin payment
+         */tokenIdentifier: String?) {
         self.paymentMethod = paymentMethod
-        self.amountSats = amountSats
+        self.amount = amount
+        self.tokenIdentifier = tokenIdentifier
     }
 }
 
@@ -5098,7 +5251,10 @@ extension PrepareSendPaymentResponse: Equatable, Hashable {
         if lhs.paymentMethod != rhs.paymentMethod {
             return false
         }
-        if lhs.amountSats != rhs.amountSats {
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        if lhs.tokenIdentifier != rhs.tokenIdentifier {
             return false
         }
         return true
@@ -5106,7 +5262,8 @@ extension PrepareSendPaymentResponse: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(paymentMethod)
-        hasher.combine(amountSats)
+        hasher.combine(amount)
+        hasher.combine(tokenIdentifier)
     }
 }
 
@@ -5119,13 +5276,15 @@ public struct FfiConverterTypePrepareSendPaymentResponse: FfiConverterRustBuffer
         return
             try PrepareSendPaymentResponse(
                 paymentMethod: FfiConverterTypeSendPaymentMethod.read(from: &buf), 
-                amountSats: FfiConverterUInt64.read(from: &buf)
+                amount: FfiConverterTypeu128.read(from: &buf), 
+                tokenIdentifier: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: PrepareSendPaymentResponse, into buf: inout [UInt8]) {
         FfiConverterTypeSendPaymentMethod.write(value.paymentMethod, into: &buf)
-        FfiConverterUInt64.write(value.amountSats, into: &buf)
+        FfiConverterTypeu128.write(value.amount, into: &buf)
+        FfiConverterOptionString.write(value.tokenIdentifier, into: &buf)
     }
 }
 
@@ -5867,6 +6026,190 @@ public func FfiConverterTypeSyncWalletResponse_lower(_ value: SyncWalletResponse
 }
 
 
+public struct TokenBalance {
+    public var balance: U128
+    public var tokenMetadata: TokenMetadata
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(balance: U128, tokenMetadata: TokenMetadata) {
+        self.balance = balance
+        self.tokenMetadata = tokenMetadata
+    }
+}
+
+
+
+extension TokenBalance: Equatable, Hashable {
+    public static func ==(lhs: TokenBalance, rhs: TokenBalance) -> Bool {
+        if lhs.balance != rhs.balance {
+            return false
+        }
+        if lhs.tokenMetadata != rhs.tokenMetadata {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(balance)
+        hasher.combine(tokenMetadata)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTokenBalance: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TokenBalance {
+        return
+            try TokenBalance(
+                balance: FfiConverterTypeu128.read(from: &buf), 
+                tokenMetadata: FfiConverterTypeTokenMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TokenBalance, into buf: inout [UInt8]) {
+        FfiConverterTypeu128.write(value.balance, into: &buf)
+        FfiConverterTypeTokenMetadata.write(value.tokenMetadata, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokenBalance_lift(_ buf: RustBuffer) throws -> TokenBalance {
+    return try FfiConverterTypeTokenBalance.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokenBalance_lower(_ value: TokenBalance) -> RustBuffer {
+    return FfiConverterTypeTokenBalance.lower(value)
+}
+
+
+public struct TokenMetadata {
+    public var identifier: String
+    /**
+     * Hex representation of the issuer public key
+     */
+    public var issuerPublicKey: String
+    public var name: String
+    public var ticker: String
+    /**
+     * Number of decimals the token uses
+     */
+    public var decimals: UInt32
+    public var maxSupply: U128
+    public var isFreezable: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(identifier: String, 
+        /**
+         * Hex representation of the issuer public key
+         */issuerPublicKey: String, name: String, ticker: String, 
+        /**
+         * Number of decimals the token uses
+         */decimals: UInt32, maxSupply: U128, isFreezable: Bool) {
+        self.identifier = identifier
+        self.issuerPublicKey = issuerPublicKey
+        self.name = name
+        self.ticker = ticker
+        self.decimals = decimals
+        self.maxSupply = maxSupply
+        self.isFreezable = isFreezable
+    }
+}
+
+
+
+extension TokenMetadata: Equatable, Hashable {
+    public static func ==(lhs: TokenMetadata, rhs: TokenMetadata) -> Bool {
+        if lhs.identifier != rhs.identifier {
+            return false
+        }
+        if lhs.issuerPublicKey != rhs.issuerPublicKey {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.ticker != rhs.ticker {
+            return false
+        }
+        if lhs.decimals != rhs.decimals {
+            return false
+        }
+        if lhs.maxSupply != rhs.maxSupply {
+            return false
+        }
+        if lhs.isFreezable != rhs.isFreezable {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(identifier)
+        hasher.combine(issuerPublicKey)
+        hasher.combine(name)
+        hasher.combine(ticker)
+        hasher.combine(decimals)
+        hasher.combine(maxSupply)
+        hasher.combine(isFreezable)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTokenMetadata: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TokenMetadata {
+        return
+            try TokenMetadata(
+                identifier: FfiConverterString.read(from: &buf), 
+                issuerPublicKey: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                ticker: FfiConverterString.read(from: &buf), 
+                decimals: FfiConverterUInt32.read(from: &buf), 
+                maxSupply: FfiConverterTypeu128.read(from: &buf), 
+                isFreezable: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TokenMetadata, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.identifier, into: &buf)
+        FfiConverterString.write(value.issuerPublicKey, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.ticker, into: &buf)
+        FfiConverterUInt32.write(value.decimals, into: &buf)
+        FfiConverterTypeu128.write(value.maxSupply, into: &buf)
+        FfiConverterBool.write(value.isFreezable, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokenMetadata_lift(_ buf: RustBuffer) throws -> TokenMetadata {
+    return try FfiConverterTypeTokenMetadata.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokenMetadata_lower(_ value: TokenMetadata) -> RustBuffer {
+    return FfiConverterTypeTokenMetadata.lower(value)
+}
+
+
 public struct TxStatus {
     public var confirmed: Bool
     public var blockHeight: UInt32?
@@ -6137,6 +6480,79 @@ public func FfiConverterTypeWaitForPaymentResponse_lift(_ buf: RustBuffer) throw
 public func FfiConverterTypeWaitForPaymentResponse_lower(_ value: WaitForPaymentResponse) -> RustBuffer {
     return FfiConverterTypeWaitForPaymentResponse.lower(value)
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * A field of [`ListPaymentsRequest`] when listing payments filtered by asset
+ */
+
+public enum AssetFilter {
+    
+    case bitcoin
+    case token(
+        /**
+         * Optional token identifier to filter by
+         */tokenIdentifier: String?
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAssetFilter: FfiConverterRustBuffer {
+    typealias SwiftType = AssetFilter
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AssetFilter {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .bitcoin
+        
+        case 2: return .token(tokenIdentifier: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AssetFilter, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .bitcoin:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .token(tokenIdentifier):
+            writeInt(&buf, Int32(2))
+            FfiConverterOptionString.write(tokenIdentifier, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAssetFilter_lift(_ buf: RustBuffer) throws -> AssetFilter {
+    return try FfiConverterTypeAssetFilter.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAssetFilter_lower(_ value: AssetFilter) -> RustBuffer {
+    return FfiConverterTypeAssetFilter.lower(value)
+}
+
+
+
+extension AssetFilter: Equatable, Hashable {}
+
+
 
 
 public enum ChainServiceError {
@@ -6593,6 +7009,8 @@ extension OnchainConfirmationSpeed: Equatable, Hashable {}
 public enum PaymentDetails {
     
     case spark
+    case token(metadata: TokenMetadata, txHash: String
+    )
     case lightning(
         /**
          * Represents the invoice description
@@ -6634,13 +7052,16 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
         
         case 1: return .spark
         
-        case 2: return .lightning(description: try FfiConverterOptionString.read(from: &buf), preimage: try FfiConverterOptionString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), paymentHash: try FfiConverterString.read(from: &buf), destinationPubkey: try FfiConverterString.read(from: &buf), lnurlPayInfo: try FfiConverterOptionTypeLnurlPayInfo.read(from: &buf)
+        case 2: return .token(metadata: try FfiConverterTypeTokenMetadata.read(from: &buf), txHash: try FfiConverterString.read(from: &buf)
         )
         
-        case 3: return .withdraw(txId: try FfiConverterString.read(from: &buf)
+        case 3: return .lightning(description: try FfiConverterOptionString.read(from: &buf), preimage: try FfiConverterOptionString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), paymentHash: try FfiConverterString.read(from: &buf), destinationPubkey: try FfiConverterString.read(from: &buf), lnurlPayInfo: try FfiConverterOptionTypeLnurlPayInfo.read(from: &buf)
         )
         
-        case 4: return .deposit(txId: try FfiConverterString.read(from: &buf)
+        case 4: return .withdraw(txId: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 5: return .deposit(txId: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -6655,8 +7076,14 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
         
         
-        case let .lightning(description,preimage,invoice,paymentHash,destinationPubkey,lnurlPayInfo):
+        case let .token(metadata,txHash):
             writeInt(&buf, Int32(2))
+            FfiConverterTypeTokenMetadata.write(metadata, into: &buf)
+            FfiConverterString.write(txHash, into: &buf)
+            
+        
+        case let .lightning(description,preimage,invoice,paymentHash,destinationPubkey,lnurlPayInfo):
+            writeInt(&buf, Int32(3))
             FfiConverterOptionString.write(description, into: &buf)
             FfiConverterOptionString.write(preimage, into: &buf)
             FfiConverterString.write(invoice, into: &buf)
@@ -6666,12 +7093,12 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
             
         
         case let .withdraw(txId):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(txId, into: &buf)
             
         
         case let .deposit(txId):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(txId, into: &buf)
             
         }
@@ -6706,6 +7133,7 @@ public enum PaymentMethod {
     
     case lightning
     case spark
+    case token
     case deposit
     case withdraw
     case unknown
@@ -6726,11 +7154,13 @@ public struct FfiConverterTypePaymentMethod: FfiConverterRustBuffer {
         
         case 2: return .spark
         
-        case 3: return .deposit
+        case 3: return .token
         
-        case 4: return .withdraw
+        case 4: return .deposit
         
-        case 5: return .unknown
+        case 5: return .withdraw
+        
+        case 6: return .unknown
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -6748,16 +7178,20 @@ public struct FfiConverterTypePaymentMethod: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         
         
-        case .deposit:
+        case .token:
             writeInt(&buf, Int32(3))
         
         
-        case .withdraw:
+        case .deposit:
             writeInt(&buf, Int32(4))
         
         
-        case .unknown:
+        case .withdraw:
             writeInt(&buf, Int32(5))
+        
+        
+        case .unknown:
+            writeInt(&buf, Int32(6))
         
         }
     }
@@ -7382,7 +7816,15 @@ public enum SendPaymentMethod {
     )
     case bolt11Invoice(invoiceDetails: Bolt11InvoiceDetails, sparkTransferFeeSats: UInt64?, lightningFeeSats: UInt64
     )
-    case sparkAddress(address: String, feeSats: UInt64
+    case sparkAddress(address: String, 
+        /**
+         * Fee to pay for the transaction
+         * Denominated in sats if token identifier is empty, otherwise in the token base units
+         */fee: U128, 
+        /**
+         * The presence of this field indicates that the payment is for a token
+         * If empty, it is a Bitcoin payment
+         */tokenIdentifier: String?
     )
 }
 
@@ -7403,7 +7845,7 @@ public struct FfiConverterTypeSendPaymentMethod: FfiConverterRustBuffer {
         case 2: return .bolt11Invoice(invoiceDetails: try FfiConverterTypeBolt11InvoiceDetails.read(from: &buf), sparkTransferFeeSats: try FfiConverterOptionUInt64.read(from: &buf), lightningFeeSats: try FfiConverterUInt64.read(from: &buf)
         )
         
-        case 3: return .sparkAddress(address: try FfiConverterString.read(from: &buf), feeSats: try FfiConverterUInt64.read(from: &buf)
+        case 3: return .sparkAddress(address: try FfiConverterString.read(from: &buf), fee: try FfiConverterTypeu128.read(from: &buf), tokenIdentifier: try FfiConverterOptionString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -7427,10 +7869,11 @@ public struct FfiConverterTypeSendPaymentMethod: FfiConverterRustBuffer {
             FfiConverterUInt64.write(lightningFeeSats, into: &buf)
             
         
-        case let .sparkAddress(address,feeSats):
+        case let .sparkAddress(address,fee,tokenIdentifier):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(address, into: &buf)
-            FfiConverterUInt64.write(feeSats, into: &buf)
+            FfiConverterTypeu128.write(fee, into: &buf)
+            FfiConverterOptionString.write(tokenIdentifier, into: &buf)
             
         }
     }
@@ -8169,6 +8612,30 @@ fileprivate struct FfiConverterOptionTypePayment: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeAssetFilter: FfiConverterRustBuffer {
+    typealias SwiftType = AssetFilter?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAssetFilter.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAssetFilter.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeDepositClaimError: FfiConverterRustBuffer {
     typealias SwiftType = DepositClaimError?
 
@@ -8289,6 +8756,54 @@ fileprivate struct FfiConverterOptionCallbackInterfaceLogger: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionSequenceTypePaymentStatus: FfiConverterRustBuffer {
+    typealias SwiftType = [PaymentStatus]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceTypePaymentStatus.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceTypePaymentStatus.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionSequenceTypePaymentType: FfiConverterRustBuffer {
+    typealias SwiftType = [PaymentType]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceTypePaymentType.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceTypePaymentType.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeSuccessAction: FfiConverterRustBuffer {
     typealias SwiftType = SuccessAction?
 
@@ -8331,6 +8846,55 @@ fileprivate struct FfiConverterOptionTypeSuccessActionProcessed: FfiConverterRus
         case 1: return try FfiConverterTypeSuccessActionProcessed.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeu128: FfiConverterRustBuffer {
+    typealias SwiftType = U128?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeu128.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeu128.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]
+
+    public static func write(_ value: [String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
     }
 }
 
@@ -8387,6 +8951,31 @@ fileprivate struct FfiConverterSequenceTypePayment: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeTokenMetadata: FfiConverterRustBuffer {
+    typealias SwiftType = [TokenMetadata]
+
+    public static func write(_ value: [TokenMetadata], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTokenMetadata.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TokenMetadata] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TokenMetadata]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTokenMetadata.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeUtxo: FfiConverterRustBuffer {
     typealias SwiftType = [Utxo]
 
@@ -8404,6 +8993,56 @@ fileprivate struct FfiConverterSequenceTypeUtxo: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeUtxo.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypePaymentStatus: FfiConverterRustBuffer {
+    typealias SwiftType = [PaymentStatus]
+
+    public static func write(_ value: [PaymentStatus], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePaymentStatus.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PaymentStatus] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PaymentStatus]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePaymentStatus.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypePaymentType: FfiConverterRustBuffer {
+    typealias SwiftType = [PaymentType]
+
+    public static func write(_ value: [PaymentType], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePaymentType.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PaymentType] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PaymentType]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePaymentType.read(from: &buf))
         }
         return seq
     }
@@ -8459,6 +9098,31 @@ fileprivate struct FfiConverterSequenceTypeRate: FfiConverterRustBuffer {
     }
 }
 
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterDictionaryStringTypeTokenBalance: FfiConverterRustBuffer {
+    public static func write(_ value: [String: TokenBalance], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for (key, value) in value {
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterTypeTokenBalance.write(value, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String: TokenBalance] {
+        let len: Int32 = try readInt(&buf)
+        var dict = [String: TokenBalance]()
+        dict.reserveCapacity(Int(len))
+        for _ in 0..<len {
+            let key = try FfiConverterString.read(from: &buf)
+            let value = try FfiConverterTypeTokenBalance.read(from: &buf)
+            dict[key] = value
+        }
+        return dict
+    }
+}
 
 
 
@@ -8477,6 +9141,59 @@ fileprivate struct FfiConverterSequenceTypeRate: FfiConverterRustBuffer {
 
 
 
+
+
+
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the custom type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
+public typealias U128 = BigUInt
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeu128: FfiConverter {
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> U128 {
+        let builtinValue = try FfiConverterString.read(from: &buf)
+        return BigUInt(stringLiteral: builtinValue)
+    }
+
+    public static func write(_ value: U128, into buf: inout [UInt8]) {
+        let builtinValue = value.description
+        return FfiConverterString.write(builtinValue, into: &buf)
+    }
+
+    public static func lift(_ value: RustBuffer) throws -> U128 {
+        let builtinValue = try FfiConverterString.lift(value)
+        return BigUInt(stringLiteral: builtinValue)
+    }
+
+    public static func lower(_ value: U128) -> RustBuffer {
+        let builtinValue = value.description
+        return FfiConverterString.lower(builtinValue)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeu128_lift(_ value: RustBuffer) throws -> U128 {
+    return try FfiConverterTypeu128.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeu128_lower(_ value: U128) -> RustBuffer {
+    return FfiConverterTypeu128.lower(value)
+}
 
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_MAYBE_READY: Int8 = 1
@@ -8718,6 +9435,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_payment() != 11540) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_tokens_metadata() != 40125) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_list_fiat_currencies() != 63366) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8733,9 +9453,6 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_lnurl_pay() != 10147) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_poll_lightning_send_payment() != 57601) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_lnurl_pay() != 37691) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8743,9 +9460,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_receive_payment() != 36984) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_recover_lightning_address() != 43367) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_refund_deposit() != 33646) {
@@ -8757,19 +9471,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_remove_event_listener() != 41066) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_send_bitcoin_address() != 5926) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_send_bolt11_invoice() != 21785) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_send_payment() != 54349) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_send_payment_internal() != 37855) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_send_spark_address() != 63147) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_sync_wallet() != 30368) {
@@ -8805,7 +9507,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_storage_set_cached_item() != 7970) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_list_payments() != 35678) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_list_payments() != 19728) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_storage_insert_payment() != 28075) {

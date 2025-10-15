@@ -3,6 +3,7 @@
 
 // swiftlint:disable all
 import Foundation
+import BigInt
 
 // Depending on the consumer's build setup, the low-level FFI code
 // might be in a separate module, or it might be compiled inline into
@@ -4035,11 +4036,11 @@ public func FfiConverterTypeSymbol_lower(_ value: Symbol) -> RustBuffer {
 
 public struct TokensPaymentDetails {
     public var tokenIdentifier: String?
-    public var amount: UInt64?
+    public var amount: CommonU128?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(tokenIdentifier: String?, amount: UInt64?) {
+    public init(tokenIdentifier: String?, amount: CommonU128?) {
         self.tokenIdentifier = tokenIdentifier
         self.amount = amount
     }
@@ -4073,13 +4074,13 @@ public struct FfiConverterTypeTokensPaymentDetails: FfiConverterRustBuffer {
         return
             try TokensPaymentDetails(
                 tokenIdentifier: FfiConverterOptionString.read(from: &buf), 
-                amount: FfiConverterOptionUInt64.read(from: &buf)
+                amount: FfiConverterOptionTypecommon_u128.read(from: &buf)
         )
     }
 
     public static func write(_ value: TokensPaymentDetails, into buf: inout [UInt8]) {
         FfiConverterOptionString.write(value.tokenIdentifier, into: &buf)
-        FfiConverterOptionUInt64.write(value.amount, into: &buf)
+        FfiConverterOptionTypecommon_u128.write(value.amount, into: &buf)
     }
 }
 
@@ -5326,6 +5327,30 @@ fileprivate struct FfiConverterOptionDictionaryStringString: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypecommon_u128: FfiConverterRustBuffer {
+    typealias SwiftType = CommonU128?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypecommon_u128.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypecommon_u128.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -5598,6 +5623,58 @@ fileprivate struct FfiConverterDictionaryStringString: FfiConverterRustBuffer {
         return dict
     }
 }
+
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the custom type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
+public typealias CommonU128 = BigUInt
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypecommon_u128: FfiConverter {
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommonU128 {
+        let builtinValue = try FfiConverterString.read(from: &buf)
+        return BigUInt(stringLiteral: builtinValue)
+    }
+
+    public static func write(_ value: CommonU128, into buf: inout [UInt8]) {
+        let builtinValue = value.description
+        return FfiConverterString.write(builtinValue, into: &buf)
+    }
+
+    public static func lift(_ value: RustBuffer) throws -> CommonU128 {
+        let builtinValue = try FfiConverterString.lift(value)
+        return BigUInt(stringLiteral: builtinValue)
+    }
+
+    public static func lower(_ value: CommonU128) -> RustBuffer {
+        let builtinValue = value.description
+        return FfiConverterString.lower(builtinValue)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypecommon_u128_lift(_ value: RustBuffer) throws -> CommonU128 {
+    return try FfiConverterTypecommon_u128.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypecommon_u128_lower(_ value: CommonU128) -> RustBuffer {
+    return FfiConverterTypecommon_u128.lower(value)
+}
+
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_MAYBE_READY: Int8 = 1
 
