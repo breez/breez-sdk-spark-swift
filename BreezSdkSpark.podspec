@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name                   = "BreezSdkSpark"
-  spec.version                = "0.3.0-rc1"
+  spec.version                = "0.3.0-rc2"
   spec.license                = { :type => "MIT" }
   spec.summary                = "Swift bindings to the Breez Spark SDK"
   spec.homepage               = "https://breez.technology"
@@ -15,4 +15,5 @@ Pod::Spec.new do |spec|
   spec.static_framework       = true
 
   spec.dependency "breez_sdk_sparkFFI", "= #{spec.version}"
+  spec.dependency "BigInt", "~> 5.4.0"
 end
