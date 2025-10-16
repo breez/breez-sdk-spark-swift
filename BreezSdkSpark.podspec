@@ -15,4 +15,5 @@ Pod::Spec.new do |spec|
   spec.static_framework       = true
 
   spec.dependency "breez_sdk_sparkFFI", "= #{spec.version}"
+  spec.dependency "Swift-BigInt", "~> 2.0"
 end
