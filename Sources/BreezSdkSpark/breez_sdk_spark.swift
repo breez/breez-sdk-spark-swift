@@ -3,7 +3,7 @@
 
 // swiftlint:disable all
 import Foundation
-import BigInt
+import BigNumber
 
 // Depending on the consumer's build setup, the low-level FFI code
 // might be in a separate module, or it might be compiled inline into
@@ -9151,7 +9151,7 @@ fileprivate struct FfiConverterDictionaryStringTypeTokenBalance: FfiConverterRus
  * Typealias from the type name used in the UDL file to the custom type.  This
  * is needed because the UDL type name is used in function/method signatures.
  */
-public typealias U128 = BigUInt
+public typealias U128 = BInt
 
 
 #if swift(>=5.8)
@@ -9161,21 +9161,21 @@ public struct FfiConverterTypeu128: FfiConverter {
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> U128 {
         let builtinValue = try FfiConverterString.read(from: &buf)
-        return BigUInt(stringLiteral: builtinValue)
+        return BInt(builtinValue)!
     }
 
     public static func write(_ value: U128, into buf: inout [UInt8]) {
-        let builtinValue = value.description
+        let builtinValue = value.asString(radix: 10)
         return FfiConverterString.write(builtinValue, into: &buf)
     }
 
     public static func lift(_ value: RustBuffer) throws -> U128 {
         let builtinValue = try FfiConverterString.lift(value)
-        return BigUInt(stringLiteral: builtinValue)
+        return BInt(builtinValue)!
     }
 
     public static func lower(_ value: U128) -> RustBuffer {
-        let builtinValue = value.description
+        let builtinValue = value.asString(radix: 10)
         return FfiConverterString.lower(builtinValue)
     }
 }
