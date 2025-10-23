@@ -2542,6 +2542,103 @@ public func FfiConverterTypeCurrencyInfo_lower(_ value: CurrencyInfo) -> RustBuf
 
 
 /**
+ * Configuration for an external input parser
+ */
+public struct ExternalInputParser {
+    /**
+     * An arbitrary parser provider id
+     */
+    public var providerId: String
+    /**
+     * The external parser will be used when an input conforms to this regex
+     */
+    public var inputRegex: String
+    /**
+     * The URL of the parser containing a placeholder `<input>` that will be replaced with the
+     * input to be parsed. The input is sanitized using percent encoding.
+     */
+    public var parserUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * An arbitrary parser provider id
+         */providerId: String, 
+        /**
+         * The external parser will be used when an input conforms to this regex
+         */inputRegex: String, 
+        /**
+         * The URL of the parser containing a placeholder `<input>` that will be replaced with the
+         * input to be parsed. The input is sanitized using percent encoding.
+         */parserUrl: String) {
+        self.providerId = providerId
+        self.inputRegex = inputRegex
+        self.parserUrl = parserUrl
+    }
+}
+
+
+
+extension ExternalInputParser: Equatable, Hashable {
+    public static func ==(lhs: ExternalInputParser, rhs: ExternalInputParser) -> Bool {
+        if lhs.providerId != rhs.providerId {
+            return false
+        }
+        if lhs.inputRegex != rhs.inputRegex {
+            return false
+        }
+        if lhs.parserUrl != rhs.parserUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(providerId)
+        hasher.combine(inputRegex)
+        hasher.combine(parserUrl)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExternalInputParser: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExternalInputParser {
+        return
+            try ExternalInputParser(
+                providerId: FfiConverterString.read(from: &buf), 
+                inputRegex: FfiConverterString.read(from: &buf), 
+                parserUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ExternalInputParser, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.providerId, into: &buf)
+        FfiConverterString.write(value.inputRegex, into: &buf)
+        FfiConverterString.write(value.parserUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExternalInputParser_lift(_ buf: RustBuffer) throws -> ExternalInputParser {
+    return try FfiConverterTypeExternalInputParser.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExternalInputParser_lower(_ value: ExternalInputParser) -> RustBuffer {
+    return FfiConverterTypeExternalInputParser.lower(value)
+}
+
+
+/**
  * Wrapper around the [`CurrencyInfo`] of a fiat currency
  */
 public struct FiatCurrency {
