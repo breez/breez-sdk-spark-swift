@@ -923,6 +923,13 @@ public protocol BreezSdkProtocol : AnyObject {
     
     func checkLightningAddressAvailable(req: CheckLightningAddressRequest) async throws  -> Bool
     
+    /**
+     * Verifies a message signature against the provided public key. The message
+     * is SHA256 hashed before verification. The signature can be hex encoded
+     * in either DER or compact format.
+     */
+    func checkMessage(request: CheckMessageRequest) async throws  -> CheckMessageResponse
+    
     func claimDeposit(request: ClaimDepositRequest) async throws  -> ClaimDepositResponse
     
     func deleteLightningAddress() async throws 
@@ -991,6 +998,35 @@ public protocol BreezSdkProtocol : AnyObject {
     
     func lnurlPay(request: LnurlPayRequest) async throws  -> LnurlPayResponse
     
+    /**
+     * Performs an LNURL withdraw operation for the amount of satoshis to
+     * withdraw and the LNURL withdraw request details. The LNURL withdraw request
+     * details can be obtained from calling [`BreezSdk::parse`].
+     *
+     * The method generates a Lightning invoice for the withdraw amount, stores
+     * the LNURL withdraw metadata, and performs the LNURL withdraw using  the generated
+     * invoice.
+     *
+     * If the `completion_timeout_secs` parameter is provided and greater than 0, the
+     * method will wait for the payment to be completed within that period. If the
+     * withdraw is completed within the timeout, the `payment` field in the response
+     * will be set with the payment details. If the `completion_timeout_secs`
+     * parameter is not provided or set to 0, the method will not wait for the payment
+     * to be completed. If the withdraw is not completed within the
+     * timeout, the `payment` field will be empty.
+     *
+     * # Arguments
+     *
+     * * `request` - The LNURL withdraw request
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `LnurlWithdrawResponse` - The payment details if the withdraw request was successful
+     * * `SdkError` - If there was an error during the withdraw process
+     */
+    func lnurlWithdraw(request: LnurlWithdrawRequest) async throws  -> LnurlWithdrawResponse
+    
     func parse(input: String) async throws  -> InputType
     
     func prepareLnurlPay(request: PrepareLnurlPayRequest) async throws  -> PrepareLnurlPayResponse
@@ -1017,6 +1053,13 @@ public protocol BreezSdkProtocol : AnyObject {
     func removeEventListener(id: String) async  -> Bool
     
     func sendPayment(request: SendPaymentRequest) async throws  -> SendPaymentResponse
+    
+    /**
+     * Signs a message with the wallet's identity key. The message is SHA256
+     * hashed before signing. The returned signature will be hex encoded in
+     * DER format by default, or compact format if specified.
+     */
+    func signMessage(request: SignMessageRequest) async throws  -> SignMessageResponse
     
     /**
      * Synchronizes the wallet with the Spark network
@@ -1123,6 +1166,28 @@ open func checkLightningAddressAvailable(req: CheckLightningAddressRequest)async
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_i8,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_i8,
             liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+    /**
+     * Verifies a message signature against the provided public key. The message
+     * is SHA256 hashed before verification. The signature can be hex encoded
+     * in either DER or compact format.
+     */
+open func checkMessage(request: CheckMessageRequest)async throws  -> CheckMessageResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_check_message(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeCheckMessageRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCheckMessageResponse.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
 }
@@ -1375,6 +1440,50 @@ open func lnurlPay(request: LnurlPayRequest)async throws  -> LnurlPayResponse {
         )
 }
     
+    /**
+     * Performs an LNURL withdraw operation for the amount of satoshis to
+     * withdraw and the LNURL withdraw request details. The LNURL withdraw request
+     * details can be obtained from calling [`BreezSdk::parse`].
+     *
+     * The method generates a Lightning invoice for the withdraw amount, stores
+     * the LNURL withdraw metadata, and performs the LNURL withdraw using  the generated
+     * invoice.
+     *
+     * If the `completion_timeout_secs` parameter is provided and greater than 0, the
+     * method will wait for the payment to be completed within that period. If the
+     * withdraw is completed within the timeout, the `payment` field in the response
+     * will be set with the payment details. If the `completion_timeout_secs`
+     * parameter is not provided or set to 0, the method will not wait for the payment
+     * to be completed. If the withdraw is not completed within the
+     * timeout, the `payment` field will be empty.
+     *
+     * # Arguments
+     *
+     * * `request` - The LNURL withdraw request
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `LnurlWithdrawResponse` - The payment details if the withdraw request was successful
+     * * `SdkError` - If there was an error during the withdraw process
+     */
+open func lnurlWithdraw(request: LnurlWithdrawRequest)async throws  -> LnurlWithdrawResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_lnurl_withdraw(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeLnurlWithdrawRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeLnurlWithdrawResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
 open func parse(input: String)async throws  -> InputType {
     return
         try  await uniffiRustCallAsync(
@@ -1519,6 +1628,28 @@ open func sendPayment(request: SendPaymentRequest)async throws  -> SendPaymentRe
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSendPaymentResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+    /**
+     * Signs a message with the wallet's identity key. The message is SHA256
+     * hashed before signing. The returned signature will be hex encoded in
+     * DER format by default, or compact format if specified.
+     */
+open func signMessage(request: SignMessageRequest)async throws  -> SignMessageResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_sign_message(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSignMessageRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSignMessageResponse.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
 }
@@ -3286,6 +3417,156 @@ public func FfiConverterTypeCheckLightningAddressRequest_lower(_ value: CheckLig
 }
 
 
+public struct CheckMessageRequest {
+    /**
+     * The message that was signed
+     */
+    public var message: String
+    /**
+     * The public key that signed the message
+     */
+    public var pubkey: String
+    /**
+     * The DER or compact hex encoded signature
+     */
+    public var signature: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The message that was signed
+         */message: String, 
+        /**
+         * The public key that signed the message
+         */pubkey: String, 
+        /**
+         * The DER or compact hex encoded signature
+         */signature: String) {
+        self.message = message
+        self.pubkey = pubkey
+        self.signature = signature
+    }
+}
+
+
+
+extension CheckMessageRequest: Equatable, Hashable {
+    public static func ==(lhs: CheckMessageRequest, rhs: CheckMessageRequest) -> Bool {
+        if lhs.message != rhs.message {
+            return false
+        }
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.signature != rhs.signature {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(message)
+        hasher.combine(pubkey)
+        hasher.combine(signature)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCheckMessageRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CheckMessageRequest {
+        return
+            try CheckMessageRequest(
+                message: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf), 
+                signature: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CheckMessageRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.message, into: &buf)
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterString.write(value.signature, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCheckMessageRequest_lift(_ buf: RustBuffer) throws -> CheckMessageRequest {
+    return try FfiConverterTypeCheckMessageRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCheckMessageRequest_lower(_ value: CheckMessageRequest) -> RustBuffer {
+    return FfiConverterTypeCheckMessageRequest.lower(value)
+}
+
+
+public struct CheckMessageResponse {
+    public var isValid: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(isValid: Bool) {
+        self.isValid = isValid
+    }
+}
+
+
+
+extension CheckMessageResponse: Equatable, Hashable {
+    public static func ==(lhs: CheckMessageResponse, rhs: CheckMessageResponse) -> Bool {
+        if lhs.isValid != rhs.isValid {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(isValid)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCheckMessageResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CheckMessageResponse {
+        return
+            try CheckMessageResponse(
+                isValid: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CheckMessageResponse, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.isValid, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCheckMessageResponse_lift(_ buf: RustBuffer) throws -> CheckMessageResponse {
+    return try FfiConverterTypeCheckMessageResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCheckMessageResponse_lower(_ value: CheckMessageResponse) -> RustBuffer {
+    return FfiConverterTypeCheckMessageResponse.lower(value)
+}
+
+
 public struct ClaimDepositRequest {
     public var txid: String
     public var vout: UInt32
@@ -4936,6 +5217,231 @@ public func FfiConverterTypeLnurlPayResponse_lower(_ value: LnurlPayResponse) ->
 }
 
 
+/**
+ * Represents the withdraw LNURL info
+ */
+public struct LnurlWithdrawInfo {
+    public var withdrawUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(withdrawUrl: String) {
+        self.withdrawUrl = withdrawUrl
+    }
+}
+
+
+
+extension LnurlWithdrawInfo: Equatable, Hashable {
+    public static func ==(lhs: LnurlWithdrawInfo, rhs: LnurlWithdrawInfo) -> Bool {
+        if lhs.withdrawUrl != rhs.withdrawUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(withdrawUrl)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLnurlWithdrawInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LnurlWithdrawInfo {
+        return
+            try LnurlWithdrawInfo(
+                withdrawUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LnurlWithdrawInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.withdrawUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlWithdrawInfo_lift(_ buf: RustBuffer) throws -> LnurlWithdrawInfo {
+    return try FfiConverterTypeLnurlWithdrawInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlWithdrawInfo_lower(_ value: LnurlWithdrawInfo) -> RustBuffer {
+    return FfiConverterTypeLnurlWithdrawInfo.lower(value)
+}
+
+
+public struct LnurlWithdrawRequest {
+    /**
+     * The amount to withdraw in satoshis
+     * Must be within the min and max withdrawable limits
+     */
+    public var amountSats: UInt64
+    public var withdrawRequest: LnurlWithdrawRequestDetails
+    /**
+     * If set, the function will return the payment if it is still pending after this
+     * number of seconds. If unset, the function will return immediately after
+     * initiating the LNURL withdraw.
+     */
+    public var completionTimeoutSecs: UInt32?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The amount to withdraw in satoshis
+         * Must be within the min and max withdrawable limits
+         */amountSats: UInt64, withdrawRequest: LnurlWithdrawRequestDetails, 
+        /**
+         * If set, the function will return the payment if it is still pending after this
+         * number of seconds. If unset, the function will return immediately after
+         * initiating the LNURL withdraw.
+         */completionTimeoutSecs: UInt32? = nil) {
+        self.amountSats = amountSats
+        self.withdrawRequest = withdrawRequest
+        self.completionTimeoutSecs = completionTimeoutSecs
+    }
+}
+
+
+
+extension LnurlWithdrawRequest: Equatable, Hashable {
+    public static func ==(lhs: LnurlWithdrawRequest, rhs: LnurlWithdrawRequest) -> Bool {
+        if lhs.amountSats != rhs.amountSats {
+            return false
+        }
+        if lhs.withdrawRequest != rhs.withdrawRequest {
+            return false
+        }
+        if lhs.completionTimeoutSecs != rhs.completionTimeoutSecs {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(amountSats)
+        hasher.combine(withdrawRequest)
+        hasher.combine(completionTimeoutSecs)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLnurlWithdrawRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LnurlWithdrawRequest {
+        return
+            try LnurlWithdrawRequest(
+                amountSats: FfiConverterUInt64.read(from: &buf), 
+                withdrawRequest: FfiConverterTypeLnurlWithdrawRequestDetails.read(from: &buf), 
+                completionTimeoutSecs: FfiConverterOptionUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LnurlWithdrawRequest, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.amountSats, into: &buf)
+        FfiConverterTypeLnurlWithdrawRequestDetails.write(value.withdrawRequest, into: &buf)
+        FfiConverterOptionUInt32.write(value.completionTimeoutSecs, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlWithdrawRequest_lift(_ buf: RustBuffer) throws -> LnurlWithdrawRequest {
+    return try FfiConverterTypeLnurlWithdrawRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlWithdrawRequest_lower(_ value: LnurlWithdrawRequest) -> RustBuffer {
+    return FfiConverterTypeLnurlWithdrawRequest.lower(value)
+}
+
+
+public struct LnurlWithdrawResponse {
+    /**
+     * The Lightning invoice generated for the LNURL withdraw
+     */
+    public var paymentRequest: String
+    public var payment: Payment?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The Lightning invoice generated for the LNURL withdraw
+         */paymentRequest: String, payment: Payment?) {
+        self.paymentRequest = paymentRequest
+        self.payment = payment
+    }
+}
+
+
+
+extension LnurlWithdrawResponse: Equatable, Hashable {
+    public static func ==(lhs: LnurlWithdrawResponse, rhs: LnurlWithdrawResponse) -> Bool {
+        if lhs.paymentRequest != rhs.paymentRequest {
+            return false
+        }
+        if lhs.payment != rhs.payment {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(paymentRequest)
+        hasher.combine(payment)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLnurlWithdrawResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LnurlWithdrawResponse {
+        return
+            try LnurlWithdrawResponse(
+                paymentRequest: FfiConverterString.read(from: &buf), 
+                payment: FfiConverterOptionTypePayment.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LnurlWithdrawResponse, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.paymentRequest, into: &buf)
+        FfiConverterOptionTypePayment.write(value.payment, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlWithdrawResponse_lift(_ buf: RustBuffer) throws -> LnurlWithdrawResponse {
+    return try FfiConverterTypeLnurlWithdrawResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlWithdrawResponse_lower(_ value: LnurlWithdrawResponse) -> RustBuffer {
+    return FfiConverterTypeLnurlWithdrawResponse.lower(value)
+}
+
+
 public struct LogEntry {
     public var line: String
     public var level: String
@@ -5174,12 +5680,14 @@ public func FfiConverterTypePayment_lower(_ value: Payment) -> RustBuffer {
  */
 public struct PaymentMetadata {
     public var lnurlPayInfo: LnurlPayInfo?
+    public var lnurlWithdrawInfo: LnurlWithdrawInfo?
     public var lnurlDescription: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(lnurlPayInfo: LnurlPayInfo?, lnurlDescription: String?) {
+    public init(lnurlPayInfo: LnurlPayInfo?, lnurlWithdrawInfo: LnurlWithdrawInfo?, lnurlDescription: String?) {
         self.lnurlPayInfo = lnurlPayInfo
+        self.lnurlWithdrawInfo = lnurlWithdrawInfo
         self.lnurlDescription = lnurlDescription
     }
 }
@@ -5191,6 +5699,9 @@ extension PaymentMetadata: Equatable, Hashable {
         if lhs.lnurlPayInfo != rhs.lnurlPayInfo {
             return false
         }
+        if lhs.lnurlWithdrawInfo != rhs.lnurlWithdrawInfo {
+            return false
+        }
         if lhs.lnurlDescription != rhs.lnurlDescription {
             return false
         }
@@ -5199,6 +5710,7 @@ extension PaymentMetadata: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(lnurlPayInfo)
+        hasher.combine(lnurlWithdrawInfo)
         hasher.combine(lnurlDescription)
     }
 }
@@ -5212,12 +5724,14 @@ public struct FfiConverterTypePaymentMetadata: FfiConverterRustBuffer {
         return
             try PaymentMetadata(
                 lnurlPayInfo: FfiConverterOptionTypeLnurlPayInfo.read(from: &buf), 
+                lnurlWithdrawInfo: FfiConverterOptionTypeLnurlWithdrawInfo.read(from: &buf), 
                 lnurlDescription: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: PaymentMetadata, into buf: inout [UInt8]) {
         FfiConverterOptionTypeLnurlPayInfo.write(value.lnurlPayInfo, into: &buf)
+        FfiConverterOptionTypeLnurlWithdrawInfo.write(value.lnurlWithdrawInfo, into: &buf)
         FfiConverterOptionString.write(value.lnurlDescription, into: &buf)
     }
 }
@@ -5750,13 +6264,21 @@ public func FfiConverterTypeReceivePaymentRequest_lower(_ value: ReceivePaymentR
 
 public struct ReceivePaymentResponse {
     public var paymentRequest: String
-    public var feeSats: UInt64
+    /**
+     * Fee to pay to receive the payment
+     * Denominated in sats or token base units
+     */
+    public var fee: U128
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(paymentRequest: String, feeSats: UInt64) {
+    public init(paymentRequest: String, 
+        /**
+         * Fee to pay to receive the payment
+         * Denominated in sats or token base units
+         */fee: U128) {
         self.paymentRequest = paymentRequest
-        self.feeSats = feeSats
+        self.fee = fee
     }
 }
 
@@ -5767,7 +6289,7 @@ extension ReceivePaymentResponse: Equatable, Hashable {
         if lhs.paymentRequest != rhs.paymentRequest {
             return false
         }
-        if lhs.feeSats != rhs.feeSats {
+        if lhs.fee != rhs.fee {
             return false
         }
         return true
@@ -5775,7 +6297,7 @@ extension ReceivePaymentResponse: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(paymentRequest)
-        hasher.combine(feeSats)
+        hasher.combine(fee)
     }
 }
 
@@ -5788,13 +6310,13 @@ public struct FfiConverterTypeReceivePaymentResponse: FfiConverterRustBuffer {
         return
             try ReceivePaymentResponse(
                 paymentRequest: FfiConverterString.read(from: &buf), 
-                feeSats: FfiConverterUInt64.read(from: &buf)
+                fee: FfiConverterTypeu128.read(from: &buf)
         )
     }
 
     public static func write(_ value: ReceivePaymentResponse, into buf: inout [UInt8]) {
         FfiConverterString.write(value.paymentRequest, into: &buf)
-        FfiConverterUInt64.write(value.feeSats, into: &buf)
+        FfiConverterTypeu128.write(value.fee, into: &buf)
     }
 }
 
@@ -6305,6 +6827,228 @@ public func FfiConverterTypeSendPaymentResponse_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeSendPaymentResponse_lower(_ value: SendPaymentResponse) -> RustBuffer {
     return FfiConverterTypeSendPaymentResponse.lower(value)
+}
+
+
+public struct SignMessageRequest {
+    public var message: String
+    /**
+     * If true, the signature will be encoded in compact format instead of DER format
+     */
+    public var compact: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(message: String, 
+        /**
+         * If true, the signature will be encoded in compact format instead of DER format
+         */compact: Bool) {
+        self.message = message
+        self.compact = compact
+    }
+}
+
+
+
+extension SignMessageRequest: Equatable, Hashable {
+    public static func ==(lhs: SignMessageRequest, rhs: SignMessageRequest) -> Bool {
+        if lhs.message != rhs.message {
+            return false
+        }
+        if lhs.compact != rhs.compact {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(message)
+        hasher.combine(compact)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSignMessageRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignMessageRequest {
+        return
+            try SignMessageRequest(
+                message: FfiConverterString.read(from: &buf), 
+                compact: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SignMessageRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.message, into: &buf)
+        FfiConverterBool.write(value.compact, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignMessageRequest_lift(_ buf: RustBuffer) throws -> SignMessageRequest {
+    return try FfiConverterTypeSignMessageRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignMessageRequest_lower(_ value: SignMessageRequest) -> RustBuffer {
+    return FfiConverterTypeSignMessageRequest.lower(value)
+}
+
+
+public struct SignMessageResponse {
+    public var pubkey: String
+    /**
+     * The DER or compact hex encoded signature
+     */
+    public var signature: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkey: String, 
+        /**
+         * The DER or compact hex encoded signature
+         */signature: String) {
+        self.pubkey = pubkey
+        self.signature = signature
+    }
+}
+
+
+
+extension SignMessageResponse: Equatable, Hashable {
+    public static func ==(lhs: SignMessageResponse, rhs: SignMessageResponse) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.signature != rhs.signature {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(signature)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSignMessageResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignMessageResponse {
+        return
+            try SignMessageResponse(
+                pubkey: FfiConverterString.read(from: &buf), 
+                signature: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SignMessageResponse, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterString.write(value.signature, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignMessageResponse_lift(_ buf: RustBuffer) throws -> SignMessageResponse {
+    return try FfiConverterTypeSignMessageResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignMessageResponse_lower(_ value: SignMessageResponse) -> RustBuffer {
+    return FfiConverterTypeSignMessageResponse.lower(value)
+}
+
+
+public struct SparkInvoicePaymentDetails {
+    /**
+     * Represents the spark invoice description
+     */
+    public var description: String?
+    /**
+     * The raw spark invoice string
+     */
+    public var invoice: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Represents the spark invoice description
+         */description: String?, 
+        /**
+         * The raw spark invoice string
+         */invoice: String) {
+        self.description = description
+        self.invoice = invoice
+    }
+}
+
+
+
+extension SparkInvoicePaymentDetails: Equatable, Hashable {
+    public static func ==(lhs: SparkInvoicePaymentDetails, rhs: SparkInvoicePaymentDetails) -> Bool {
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.invoice != rhs.invoice {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(description)
+        hasher.combine(invoice)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSparkInvoicePaymentDetails: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SparkInvoicePaymentDetails {
+        return
+            try SparkInvoicePaymentDetails(
+                description: FfiConverterOptionString.read(from: &buf), 
+                invoice: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SparkInvoicePaymentDetails, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterString.write(value.invoice, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkInvoicePaymentDetails_lift(_ buf: RustBuffer) throws -> SparkInvoicePaymentDetails {
+    return try FfiConverterTypeSparkInvoicePaymentDetails.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkInvoicePaymentDetails_lower(_ value: SparkInvoicePaymentDetails) -> RustBuffer {
+    return FfiConverterTypeSparkInvoicePaymentDetails.lower(value)
 }
 
 
@@ -7394,8 +8138,15 @@ extension OnchainConfirmationSpeed: Equatable, Hashable {}
 
 public enum PaymentDetails {
     
-    case spark
-    case token(metadata: TokenMetadata, txHash: String
+    case spark(
+        /**
+         * The invoice details if the payment fulfilled a spark invoice
+         */invoiceDetails: SparkInvoicePaymentDetails?
+    )
+    case token(metadata: TokenMetadata, txHash: String, 
+        /**
+         * The invoice details if the payment fulfilled a spark invoice
+         */invoiceDetails: SparkInvoicePaymentDetails?
     )
     case lightning(
         /**
@@ -7417,7 +8168,10 @@ public enum PaymentDetails {
          */destinationPubkey: String, 
         /**
          * Lnurl payment information if this was an lnurl payment.
-         */lnurlPayInfo: LnurlPayInfo?
+         */lnurlPayInfo: LnurlPayInfo?, 
+        /**
+         * Lnurl withdrawal information if this was an lnurl payment.
+         */lnurlWithdrawInfo: LnurlWithdrawInfo?
     )
     case withdraw(txId: String
     )
@@ -7436,12 +8190,13 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .spark
-        
-        case 2: return .token(metadata: try FfiConverterTypeTokenMetadata.read(from: &buf), txHash: try FfiConverterString.read(from: &buf)
+        case 1: return .spark(invoiceDetails: try FfiConverterOptionTypeSparkInvoicePaymentDetails.read(from: &buf)
         )
         
-        case 3: return .lightning(description: try FfiConverterOptionString.read(from: &buf), preimage: try FfiConverterOptionString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), paymentHash: try FfiConverterString.read(from: &buf), destinationPubkey: try FfiConverterString.read(from: &buf), lnurlPayInfo: try FfiConverterOptionTypeLnurlPayInfo.read(from: &buf)
+        case 2: return .token(metadata: try FfiConverterTypeTokenMetadata.read(from: &buf), txHash: try FfiConverterString.read(from: &buf), invoiceDetails: try FfiConverterOptionTypeSparkInvoicePaymentDetails.read(from: &buf)
+        )
+        
+        case 3: return .lightning(description: try FfiConverterOptionString.read(from: &buf), preimage: try FfiConverterOptionString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), paymentHash: try FfiConverterString.read(from: &buf), destinationPubkey: try FfiConverterString.read(from: &buf), lnurlPayInfo: try FfiConverterOptionTypeLnurlPayInfo.read(from: &buf), lnurlWithdrawInfo: try FfiConverterOptionTypeLnurlWithdrawInfo.read(from: &buf)
         )
         
         case 4: return .withdraw(txId: try FfiConverterString.read(from: &buf)
@@ -7458,17 +8213,19 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
         switch value {
         
         
-        case .spark:
+        case let .spark(invoiceDetails):
             writeInt(&buf, Int32(1))
+            FfiConverterOptionTypeSparkInvoicePaymentDetails.write(invoiceDetails, into: &buf)
+            
         
-        
-        case let .token(metadata,txHash):
+        case let .token(metadata,txHash,invoiceDetails):
             writeInt(&buf, Int32(2))
             FfiConverterTypeTokenMetadata.write(metadata, into: &buf)
             FfiConverterString.write(txHash, into: &buf)
+            FfiConverterOptionTypeSparkInvoicePaymentDetails.write(invoiceDetails, into: &buf)
             
         
-        case let .lightning(description,preimage,invoice,paymentHash,destinationPubkey,lnurlPayInfo):
+        case let .lightning(description,preimage,invoice,paymentHash,destinationPubkey,lnurlPayInfo,lnurlWithdrawInfo):
             writeInt(&buf, Int32(3))
             FfiConverterOptionString.write(description, into: &buf)
             FfiConverterOptionString.write(preimage, into: &buf)
@@ -7476,6 +8233,7 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
             FfiConverterString.write(paymentHash, into: &buf)
             FfiConverterString.write(destinationPubkey, into: &buf)
             FfiConverterOptionTypeLnurlPayInfo.write(lnurlPayInfo, into: &buf)
+            FfiConverterOptionTypeLnurlWithdrawInfo.write(lnurlWithdrawInfo, into: &buf)
             
         
         case let .withdraw(txId):
@@ -7842,16 +8600,16 @@ public enum ProvisionalPaymentDetails {
     )
     case spark(
         /**
-         * Spark receiver address
-         */receiverAddress: String
+         * Spark pay request being paid (either a Spark address or a Spark invoice)
+         */payRequest: String
     )
     case token(
         /**
          * Token identifier
          */tokenId: String, 
         /**
-         * Spark receiver address
-         */receiverAddress: String
+         * Spark pay request being paid (either a Spark address or a Spark invoice)
+         */payRequest: String
     )
 }
 
@@ -7872,10 +8630,10 @@ public struct FfiConverterTypeProvisionalPaymentDetails: FfiConverterRustBuffer 
         case 2: return .lightning(invoice: try FfiConverterString.read(from: &buf)
         )
         
-        case 3: return .spark(receiverAddress: try FfiConverterString.read(from: &buf)
+        case 3: return .spark(payRequest: try FfiConverterString.read(from: &buf)
         )
         
-        case 4: return .token(tokenId: try FfiConverterString.read(from: &buf), receiverAddress: try FfiConverterString.read(from: &buf)
+        case 4: return .token(tokenId: try FfiConverterString.read(from: &buf), payRequest: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -7896,15 +8654,15 @@ public struct FfiConverterTypeProvisionalPaymentDetails: FfiConverterRustBuffer 
             FfiConverterString.write(invoice, into: &buf)
             
         
-        case let .spark(receiverAddress):
+        case let .spark(payRequest):
             writeInt(&buf, Int32(3))
-            FfiConverterString.write(receiverAddress, into: &buf)
+            FfiConverterString.write(payRequest, into: &buf)
             
         
-        case let .token(tokenId,receiverAddress):
+        case let .token(tokenId,payRequest):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(tokenId, into: &buf)
-            FfiConverterString.write(receiverAddress, into: &buf)
+            FfiConverterString.write(payRequest, into: &buf)
             
         }
     }
@@ -7937,6 +8695,24 @@ extension ProvisionalPaymentDetails: Equatable, Hashable {}
 public enum ReceivePaymentMethod {
     
     case sparkAddress
+    case sparkInvoice(
+        /**
+         * Amount to receive. Denominated in sats if token identifier is empty, otherwise in the token base units
+         */amount: U128?, 
+        /**
+         * The presence of this field indicates that the payment is for a token
+         * If empty, it is a Bitcoin payment
+         */tokenIdentifier: String?, 
+        /**
+         * The expiry time of the invoice in seconds since the Unix epoch
+         */expiryTime: UInt64?, 
+        /**
+         * A description to embed in the invoice.
+         */description: String?, 
+        /**
+         * If set, the invoice may only be fulfilled by a payer with this public key
+         */senderPublicKey: String?
+    )
     case bitcoinAddress
     case bolt11Invoice(description: String, amountSats: UInt64?
     )
@@ -7955,9 +8731,12 @@ public struct FfiConverterTypeReceivePaymentMethod: FfiConverterRustBuffer {
         
         case 1: return .sparkAddress
         
-        case 2: return .bitcoinAddress
+        case 2: return .sparkInvoice(amount: try FfiConverterOptionTypeu128.read(from: &buf), tokenIdentifier: try FfiConverterOptionString.read(from: &buf), expiryTime: try FfiConverterOptionUInt64.read(from: &buf), description: try FfiConverterOptionString.read(from: &buf), senderPublicKey: try FfiConverterOptionString.read(from: &buf)
+        )
         
-        case 3: return .bolt11Invoice(description: try FfiConverterString.read(from: &buf), amountSats: try FfiConverterOptionUInt64.read(from: &buf)
+        case 3: return .bitcoinAddress
+        
+        case 4: return .bolt11Invoice(description: try FfiConverterString.read(from: &buf), amountSats: try FfiConverterOptionUInt64.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -7972,12 +8751,21 @@ public struct FfiConverterTypeReceivePaymentMethod: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
         
         
-        case .bitcoinAddress:
+        case let .sparkInvoice(amount,tokenIdentifier,expiryTime,description,senderPublicKey):
             writeInt(&buf, Int32(2))
+            FfiConverterOptionTypeu128.write(amount, into: &buf)
+            FfiConverterOptionString.write(tokenIdentifier, into: &buf)
+            FfiConverterOptionUInt64.write(expiryTime, into: &buf)
+            FfiConverterOptionString.write(description, into: &buf)
+            FfiConverterOptionString.write(senderPublicKey, into: &buf)
+            
+        
+        case .bitcoinAddress:
+            writeInt(&buf, Int32(3))
         
         
         case let .bolt11Invoice(description,amountSats):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(description, into: &buf)
             FfiConverterOptionUInt64.write(amountSats, into: &buf)
             
@@ -8383,6 +9171,16 @@ public enum SendPaymentMethod {
          * If empty, it is a Bitcoin payment
          */tokenIdentifier: String?
     )
+    case sparkInvoice(sparkInvoiceDetails: SparkInvoiceDetails, 
+        /**
+         * Fee to pay for the transaction
+         * Denominated in sats if token identifier is empty, otherwise in the token base units
+         */fee: U128, 
+        /**
+         * The presence of this field indicates that the payment is for a token
+         * If empty, it is a Bitcoin payment
+         */tokenIdentifier: String?
+    )
 }
 
 
@@ -8403,6 +9201,9 @@ public struct FfiConverterTypeSendPaymentMethod: FfiConverterRustBuffer {
         )
         
         case 3: return .sparkAddress(address: try FfiConverterString.read(from: &buf), fee: try FfiConverterTypeu128.read(from: &buf), tokenIdentifier: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 4: return .sparkInvoice(sparkInvoiceDetails: try FfiConverterTypeSparkInvoiceDetails.read(from: &buf), fee: try FfiConverterTypeu128.read(from: &buf), tokenIdentifier: try FfiConverterOptionString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -8429,6 +9230,13 @@ public struct FfiConverterTypeSendPaymentMethod: FfiConverterRustBuffer {
         case let .sparkAddress(address,fee,tokenIdentifier):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(address, into: &buf)
+            FfiConverterTypeu128.write(fee, into: &buf)
+            FfiConverterOptionString.write(tokenIdentifier, into: &buf)
+            
+        
+        case let .sparkInvoice(sparkInvoiceDetails,fee,tokenIdentifier):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeSparkInvoiceDetails.write(sparkInvoiceDetails, into: &buf)
             FfiConverterTypeu128.write(fee, into: &buf)
             FfiConverterOptionString.write(tokenIdentifier, into: &buf)
             
@@ -9145,6 +9953,30 @@ fileprivate struct FfiConverterOptionTypeLnurlPayInfo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeLnurlWithdrawInfo: FfiConverterRustBuffer {
+    typealias SwiftType = LnurlWithdrawInfo?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeLnurlWithdrawInfo.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeLnurlWithdrawInfo.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypePayment: FfiConverterRustBuffer {
     typealias SwiftType = Payment?
 
@@ -9161,6 +9993,30 @@ fileprivate struct FfiConverterOptionTypePayment: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypePayment.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeSparkInvoicePaymentDetails: FfiConverterRustBuffer {
+    typealias SwiftType = SparkInvoicePaymentDetails?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSparkInvoicePaymentDetails.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSparkInvoicePaymentDetails.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -9780,6 +10636,10 @@ fileprivate struct FfiConverterDictionaryStringTypeTokenBalance: FfiConverterRus
 
 
 
+
+
+
+
 /**
  * Typealias from the type name used in the UDL file to the custom type.  This
  * is needed because the UDL type name is used in function/method signatures.
@@ -10033,6 +10893,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_check_lightning_address_available() != 31624) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_check_message() != 4385) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_claim_deposit() != 43529) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10069,6 +10932,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_lnurl_pay() != 10147) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_lnurl_withdraw() != 45652) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_parse() != 195) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10091,6 +10957,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_send_payment() != 54349) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_sign_message() != 57563) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_sync_wallet() != 30368) {
