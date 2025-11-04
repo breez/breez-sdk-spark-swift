@@ -1998,6 +1998,8 @@ public protocol SdkBuilderProtocol : AnyObject {
      */
     func withPaymentObserver(paymentObserver: PaymentObserver) async 
     
+    func withRealTimeSyncStorage(storage: SyncStorage) async 
+    
     /**
      * Sets the REST chain service to be used by the SDK.
      * Arguments:
@@ -2198,6 +2200,24 @@ open func withPaymentObserver(paymentObserver: PaymentObserver)async  {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_payment_observer(
                     self.uniffiClonePointer(),
                     FfiConverterTypePaymentObserver.lower(paymentObserver)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
+}
+    
+open func withRealTimeSyncStorage(storage: SyncStorage)async  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_real_time_sync_storage(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSyncStorage_lower(storage)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -3726,6 +3746,10 @@ public struct Config {
      * Set this to false in order to prevent their use.
      */
     public var useDefaultExternalInputParsers: Bool
+    /**
+     * Url to use for the real-time sync server. Defaults to the Breez real-time sync server.
+     */
+    public var realTimeSyncServerUrl: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -3747,7 +3771,10 @@ public struct Config {
          * The SDK includes some default external input parsers
          * ([`DEFAULT_EXTERNAL_INPUT_PARSERS`]).
          * Set this to false in order to prevent their use.
-         */useDefaultExternalInputParsers: Bool) {
+         */useDefaultExternalInputParsers: Bool, 
+        /**
+         * Url to use for the real-time sync server. Defaults to the Breez real-time sync server.
+         */realTimeSyncServerUrl: String?) {
         self.apiKey = apiKey
         self.network = network
         self.syncIntervalSecs = syncIntervalSecs
@@ -3756,6 +3783,7 @@ public struct Config {
         self.preferSparkOverLightning = preferSparkOverLightning
         self.externalInputParsers = externalInputParsers
         self.useDefaultExternalInputParsers = useDefaultExternalInputParsers
+        self.realTimeSyncServerUrl = realTimeSyncServerUrl
     }
 }
 
@@ -3787,6 +3815,9 @@ extension Config: Equatable, Hashable {
         if lhs.useDefaultExternalInputParsers != rhs.useDefaultExternalInputParsers {
             return false
         }
+        if lhs.realTimeSyncServerUrl != rhs.realTimeSyncServerUrl {
+            return false
+        }
         return true
     }
 
@@ -3799,6 +3830,7 @@ extension Config: Equatable, Hashable {
         hasher.combine(preferSparkOverLightning)
         hasher.combine(externalInputParsers)
         hasher.combine(useDefaultExternalInputParsers)
+        hasher.combine(realTimeSyncServerUrl)
     }
 }
 
@@ -3817,7 +3849,8 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
                 lnurlDomain: FfiConverterOptionString.read(from: &buf), 
                 preferSparkOverLightning: FfiConverterBool.read(from: &buf), 
                 externalInputParsers: FfiConverterOptionSequenceTypeExternalInputParser.read(from: &buf), 
-                useDefaultExternalInputParsers: FfiConverterBool.read(from: &buf)
+                useDefaultExternalInputParsers: FfiConverterBool.read(from: &buf), 
+                realTimeSyncServerUrl: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -3830,6 +3863,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
         FfiConverterBool.write(value.preferSparkOverLightning, into: &buf)
         FfiConverterOptionSequenceTypeExternalInputParser.write(value.externalInputParsers, into: &buf)
         FfiConverterBool.write(value.useDefaultExternalInputParsers, into: &buf)
+        FfiConverterOptionString.write(value.realTimeSyncServerUrl, into: &buf)
     }
 }
 
@@ -7764,7 +7798,7 @@ extension ChainServiceError: Foundation.LocalizedError {
 
 public enum DepositClaimError {
     
-    case depositClaimFeeExceeded(tx: String, vout: UInt32, maxFee: Fee, actualFee: UInt64
+    case depositClaimFeeExceeded(tx: String, vout: UInt32, maxFee: Fee?, actualFee: UInt64
     )
     case missingUtxo(tx: String, vout: UInt32
     )
@@ -7783,7 +7817,7 @@ public struct FfiConverterTypeDepositClaimError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .depositClaimFeeExceeded(tx: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf), maxFee: try FfiConverterTypeFee.read(from: &buf), actualFee: try FfiConverterUInt64.read(from: &buf)
+        case 1: return .depositClaimFeeExceeded(tx: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf), maxFee: try FfiConverterOptionTypeFee.read(from: &buf), actualFee: try FfiConverterUInt64.read(from: &buf)
         )
         
         case 2: return .missingUtxo(tx: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf)
@@ -7804,7 +7838,7 @@ public struct FfiConverterTypeDepositClaimError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
             FfiConverterString.write(tx, into: &buf)
             FfiConverterUInt32.write(vout, into: &buf)
-            FfiConverterTypeFee.write(maxFee, into: &buf)
+            FfiConverterOptionTypeFee.write(maxFee, into: &buf)
             FfiConverterUInt64.write(actualFee, into: &buf)
             
         
@@ -8823,7 +8857,7 @@ public enum SdkError {
     )
     case ChainServiceError(String
     )
-    case DepositClaimFeeExceeded(tx: String, vout: UInt32, maxFee: Fee, actualFee: UInt64
+    case DepositClaimFeeExceeded(tx: String, vout: UInt32, maxFee: Fee?, actualFee: UInt64
     )
     case MissingUtxo(tx: String, vout: UInt32
     )
@@ -8868,7 +8902,7 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
         case 7: return .DepositClaimFeeExceeded(
             tx: try FfiConverterString.read(from: &buf), 
             vout: try FfiConverterUInt32.read(from: &buf), 
-            maxFee: try FfiConverterTypeFee.read(from: &buf), 
+            maxFee: try FfiConverterOptionTypeFee.read(from: &buf), 
             actualFee: try FfiConverterUInt64.read(from: &buf)
             )
         case 8: return .MissingUtxo(
@@ -8927,7 +8961,7 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(7))
             FfiConverterString.write(tx, into: &buf)
             FfiConverterUInt32.write(vout, into: &buf)
-            FfiConverterTypeFee.write(maxFee, into: &buf)
+            FfiConverterOptionTypeFee.write(maxFee, into: &buf)
             FfiConverterUInt64.write(actualFee, into: &buf)
             
         
@@ -8972,11 +9006,19 @@ public enum SdkEvent {
      */
     case synced
     /**
-     * Emitted when the wallet failed to claim some deposits
+     * Emitted when data was pushed and/or pulled to/from real-time sync storage.
      */
-    case claimDepositsFailed(unclaimedDeposits: [DepositInfo]
+    case dataSynced(
+        /**
+         * Value indicating whether new data was pulled through real-time sync.
+         */didPullNewRecords: Bool
     )
-    case claimDepositsSucceeded(claimedDeposits: [DepositInfo]
+    /**
+     * Emitted when the SDK was unable to claim deposits
+     */
+    case unclaimedDeposits(unclaimedDeposits: [DepositInfo]
+    )
+    case claimedDeposits(claimedDeposits: [DepositInfo]
     )
     case paymentSucceeded(payment: Payment
     )
@@ -8997,16 +9039,19 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
         
         case 1: return .synced
         
-        case 2: return .claimDepositsFailed(unclaimedDeposits: try FfiConverterSequenceTypeDepositInfo.read(from: &buf)
+        case 2: return .dataSynced(didPullNewRecords: try FfiConverterBool.read(from: &buf)
         )
         
-        case 3: return .claimDepositsSucceeded(claimedDeposits: try FfiConverterSequenceTypeDepositInfo.read(from: &buf)
+        case 3: return .unclaimedDeposits(unclaimedDeposits: try FfiConverterSequenceTypeDepositInfo.read(from: &buf)
         )
         
-        case 4: return .paymentSucceeded(payment: try FfiConverterTypePayment.read(from: &buf)
+        case 4: return .claimedDeposits(claimedDeposits: try FfiConverterSequenceTypeDepositInfo.read(from: &buf)
         )
         
-        case 5: return .paymentFailed(payment: try FfiConverterTypePayment.read(from: &buf)
+        case 5: return .paymentSucceeded(payment: try FfiConverterTypePayment.read(from: &buf)
+        )
+        
+        case 6: return .paymentFailed(payment: try FfiConverterTypePayment.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -9021,23 +9066,28 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
         
         
-        case let .claimDepositsFailed(unclaimedDeposits):
+        case let .dataSynced(didPullNewRecords):
             writeInt(&buf, Int32(2))
+            FfiConverterBool.write(didPullNewRecords, into: &buf)
+            
+        
+        case let .unclaimedDeposits(unclaimedDeposits):
+            writeInt(&buf, Int32(3))
             FfiConverterSequenceTypeDepositInfo.write(unclaimedDeposits, into: &buf)
             
         
-        case let .claimDepositsSucceeded(claimedDeposits):
-            writeInt(&buf, Int32(3))
+        case let .claimedDeposits(claimedDeposits):
+            writeInt(&buf, Int32(4))
             FfiConverterSequenceTypeDepositInfo.write(claimedDeposits, into: &buf)
             
         
         case let .paymentSucceeded(payment):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypePayment.write(payment, into: &buf)
             
         
         case let .paymentFailed(payment):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypePayment.write(payment, into: &buf)
             
         }
@@ -10640,6 +10690,8 @@ fileprivate struct FfiConverterDictionaryStringTypeTokenBalance: FfiConverterRus
 
 
 
+
+
 /**
  * Typealias from the type name used in the UDL file to the custom type.  This
  * is needed because the UDL type name is used in function/method signatures.
@@ -10839,6 +10891,13 @@ public func defaultStorage(dataDir: String)throws  -> Storage {
     )
 })
 }
+public func defaultSyncStorage(dataDir: String)throws  -> SyncStorage {
+    return try  FfiConverterTypeSyncStorage_lift(try rustCallWithError(FfiConverterTypeSdkError.lift) {
+    uniffi_breez_sdk_spark_fn_func_default_sync_storage(
+        FfiConverterString.lower(dataDir),$0
+    )
+})
+}
 public func initLogging(logDir: String?, appLogger: Logger?, logFilter: String?)throws  {try rustCallWithError(FfiConverterTypeSdkError.lift) {
     uniffi_breez_sdk_spark_fn_func_init_logging(
         FfiConverterOptionString.lower(logDir),
@@ -10870,6 +10929,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_default_storage() != 46285) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_func_default_sync_storage() != 62413) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_init_logging() != 8518) {
@@ -10987,6 +11049,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_payment_observer() != 21617) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_real_time_sync_storage() != 36431) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_rest_chain_service() != 56288) {
