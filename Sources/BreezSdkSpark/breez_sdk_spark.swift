@@ -988,6 +988,11 @@ public protocol BreezSdkProtocol : AnyObject {
     func getPayment(request: GetPaymentRequest) async throws  -> GetPaymentResponse
     
     /**
+     * Returns an instance of the [`TokenIssuer`] for managing token issuance.
+     */
+    func getTokenIssuer()  -> TokenIssuer
+    
+    /**
      * Returns the metadata for the given token identifiers.
      *
      * Results are not guaranteed to be in the same order as the input token identifiers.
@@ -1351,6 +1356,16 @@ open func getPayment(request: GetPaymentRequest)async throws  -> GetPaymentRespo
             liftFunc: FfiConverterTypeGetPaymentResponse.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
+}
+    
+    /**
+     * Returns an instance of the [`TokenIssuer`] for managing token issuance.
+     */
+open func getTokenIssuer() -> TokenIssuer {
+    return try!  FfiConverterTypeTokenIssuer.lift(try! rustCall() {
+    uniffi_breez_sdk_spark_fn_method_breezsdk_get_token_issuer(self.uniffiClonePointer(),$0
+    )
+})
 }
     
     /**
@@ -4968,6 +4983,416 @@ public func FfiConverterTypeSyncStorage_lower(_ value: SyncStorage) -> UnsafeMut
 }
 
 
+
+
+public protocol TokenIssuerProtocol : AnyObject {
+    
+    /**
+     * Burns supply of the issuer token
+     *
+     * # Arguments
+     *
+     * * `request`: The request containing the amount of the supply to burn
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `Payment` - The payment representing the burn transaction
+     * * `SdkError` - If there was an error during the burn process
+     */
+    func burnIssuerToken(request: BurnIssuerTokenRequest) async throws  -> Payment
+    
+    /**
+     * Creates a new issuer token
+     *
+     * # Arguments
+     *
+     * * `request`: The request containing the token parameters
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `TokenMetadata` - The metadata of the created token
+     * * `SdkError` - If there was an error during the token creation
+     */
+    func createIssuerToken(request: CreateIssuerTokenRequest) async throws  -> TokenMetadata
+    
+    /**
+     * Freezes tokens held at the specified address
+     *
+     * # Arguments
+     *
+     * * `request`: The request containing the spark address where the tokens to be frozen are held
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `FreezeIssuerTokenResponse` - The response containing details of the freeze operation
+     * * `SdkError` - If there was an error during the freeze process
+     */
+    func freezeIssuerToken(request: FreezeIssuerTokenRequest) async throws  -> FreezeIssuerTokenResponse
+    
+    /**
+     * Gets the issuer token balance
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `TokenBalance` - The balance of the issuer token
+     * * `SdkError` - If there was an error during the retrieval or no issuer token exists
+     */
+    func getIssuerTokenBalance() async throws  -> TokenBalance
+    
+    /**
+     * Gets the issuer token metadata
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `TokenMetadata` - The metadata of the issuer token
+     * * `SdkError` - If there was an error during the retrieval or no issuer token exists
+     */
+    func getIssuerTokenMetadata() async throws  -> TokenMetadata
+    
+    /**
+     * Mints supply for the issuer token
+     *
+     * # Arguments
+     *
+     * * `request`: The request contiaining the amount of the supply to mint
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `Payment` - The payment representing the minting transaction
+     * * `SdkError` - If there was an error during the minting process
+     */
+    func mintIssuerToken(request: MintIssuerTokenRequest) async throws  -> Payment
+    
+    /**
+     * Unfreezes tokens held at the specified address
+     *
+     * # Arguments
+     *
+     * * `request`: The request containing the spark address where the tokens to be unfrozen are held
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `UnfreezeIssuerTokenResponse` - The response containing details of the unfreeze operation
+     * * `SdkError` - If there was an error during the unfreeze process
+     */
+    func unfreezeIssuerToken(request: UnfreezeIssuerTokenRequest) async throws  -> UnfreezeIssuerTokenResponse
+    
+}
+
+open class TokenIssuer:
+    TokenIssuerProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_tokenissuer(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_breez_sdk_spark_fn_free_tokenissuer(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Burns supply of the issuer token
+     *
+     * # Arguments
+     *
+     * * `request`: The request containing the amount of the supply to burn
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `Payment` - The payment representing the burn transaction
+     * * `SdkError` - If there was an error during the burn process
+     */
+open func burnIssuerToken(request: BurnIssuerTokenRequest)async throws  -> Payment {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_tokenissuer_burn_issuer_token(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeBurnIssuerTokenRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePayment.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+    /**
+     * Creates a new issuer token
+     *
+     * # Arguments
+     *
+     * * `request`: The request containing the token parameters
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `TokenMetadata` - The metadata of the created token
+     * * `SdkError` - If there was an error during the token creation
+     */
+open func createIssuerToken(request: CreateIssuerTokenRequest)async throws  -> TokenMetadata {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_tokenissuer_create_issuer_token(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeCreateIssuerTokenRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTokenMetadata.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+    /**
+     * Freezes tokens held at the specified address
+     *
+     * # Arguments
+     *
+     * * `request`: The request containing the spark address where the tokens to be frozen are held
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `FreezeIssuerTokenResponse` - The response containing details of the freeze operation
+     * * `SdkError` - If there was an error during the freeze process
+     */
+open func freezeIssuerToken(request: FreezeIssuerTokenRequest)async throws  -> FreezeIssuerTokenResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_tokenissuer_freeze_issuer_token(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeFreezeIssuerTokenRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFreezeIssuerTokenResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+    /**
+     * Gets the issuer token balance
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `TokenBalance` - The balance of the issuer token
+     * * `SdkError` - If there was an error during the retrieval or no issuer token exists
+     */
+open func getIssuerTokenBalance()async throws  -> TokenBalance {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_tokenissuer_get_issuer_token_balance(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTokenBalance.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+    /**
+     * Gets the issuer token metadata
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `TokenMetadata` - The metadata of the issuer token
+     * * `SdkError` - If there was an error during the retrieval or no issuer token exists
+     */
+open func getIssuerTokenMetadata()async throws  -> TokenMetadata {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_tokenissuer_get_issuer_token_metadata(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTokenMetadata.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+    /**
+     * Mints supply for the issuer token
+     *
+     * # Arguments
+     *
+     * * `request`: The request contiaining the amount of the supply to mint
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `Payment` - The payment representing the minting transaction
+     * * `SdkError` - If there was an error during the minting process
+     */
+open func mintIssuerToken(request: MintIssuerTokenRequest)async throws  -> Payment {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_tokenissuer_mint_issuer_token(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeMintIssuerTokenRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePayment.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+    /**
+     * Unfreezes tokens held at the specified address
+     *
+     * # Arguments
+     *
+     * * `request`: The request containing the spark address where the tokens to be unfrozen are held
+     *
+     * # Returns
+     *
+     * Result containing either:
+     * * `UnfreezeIssuerTokenResponse` - The response containing details of the unfreeze operation
+     * * `SdkError` - If there was an error during the unfreeze process
+     */
+open func unfreezeIssuerToken(request: UnfreezeIssuerTokenRequest)async throws  -> UnfreezeIssuerTokenResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_tokenissuer_unfreeze_issuer_token(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeUnfreezeIssuerTokenRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnfreezeIssuerTokenResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTokenIssuer: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = TokenIssuer
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> TokenIssuer {
+        return TokenIssuer(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: TokenIssuer) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TokenIssuer {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: TokenIssuer, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokenIssuer_lift(_ pointer: UnsafeMutableRawPointer) throws -> TokenIssuer {
+    return try FfiConverterTypeTokenIssuer.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokenIssuer_lower(_ value: TokenIssuer) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeTokenIssuer.lower(value)
+}
+
+
 /**
  * Payload of the AES success action, as received from the LNURL endpoint
  *
@@ -6223,6 +6648,64 @@ public func FfiConverterTypeBolt12OfferDetails_lower(_ value: Bolt12OfferDetails
 }
 
 
+public struct BurnIssuerTokenRequest {
+    public var amount: U128
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(amount: U128) {
+        self.amount = amount
+    }
+}
+
+
+
+extension BurnIssuerTokenRequest: Equatable, Hashable {
+    public static func ==(lhs: BurnIssuerTokenRequest, rhs: BurnIssuerTokenRequest) -> Bool {
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(amount)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBurnIssuerTokenRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BurnIssuerTokenRequest {
+        return
+            try BurnIssuerTokenRequest(
+                amount: FfiConverterTypeu128.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BurnIssuerTokenRequest, into buf: inout [UInt8]) {
+        FfiConverterTypeu128.write(value.amount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBurnIssuerTokenRequest_lift(_ buf: RustBuffer) throws -> BurnIssuerTokenRequest {
+    return try FfiConverterTypeBurnIssuerTokenRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBurnIssuerTokenRequest_lower(_ value: BurnIssuerTokenRequest) -> RustBuffer {
+    return FfiConverterTypeBurnIssuerTokenRequest.lower(value)
+}
+
+
 public struct CheckLightningAddressRequest {
     public var username: String
 
@@ -6821,6 +7304,96 @@ public func FfiConverterTypeConnectRequest_lower(_ value: ConnectRequest) -> Rus
 }
 
 
+public struct CreateIssuerTokenRequest {
+    public var name: String
+    public var ticker: String
+    public var decimals: UInt32
+    public var isFreezable: Bool
+    public var maxSupply: U128
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, ticker: String, decimals: UInt32, isFreezable: Bool, maxSupply: U128) {
+        self.name = name
+        self.ticker = ticker
+        self.decimals = decimals
+        self.isFreezable = isFreezable
+        self.maxSupply = maxSupply
+    }
+}
+
+
+
+extension CreateIssuerTokenRequest: Equatable, Hashable {
+    public static func ==(lhs: CreateIssuerTokenRequest, rhs: CreateIssuerTokenRequest) -> Bool {
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.ticker != rhs.ticker {
+            return false
+        }
+        if lhs.decimals != rhs.decimals {
+            return false
+        }
+        if lhs.isFreezable != rhs.isFreezable {
+            return false
+        }
+        if lhs.maxSupply != rhs.maxSupply {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(ticker)
+        hasher.combine(decimals)
+        hasher.combine(isFreezable)
+        hasher.combine(maxSupply)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateIssuerTokenRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateIssuerTokenRequest {
+        return
+            try CreateIssuerTokenRequest(
+                name: FfiConverterString.read(from: &buf), 
+                ticker: FfiConverterString.read(from: &buf), 
+                decimals: FfiConverterUInt32.read(from: &buf), 
+                isFreezable: FfiConverterBool.read(from: &buf), 
+                maxSupply: FfiConverterTypeu128.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateIssuerTokenRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.ticker, into: &buf)
+        FfiConverterUInt32.write(value.decimals, into: &buf)
+        FfiConverterBool.write(value.isFreezable, into: &buf)
+        FfiConverterTypeu128.write(value.maxSupply, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateIssuerTokenRequest_lift(_ buf: RustBuffer) throws -> CreateIssuerTokenRequest {
+    return try FfiConverterTypeCreateIssuerTokenRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateIssuerTokenRequest_lower(_ value: CreateIssuerTokenRequest) -> RustBuffer {
+    return FfiConverterTypeCreateIssuerTokenRequest.lower(value)
+}
+
+
 public struct Credentials {
     public var username: String
     public var password: String
@@ -7257,6 +7830,130 @@ public func FfiConverterTypeFiatCurrency_lift(_ buf: RustBuffer) throws -> FiatC
 #endif
 public func FfiConverterTypeFiatCurrency_lower(_ value: FiatCurrency) -> RustBuffer {
     return FfiConverterTypeFiatCurrency.lower(value)
+}
+
+
+public struct FreezeIssuerTokenRequest {
+    public var address: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(address: String) {
+        self.address = address
+    }
+}
+
+
+
+extension FreezeIssuerTokenRequest: Equatable, Hashable {
+    public static func ==(lhs: FreezeIssuerTokenRequest, rhs: FreezeIssuerTokenRequest) -> Bool {
+        if lhs.address != rhs.address {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(address)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFreezeIssuerTokenRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FreezeIssuerTokenRequest {
+        return
+            try FreezeIssuerTokenRequest(
+                address: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FreezeIssuerTokenRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFreezeIssuerTokenRequest_lift(_ buf: RustBuffer) throws -> FreezeIssuerTokenRequest {
+    return try FfiConverterTypeFreezeIssuerTokenRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFreezeIssuerTokenRequest_lower(_ value: FreezeIssuerTokenRequest) -> RustBuffer {
+    return FfiConverterTypeFreezeIssuerTokenRequest.lower(value)
+}
+
+
+public struct FreezeIssuerTokenResponse {
+    public var impactedOutputIds: [String]
+    public var impactedTokenAmount: U128
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(impactedOutputIds: [String], impactedTokenAmount: U128) {
+        self.impactedOutputIds = impactedOutputIds
+        self.impactedTokenAmount = impactedTokenAmount
+    }
+}
+
+
+
+extension FreezeIssuerTokenResponse: Equatable, Hashable {
+    public static func ==(lhs: FreezeIssuerTokenResponse, rhs: FreezeIssuerTokenResponse) -> Bool {
+        if lhs.impactedOutputIds != rhs.impactedOutputIds {
+            return false
+        }
+        if lhs.impactedTokenAmount != rhs.impactedTokenAmount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(impactedOutputIds)
+        hasher.combine(impactedTokenAmount)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFreezeIssuerTokenResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FreezeIssuerTokenResponse {
+        return
+            try FreezeIssuerTokenResponse(
+                impactedOutputIds: FfiConverterSequenceString.read(from: &buf), 
+                impactedTokenAmount: FfiConverterTypeu128.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FreezeIssuerTokenResponse, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.impactedOutputIds, into: &buf)
+        FfiConverterTypeu128.write(value.impactedTokenAmount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFreezeIssuerTokenResponse_lift(_ buf: RustBuffer) throws -> FreezeIssuerTokenResponse {
+    return try FfiConverterTypeFreezeIssuerTokenResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFreezeIssuerTokenResponse_lower(_ value: FreezeIssuerTokenResponse) -> RustBuffer {
+    return FfiConverterTypeFreezeIssuerTokenResponse.lower(value)
 }
 
 
@@ -9435,6 +10132,64 @@ public func FfiConverterTypeMessageSuccessActionData_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeMessageSuccessActionData_lower(_ value: MessageSuccessActionData) -> RustBuffer {
     return FfiConverterTypeMessageSuccessActionData.lower(value)
+}
+
+
+public struct MintIssuerTokenRequest {
+    public var amount: U128
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(amount: U128) {
+        self.amount = amount
+    }
+}
+
+
+
+extension MintIssuerTokenRequest: Equatable, Hashable {
+    public static func ==(lhs: MintIssuerTokenRequest, rhs: MintIssuerTokenRequest) -> Bool {
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(amount)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMintIssuerTokenRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MintIssuerTokenRequest {
+        return
+            try MintIssuerTokenRequest(
+                amount: FfiConverterTypeu128.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MintIssuerTokenRequest, into buf: inout [UInt8]) {
+        FfiConverterTypeu128.write(value.amount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMintIssuerTokenRequest_lift(_ buf: RustBuffer) throws -> MintIssuerTokenRequest {
+    return try FfiConverterTypeMintIssuerTokenRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMintIssuerTokenRequest_lower(_ value: MintIssuerTokenRequest) -> RustBuffer {
+    return FfiConverterTypeMintIssuerTokenRequest.lower(value)
 }
 
 
@@ -12247,6 +13002,130 @@ public func FfiConverterTypeTxStatus_lift(_ buf: RustBuffer) throws -> TxStatus 
 #endif
 public func FfiConverterTypeTxStatus_lower(_ value: TxStatus) -> RustBuffer {
     return FfiConverterTypeTxStatus.lower(value)
+}
+
+
+public struct UnfreezeIssuerTokenRequest {
+    public var address: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(address: String) {
+        self.address = address
+    }
+}
+
+
+
+extension UnfreezeIssuerTokenRequest: Equatable, Hashable {
+    public static func ==(lhs: UnfreezeIssuerTokenRequest, rhs: UnfreezeIssuerTokenRequest) -> Bool {
+        if lhs.address != rhs.address {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(address)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUnfreezeIssuerTokenRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnfreezeIssuerTokenRequest {
+        return
+            try UnfreezeIssuerTokenRequest(
+                address: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UnfreezeIssuerTokenRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnfreezeIssuerTokenRequest_lift(_ buf: RustBuffer) throws -> UnfreezeIssuerTokenRequest {
+    return try FfiConverterTypeUnfreezeIssuerTokenRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnfreezeIssuerTokenRequest_lower(_ value: UnfreezeIssuerTokenRequest) -> RustBuffer {
+    return FfiConverterTypeUnfreezeIssuerTokenRequest.lower(value)
+}
+
+
+public struct UnfreezeIssuerTokenResponse {
+    public var impactedOutputIds: [String]
+    public var impactedTokenAmount: U128
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(impactedOutputIds: [String], impactedTokenAmount: U128) {
+        self.impactedOutputIds = impactedOutputIds
+        self.impactedTokenAmount = impactedTokenAmount
+    }
+}
+
+
+
+extension UnfreezeIssuerTokenResponse: Equatable, Hashable {
+    public static func ==(lhs: UnfreezeIssuerTokenResponse, rhs: UnfreezeIssuerTokenResponse) -> Bool {
+        if lhs.impactedOutputIds != rhs.impactedOutputIds {
+            return false
+        }
+        if lhs.impactedTokenAmount != rhs.impactedTokenAmount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(impactedOutputIds)
+        hasher.combine(impactedTokenAmount)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUnfreezeIssuerTokenResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnfreezeIssuerTokenResponse {
+        return
+            try UnfreezeIssuerTokenResponse(
+                impactedOutputIds: FfiConverterSequenceString.read(from: &buf), 
+                impactedTokenAmount: FfiConverterTypeu128.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UnfreezeIssuerTokenResponse, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.impactedOutputIds, into: &buf)
+        FfiConverterTypeu128.write(value.impactedTokenAmount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnfreezeIssuerTokenResponse_lift(_ buf: RustBuffer) throws -> UnfreezeIssuerTokenResponse {
+    return try FfiConverterTypeUnfreezeIssuerTokenResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnfreezeIssuerTokenResponse_lower(_ value: UnfreezeIssuerTokenResponse) -> RustBuffer {
+    return FfiConverterTypeUnfreezeIssuerTokenResponse.lower(value)
 }
 
 
@@ -17272,6 +18151,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_payment() != 11540) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_token_issuer() != 26649) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_tokens_metadata() != 40125) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17444,6 +18326,27 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_syncstorage_update_record_from_incoming() != 9986) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_tokenissuer_burn_issuer_token() != 56056) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_tokenissuer_create_issuer_token() != 33277) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_tokenissuer_freeze_issuer_token() != 32344) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_tokenissuer_get_issuer_token_balance() != 9758) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_tokenissuer_get_issuer_token_metadata() != 57707) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_tokenissuer_mint_issuer_token() != 36459) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_tokenissuer_unfreeze_issuer_token() != 65025) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_constructor_sdkbuilder_new() != 65435) {
