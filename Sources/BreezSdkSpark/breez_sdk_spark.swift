@@ -557,6 +557,8 @@ public protocol BitcoinChainService : AnyObject {
     
     func broadcastTransaction(tx: String) async throws 
     
+    func recommendedFees() async throws  -> RecommendedFees
+    
 }
 
 open class BitcoinChainServiceImpl:
@@ -673,6 +675,23 @@ open func broadcastTransaction(tx: String)async throws  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
+            errorHandler: FfiConverterTypeChainServiceError.lift
+        )
+}
+    
+open func recommendedFees()async throws  -> RecommendedFees {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_bitcoinchainservice_recommended_fees(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRecommendedFees.lift,
             errorHandler: FfiConverterTypeChainServiceError.lift
         )
 }
@@ -851,6 +870,47 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeChainServiceError.lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        recommendedFees: { (
+            uniffiHandle: UInt64,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> RecommendedFees in
+                guard let uniffiObj = try? FfiConverterTypeBitcoinChainService.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.recommendedFees(
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: RecommendedFees) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterTypeRecommendedFees.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
                         callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
                     )
                 )
@@ -1079,6 +1139,11 @@ public protocol BreezSdkProtocol : AnyObject {
     
     func receivePayment(request: ReceivePaymentRequest) async throws  -> ReceivePaymentResponse
     
+    /**
+     * Get the recommended BTC fees based on the configured chain service.
+     */
+    func recommendedFees() async throws  -> RecommendedFees
+    
     func refundDeposit(request: RefundDepositRequest) async throws  -> RefundDepositResponse
     
     func registerLightningAddress(request: RegisterLightningAddressRequest) async throws  -> LightningAddressInfo
@@ -1116,8 +1181,6 @@ public protocol BreezSdkProtocol : AnyObject {
      * Some settings are updated on the Spark network so network requests may be performed.
      */
     func updateUserSettings(request: UpdateUserSettingsRequest) async throws 
-    
-    func waitForPayment(request: WaitForPaymentRequest) async throws  -> WaitForPaymentResponse
     
 }
 
@@ -1635,6 +1698,26 @@ open func receivePayment(request: ReceivePaymentRequest)async throws  -> Receive
         )
 }
     
+    /**
+     * Get the recommended BTC fees based on the configured chain service.
+     */
+open func recommendedFees()async throws  -> RecommendedFees {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_recommended_fees(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRecommendedFees.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
 open func refundDeposit(request: RefundDepositRequest)async throws  -> RefundDepositResponse {
     return
         try  await uniffiRustCallAsync(
@@ -1775,23 +1858,6 @@ open func updateUserSettings(request: UpdateUserSettingsRequest)async throws  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeSdkError.lift
-        )
-}
-    
-open func waitForPayment(request: WaitForPaymentRequest)async throws  -> WaitForPaymentResponse {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_breezsdk_wait_for_payment(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeWaitForPaymentRequest.lower(request)
-                )
-            },
-            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
-            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
-            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeWaitForPaymentResponse.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
 }
@@ -2767,9 +2833,10 @@ public protocol SdkBuilderProtocol : AnyObject {
      * Sets the REST chain service to be used by the SDK.
      * Arguments:
      * - `url`: The base URL of the REST API.
+     * - `api_type`: The API type to be used.
      * - `credentials`: Optional credentials for basic authentication.
      */
-    func withRestChainService(url: String, credentials: Credentials?) async 
+    func withRestChainService(url: String, apiType: ChainApiType, credentials: Credentials?) async 
     
     /**
      * Sets the storage implementation to be used by the SDK.
@@ -3031,15 +3098,16 @@ open func withRealTimeSyncStorage(storage: SyncStorage)async  {
      * Sets the REST chain service to be used by the SDK.
      * Arguments:
      * - `url`: The base URL of the REST API.
+     * - `api_type`: The API type to be used.
      * - `credentials`: Optional credentials for basic authentication.
      */
-open func withRestChainService(url: String, credentials: Credentials?)async  {
+open func withRestChainService(url: String, apiType: ChainApiType, credentials: Credentials?)async  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_rest_chain_service(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(url),FfiConverterOptionTypeCredentials.lower(credentials)
+                    FfiConverterString.lower(url),FfiConverterTypeChainApiType.lower(apiType),FfiConverterOptionTypeCredentials.lower(credentials)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -9214,11 +9282,23 @@ public func FfiConverterTypeLnurlPayInfo_lower(_ value: LnurlPayInfo) -> RustBuf
 
 public struct LnurlPayRequest {
     public var prepareResponse: PrepareLnurlPayResponse
+    /**
+     * If set, providing the same idempotency key for multiple requests will ensure that only one
+     * payment is made. If an idempotency key is re-used, the same payment will be returned.
+     * The idempotency key must be a valid UUID.
+     */
+    public var idempotencyKey: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(prepareResponse: PrepareLnurlPayResponse) {
+    public init(prepareResponse: PrepareLnurlPayResponse, 
+        /**
+         * If set, providing the same idempotency key for multiple requests will ensure that only one
+         * payment is made. If an idempotency key is re-used, the same payment will be returned.
+         * The idempotency key must be a valid UUID.
+         */idempotencyKey: String? = nil) {
         self.prepareResponse = prepareResponse
+        self.idempotencyKey = idempotencyKey
     }
 }
 
@@ -9229,11 +9309,15 @@ extension LnurlPayRequest: Equatable, Hashable {
         if lhs.prepareResponse != rhs.prepareResponse {
             return false
         }
+        if lhs.idempotencyKey != rhs.idempotencyKey {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(prepareResponse)
+        hasher.combine(idempotencyKey)
     }
 }
 
@@ -9245,12 +9329,14 @@ public struct FfiConverterTypeLnurlPayRequest: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LnurlPayRequest {
         return
             try LnurlPayRequest(
-                prepareResponse: FfiConverterTypePrepareLnurlPayResponse.read(from: &buf)
+                prepareResponse: FfiConverterTypePrepareLnurlPayResponse.read(from: &buf), 
+                idempotencyKey: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: LnurlPayRequest, into buf: inout [UInt8]) {
         FfiConverterTypePrepareLnurlPayResponse.write(value.prepareResponse, into: &buf)
+        FfiConverterOptionString.write(value.idempotencyKey, into: &buf)
     }
 }
 
@@ -11222,6 +11308,96 @@ public func FfiConverterTypeReceivePaymentResponse_lower(_ value: ReceivePayment
 }
 
 
+public struct RecommendedFees {
+    public var fastestFee: UInt64
+    public var halfHourFee: UInt64
+    public var hourFee: UInt64
+    public var economyFee: UInt64
+    public var minimumFee: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(fastestFee: UInt64, halfHourFee: UInt64, hourFee: UInt64, economyFee: UInt64, minimumFee: UInt64) {
+        self.fastestFee = fastestFee
+        self.halfHourFee = halfHourFee
+        self.hourFee = hourFee
+        self.economyFee = economyFee
+        self.minimumFee = minimumFee
+    }
+}
+
+
+
+extension RecommendedFees: Equatable, Hashable {
+    public static func ==(lhs: RecommendedFees, rhs: RecommendedFees) -> Bool {
+        if lhs.fastestFee != rhs.fastestFee {
+            return false
+        }
+        if lhs.halfHourFee != rhs.halfHourFee {
+            return false
+        }
+        if lhs.hourFee != rhs.hourFee {
+            return false
+        }
+        if lhs.economyFee != rhs.economyFee {
+            return false
+        }
+        if lhs.minimumFee != rhs.minimumFee {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(fastestFee)
+        hasher.combine(halfHourFee)
+        hasher.combine(hourFee)
+        hasher.combine(economyFee)
+        hasher.combine(minimumFee)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRecommendedFees: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RecommendedFees {
+        return
+            try RecommendedFees(
+                fastestFee: FfiConverterUInt64.read(from: &buf), 
+                halfHourFee: FfiConverterUInt64.read(from: &buf), 
+                hourFee: FfiConverterUInt64.read(from: &buf), 
+                economyFee: FfiConverterUInt64.read(from: &buf), 
+                minimumFee: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RecommendedFees, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.fastestFee, into: &buf)
+        FfiConverterUInt64.write(value.halfHourFee, into: &buf)
+        FfiConverterUInt64.write(value.hourFee, into: &buf)
+        FfiConverterUInt64.write(value.economyFee, into: &buf)
+        FfiConverterUInt64.write(value.minimumFee, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecommendedFees_lift(_ buf: RustBuffer) throws -> RecommendedFees {
+    return try FfiConverterTypeRecommendedFees.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecommendedFees_lower(_ value: RecommendedFees) -> RustBuffer {
+    return FfiConverterTypeRecommendedFees.lower(value)
+}
+
+
 public struct Record {
     public var id: RecordId
     public var revision: UInt64
@@ -11891,12 +12067,26 @@ public func FfiConverterTypeSendOnchainSpeedFeeQuote_lower(_ value: SendOnchainS
 public struct SendPaymentRequest {
     public var prepareResponse: PrepareSendPaymentResponse
     public var options: SendPaymentOptions?
+    /**
+     * The optional idempotency key for all Spark based transfers (excludes token payments).
+     * If set, providing the same idempotency key for multiple requests will ensure that only one
+     * payment is made. If an idempotency key is re-used, the same payment will be returned.
+     * The idempotency key must be a valid UUID.
+     */
+    public var idempotencyKey: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(prepareResponse: PrepareSendPaymentResponse, options: SendPaymentOptions? = nil) {
+    public init(prepareResponse: PrepareSendPaymentResponse, options: SendPaymentOptions? = nil, 
+        /**
+         * The optional idempotency key for all Spark based transfers (excludes token payments).
+         * If set, providing the same idempotency key for multiple requests will ensure that only one
+         * payment is made. If an idempotency key is re-used, the same payment will be returned.
+         * The idempotency key must be a valid UUID.
+         */idempotencyKey: String? = nil) {
         self.prepareResponse = prepareResponse
         self.options = options
+        self.idempotencyKey = idempotencyKey
     }
 }
 
@@ -11910,12 +12100,16 @@ extension SendPaymentRequest: Equatable, Hashable {
         if lhs.options != rhs.options {
             return false
         }
+        if lhs.idempotencyKey != rhs.idempotencyKey {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(prepareResponse)
         hasher.combine(options)
+        hasher.combine(idempotencyKey)
     }
 }
 
@@ -11928,13 +12122,15 @@ public struct FfiConverterTypeSendPaymentRequest: FfiConverterRustBuffer {
         return
             try SendPaymentRequest(
                 prepareResponse: FfiConverterTypePrepareSendPaymentResponse.read(from: &buf), 
-                options: FfiConverterOptionTypeSendPaymentOptions.read(from: &buf)
+                options: FfiConverterOptionTypeSendPaymentOptions.read(from: &buf), 
+                idempotencyKey: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: SendPaymentRequest, into buf: inout [UInt8]) {
         FfiConverterTypePrepareSendPaymentResponse.write(value.prepareResponse, into: &buf)
         FfiConverterOptionTypeSendPaymentOptions.write(value.options, into: &buf)
+        FfiConverterOptionString.write(value.idempotencyKey, into: &buf)
     }
 }
 
@@ -13496,122 +13692,6 @@ public func FfiConverterTypeUtxo_lower(_ value: Utxo) -> RustBuffer {
     return FfiConverterTypeUtxo.lower(value)
 }
 
-
-public struct WaitForPaymentRequest {
-    public var identifier: WaitForPaymentIdentifier
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(identifier: WaitForPaymentIdentifier) {
-        self.identifier = identifier
-    }
-}
-
-
-
-extension WaitForPaymentRequest: Equatable, Hashable {
-    public static func ==(lhs: WaitForPaymentRequest, rhs: WaitForPaymentRequest) -> Bool {
-        if lhs.identifier != rhs.identifier {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(identifier)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWaitForPaymentRequest: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WaitForPaymentRequest {
-        return
-            try WaitForPaymentRequest(
-                identifier: FfiConverterTypeWaitForPaymentIdentifier.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: WaitForPaymentRequest, into buf: inout [UInt8]) {
-        FfiConverterTypeWaitForPaymentIdentifier.write(value.identifier, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWaitForPaymentRequest_lift(_ buf: RustBuffer) throws -> WaitForPaymentRequest {
-    return try FfiConverterTypeWaitForPaymentRequest.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWaitForPaymentRequest_lower(_ value: WaitForPaymentRequest) -> RustBuffer {
-    return FfiConverterTypeWaitForPaymentRequest.lower(value)
-}
-
-
-public struct WaitForPaymentResponse {
-    public var payment: Payment
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(payment: Payment) {
-        self.payment = payment
-    }
-}
-
-
-
-extension WaitForPaymentResponse: Equatable, Hashable {
-    public static func ==(lhs: WaitForPaymentResponse, rhs: WaitForPaymentResponse) -> Bool {
-        if lhs.payment != rhs.payment {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(payment)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWaitForPaymentResponse: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WaitForPaymentResponse {
-        return
-            try WaitForPaymentResponse(
-                payment: FfiConverterTypePayment.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: WaitForPaymentResponse, into buf: inout [UInt8]) {
-        FfiConverterTypePayment.write(value.payment, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWaitForPaymentResponse_lift(_ buf: RustBuffer) throws -> WaitForPaymentResponse {
-    return try FfiConverterTypeWaitForPaymentResponse.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWaitForPaymentResponse_lower(_ value: WaitForPaymentResponse) -> RustBuffer {
-    return FfiConverterTypeWaitForPaymentResponse.lower(value)
-}
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
@@ -13923,6 +14003,70 @@ public func FfiConverterTypeBitcoinNetwork_lower(_ value: BitcoinNetwork) -> Rus
 
 
 extension BitcoinNetwork: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ChainApiType {
+    
+    case esplora
+    case mempoolSpace
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChainApiType: FfiConverterRustBuffer {
+    typealias SwiftType = ChainApiType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChainApiType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .esplora
+        
+        case 2: return .mempoolSpace
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ChainApiType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .esplora:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .mempoolSpace:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChainApiType_lift(_ buf: RustBuffer) throws -> ChainApiType {
+    return try FfiConverterTypeChainApiType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChainApiType_lower(_ value: ChainApiType) -> RustBuffer {
+    return FfiConverterTypeChainApiType.lower(value)
+}
+
+
+
+extension ChainApiType: Equatable, Hashable {}
 
 
 
@@ -16369,76 +16513,6 @@ extension UpdateDepositPayload: Equatable, Hashable {}
 
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum WaitForPaymentIdentifier {
-    
-    case paymentId(String
-    )
-    case paymentRequest(String
-    )
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWaitForPaymentIdentifier: FfiConverterRustBuffer {
-    typealias SwiftType = WaitForPaymentIdentifier
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WaitForPaymentIdentifier {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .paymentId(try FfiConverterString.read(from: &buf)
-        )
-        
-        case 2: return .paymentRequest(try FfiConverterString.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: WaitForPaymentIdentifier, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .paymentId(v1):
-            writeInt(&buf, Int32(1))
-            FfiConverterString.write(v1, into: &buf)
-            
-        
-        case let .paymentRequest(v1):
-            writeInt(&buf, Int32(2))
-            FfiConverterString.write(v1, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWaitForPaymentIdentifier_lift(_ buf: RustBuffer) throws -> WaitForPaymentIdentifier {
-    return try FfiConverterTypeWaitForPaymentIdentifier.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWaitForPaymentIdentifier_lower(_ value: WaitForPaymentIdentifier) -> RustBuffer {
-    return FfiConverterTypeWaitForPaymentIdentifier.lower(value)
-}
-
-
-
-extension WaitForPaymentIdentifier: Equatable, Hashable {}
-
-
-
 
 
 
@@ -18124,6 +18198,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_broadcast_transaction() != 65179) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_recommended_fees() != 43230) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_add_event_listener() != 37737) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -18190,6 +18267,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_receive_payment() != 36984) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_recommended_fees() != 16947) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_refund_deposit() != 33646) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -18209,9 +18289,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_update_user_settings() != 1721) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_wait_for_payment() != 64922) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_fiatservice_fetch_fiat_currencies() != 19092) {
@@ -18256,7 +18333,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_real_time_sync_storage() != 20579) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_rest_chain_service() != 56288) {
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_rest_chain_service() != 63155) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_storage() != 59400) {
