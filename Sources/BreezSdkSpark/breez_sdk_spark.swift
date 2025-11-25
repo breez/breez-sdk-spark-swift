@@ -1024,6 +1024,8 @@ public protocol BreezSdkProtocol : AnyObject {
     
     func claimDeposit(request: ClaimDepositRequest) async throws  -> ClaimDepositResponse
     
+    func claimHtlcPayment(request: ClaimHtlcPaymentRequest) async throws  -> ClaimHtlcPaymentResponse
+    
     func deleteLightningAddress() async throws 
     
     /**
@@ -1319,6 +1321,23 @@ open func claimDeposit(request: ClaimDepositRequest)async throws  -> ClaimDeposi
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeClaimDepositResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
+open func claimHtlcPayment(request: ClaimHtlcPaymentRequest)async throws  -> ClaimHtlcPaymentResponse {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_claim_htlc_payment(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeClaimHtlcPaymentRequest.lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeClaimHtlcPaymentResponse.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
 }
@@ -7114,6 +7133,122 @@ public func FfiConverterTypeClaimDepositResponse_lower(_ value: ClaimDepositResp
 }
 
 
+public struct ClaimHtlcPaymentRequest {
+    public var preimage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(preimage: String) {
+        self.preimage = preimage
+    }
+}
+
+
+
+extension ClaimHtlcPaymentRequest: Equatable, Hashable {
+    public static func ==(lhs: ClaimHtlcPaymentRequest, rhs: ClaimHtlcPaymentRequest) -> Bool {
+        if lhs.preimage != rhs.preimage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(preimage)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClaimHtlcPaymentRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClaimHtlcPaymentRequest {
+        return
+            try ClaimHtlcPaymentRequest(
+                preimage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ClaimHtlcPaymentRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.preimage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClaimHtlcPaymentRequest_lift(_ buf: RustBuffer) throws -> ClaimHtlcPaymentRequest {
+    return try FfiConverterTypeClaimHtlcPaymentRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClaimHtlcPaymentRequest_lower(_ value: ClaimHtlcPaymentRequest) -> RustBuffer {
+    return FfiConverterTypeClaimHtlcPaymentRequest.lower(value)
+}
+
+
+public struct ClaimHtlcPaymentResponse {
+    public var payment: Payment
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(payment: Payment) {
+        self.payment = payment
+    }
+}
+
+
+
+extension ClaimHtlcPaymentResponse: Equatable, Hashable {
+    public static func ==(lhs: ClaimHtlcPaymentResponse, rhs: ClaimHtlcPaymentResponse) -> Bool {
+        if lhs.payment != rhs.payment {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(payment)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClaimHtlcPaymentResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClaimHtlcPaymentResponse {
+        return
+            try ClaimHtlcPaymentResponse(
+                payment: FfiConverterTypePayment.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ClaimHtlcPaymentResponse, into buf: inout [UInt8]) {
+        FfiConverterTypePayment.write(value.payment, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClaimHtlcPaymentResponse_lift(_ buf: RustBuffer) throws -> ClaimHtlcPaymentResponse {
+    return try FfiConverterTypeClaimHtlcPaymentResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClaimHtlcPaymentResponse_lower(_ value: ClaimHtlcPaymentResponse) -> RustBuffer {
+    return FfiConverterTypeClaimHtlcPaymentResponse.lower(value)
+}
+
+
 public struct Config {
     public var apiKey: String?
     public var network: Network
@@ -8755,6 +8890,10 @@ public struct ListPaymentsRequest {
     public var statusFilter: [PaymentStatus]?
     public var assetFilter: AssetFilter?
     /**
+     * Only include payments with specific Spark HTLC statuses
+     */
+    public var sparkHtlcStatusFilter: [SparkHtlcStatus]?
+    /**
      * Only include payments created after this timestamp (inclusive)
      */
     public var fromTimestamp: UInt64?
@@ -8776,6 +8915,9 @@ public struct ListPaymentsRequest {
     // declare one manually.
     public init(typeFilter: [PaymentType]? = nil, statusFilter: [PaymentStatus]? = nil, assetFilter: AssetFilter? = nil, 
         /**
+         * Only include payments with specific Spark HTLC statuses
+         */sparkHtlcStatusFilter: [SparkHtlcStatus]? = nil, 
+        /**
          * Only include payments created after this timestamp (inclusive)
          */fromTimestamp: UInt64? = nil, 
         /**
@@ -8790,6 +8932,7 @@ public struct ListPaymentsRequest {
         self.typeFilter = typeFilter
         self.statusFilter = statusFilter
         self.assetFilter = assetFilter
+        self.sparkHtlcStatusFilter = sparkHtlcStatusFilter
         self.fromTimestamp = fromTimestamp
         self.toTimestamp = toTimestamp
         self.offset = offset
@@ -8809,6 +8952,9 @@ extension ListPaymentsRequest: Equatable, Hashable {
             return false
         }
         if lhs.assetFilter != rhs.assetFilter {
+            return false
+        }
+        if lhs.sparkHtlcStatusFilter != rhs.sparkHtlcStatusFilter {
             return false
         }
         if lhs.fromTimestamp != rhs.fromTimestamp {
@@ -8833,6 +8979,7 @@ extension ListPaymentsRequest: Equatable, Hashable {
         hasher.combine(typeFilter)
         hasher.combine(statusFilter)
         hasher.combine(assetFilter)
+        hasher.combine(sparkHtlcStatusFilter)
         hasher.combine(fromTimestamp)
         hasher.combine(toTimestamp)
         hasher.combine(offset)
@@ -8852,6 +8999,7 @@ public struct FfiConverterTypeListPaymentsRequest: FfiConverterRustBuffer {
                 typeFilter: FfiConverterOptionSequenceTypePaymentType.read(from: &buf), 
                 statusFilter: FfiConverterOptionSequenceTypePaymentStatus.read(from: &buf), 
                 assetFilter: FfiConverterOptionTypeAssetFilter.read(from: &buf), 
+                sparkHtlcStatusFilter: FfiConverterOptionSequenceTypeSparkHtlcStatus.read(from: &buf), 
                 fromTimestamp: FfiConverterOptionUInt64.read(from: &buf), 
                 toTimestamp: FfiConverterOptionUInt64.read(from: &buf), 
                 offset: FfiConverterOptionUInt32.read(from: &buf), 
@@ -8864,6 +9012,7 @@ public struct FfiConverterTypeListPaymentsRequest: FfiConverterRustBuffer {
         FfiConverterOptionSequenceTypePaymentType.write(value.typeFilter, into: &buf)
         FfiConverterOptionSequenceTypePaymentStatus.write(value.statusFilter, into: &buf)
         FfiConverterOptionTypeAssetFilter.write(value.assetFilter, into: &buf)
+        FfiConverterOptionSequenceTypeSparkHtlcStatus.write(value.sparkHtlcStatusFilter, into: &buf)
         FfiConverterOptionUInt64.write(value.fromTimestamp, into: &buf)
         FfiConverterOptionUInt64.write(value.toTimestamp, into: &buf)
         FfiConverterOptionUInt32.write(value.offset, into: &buf)
@@ -9063,7 +9212,7 @@ public func FfiConverterTypeListUnclaimedDepositsResponse_lower(_ value: ListUnc
 
 
 /**
- * Wrapped in a [`LnurlAuth`], this is the result of [`parse`] when given a LNURL-auth endpoint.
+ * Wrapped in a [`InputType::LnurlAuth`], this is the result of [`parse`](breez_sdk_common::input::parse) when given a LNURL-auth endpoint.
  *
  * It represents the endpoint's parameters for the LNURL workflow.
  *
@@ -12520,6 +12669,192 @@ public func FfiConverterTypeSparkAddressDetails_lower(_ value: SparkAddressDetai
 }
 
 
+public struct SparkHtlcDetails {
+    /**
+     * The payment hash of the HTLC
+     */
+    public var paymentHash: String
+    /**
+     * The preimage of the HTLC. Empty until receiver has released it.
+     */
+    public var preimage: String?
+    /**
+     * The expiry time of the HTLC in seconds since the Unix epoch
+     */
+    public var expiryTime: UInt64
+    /**
+     * The HTLC status
+     */
+    public var status: SparkHtlcStatus
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The payment hash of the HTLC
+         */paymentHash: String, 
+        /**
+         * The preimage of the HTLC. Empty until receiver has released it.
+         */preimage: String?, 
+        /**
+         * The expiry time of the HTLC in seconds since the Unix epoch
+         */expiryTime: UInt64, 
+        /**
+         * The HTLC status
+         */status: SparkHtlcStatus) {
+        self.paymentHash = paymentHash
+        self.preimage = preimage
+        self.expiryTime = expiryTime
+        self.status = status
+    }
+}
+
+
+
+extension SparkHtlcDetails: Equatable, Hashable {
+    public static func ==(lhs: SparkHtlcDetails, rhs: SparkHtlcDetails) -> Bool {
+        if lhs.paymentHash != rhs.paymentHash {
+            return false
+        }
+        if lhs.preimage != rhs.preimage {
+            return false
+        }
+        if lhs.expiryTime != rhs.expiryTime {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(paymentHash)
+        hasher.combine(preimage)
+        hasher.combine(expiryTime)
+        hasher.combine(status)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSparkHtlcDetails: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SparkHtlcDetails {
+        return
+            try SparkHtlcDetails(
+                paymentHash: FfiConverterString.read(from: &buf), 
+                preimage: FfiConverterOptionString.read(from: &buf), 
+                expiryTime: FfiConverterUInt64.read(from: &buf), 
+                status: FfiConverterTypeSparkHtlcStatus.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SparkHtlcDetails, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.paymentHash, into: &buf)
+        FfiConverterOptionString.write(value.preimage, into: &buf)
+        FfiConverterUInt64.write(value.expiryTime, into: &buf)
+        FfiConverterTypeSparkHtlcStatus.write(value.status, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkHtlcDetails_lift(_ buf: RustBuffer) throws -> SparkHtlcDetails {
+    return try FfiConverterTypeSparkHtlcDetails.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkHtlcDetails_lower(_ value: SparkHtlcDetails) -> RustBuffer {
+    return FfiConverterTypeSparkHtlcDetails.lower(value)
+}
+
+
+public struct SparkHtlcOptions {
+    /**
+     * The payment hash of the HTLC. The receiver will need to provide the associated preimage to claim it.
+     */
+    public var paymentHash: String
+    /**
+     * The duration of the HTLC in seconds.
+     * After this time, the HTLC will be returned.
+     */
+    public var expiryDurationSecs: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The payment hash of the HTLC. The receiver will need to provide the associated preimage to claim it.
+         */paymentHash: String, 
+        /**
+         * The duration of the HTLC in seconds.
+         * After this time, the HTLC will be returned.
+         */expiryDurationSecs: UInt64) {
+        self.paymentHash = paymentHash
+        self.expiryDurationSecs = expiryDurationSecs
+    }
+}
+
+
+
+extension SparkHtlcOptions: Equatable, Hashable {
+    public static func ==(lhs: SparkHtlcOptions, rhs: SparkHtlcOptions) -> Bool {
+        if lhs.paymentHash != rhs.paymentHash {
+            return false
+        }
+        if lhs.expiryDurationSecs != rhs.expiryDurationSecs {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(paymentHash)
+        hasher.combine(expiryDurationSecs)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSparkHtlcOptions: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SparkHtlcOptions {
+        return
+            try SparkHtlcOptions(
+                paymentHash: FfiConverterString.read(from: &buf), 
+                expiryDurationSecs: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SparkHtlcOptions, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.paymentHash, into: &buf)
+        FfiConverterUInt64.write(value.expiryDurationSecs, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkHtlcOptions_lift(_ buf: RustBuffer) throws -> SparkHtlcOptions {
+    return try FfiConverterTypeSparkHtlcOptions.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkHtlcOptions_lower(_ value: SparkHtlcOptions) -> RustBuffer {
+    return FfiConverterTypeSparkHtlcOptions.lower(value)
+}
+
+
 public struct SparkInvoiceDetails {
     /**
      * The raw invoice string
@@ -14717,7 +15052,10 @@ public enum PaymentDetails {
     case spark(
         /**
          * The invoice details if the payment fulfilled a spark invoice
-         */invoiceDetails: SparkInvoicePaymentDetails?
+         */invoiceDetails: SparkInvoicePaymentDetails?, 
+        /**
+         * The HTLC transfer details if the payment fulfilled an HTLC transfer
+         */htlcDetails: SparkHtlcDetails?
     )
     case token(metadata: TokenMetadata, txHash: String, 
         /**
@@ -14766,7 +15104,7 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .spark(invoiceDetails: try FfiConverterOptionTypeSparkInvoicePaymentDetails.read(from: &buf)
+        case 1: return .spark(invoiceDetails: try FfiConverterOptionTypeSparkInvoicePaymentDetails.read(from: &buf), htlcDetails: try FfiConverterOptionTypeSparkHtlcDetails.read(from: &buf)
         )
         
         case 2: return .token(metadata: try FfiConverterTypeTokenMetadata.read(from: &buf), txHash: try FfiConverterString.read(from: &buf), invoiceDetails: try FfiConverterOptionTypeSparkInvoicePaymentDetails.read(from: &buf)
@@ -14789,9 +15127,10 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .spark(invoiceDetails):
+        case let .spark(invoiceDetails,htlcDetails):
             writeInt(&buf, Int32(1))
             FfiConverterOptionTypeSparkInvoicePaymentDetails.write(invoiceDetails, into: &buf)
+            FfiConverterOptionTypeSparkHtlcDetails.write(htlcDetails, into: &buf)
             
         
         case let .token(metadata,txHash,invoiceDetails):
@@ -15880,6 +16219,12 @@ public enum SendPaymentOptions {
          * number of seconds. If unset, the function will return immediately after initiating the payment.
          */completionTimeoutSecs: UInt32?
     )
+    case sparkAddress(
+        /**
+         * Can only be provided for Bitcoin payments. If set, a Spark HTLC transfer will be created.
+         * The receiver will need to provide the preimage to claim it.
+         */htlcOptions: SparkHtlcOptions?
+    )
 }
 
 
@@ -15899,6 +16244,9 @@ public struct FfiConverterTypeSendPaymentOptions: FfiConverterRustBuffer {
         case 2: return .bolt11Invoice(preferSpark: try FfiConverterBool.read(from: &buf), completionTimeoutSecs: try FfiConverterOptionUInt32.read(from: &buf)
         )
         
+        case 3: return .sparkAddress(htlcOptions: try FfiConverterOptionTypeSparkHtlcOptions.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -15916,6 +16264,11 @@ public struct FfiConverterTypeSendPaymentOptions: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
             FfiConverterBool.write(preferSpark, into: &buf)
             FfiConverterOptionUInt32.write(completionTimeoutSecs, into: &buf)
+            
+        
+        case let .sparkAddress(htlcOptions):
+            writeInt(&buf, Int32(3))
+            FfiConverterOptionTypeSparkHtlcOptions.write(htlcOptions, into: &buf)
             
         }
     }
@@ -16088,6 +16441,86 @@ extension ServiceConnectivityError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum SparkHtlcStatus {
+    
+    /**
+     * The HTLC is waiting for the preimage to be shared by the receiver
+     */
+    case waitingForPreimage
+    /**
+     * The HTLC preimage has been shared and the transfer can be or has been claimed by the receiver
+     */
+    case preimageShared
+    /**
+     * The HTLC has been returned to the sender due to expiry
+     */
+    case returned
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSparkHtlcStatus: FfiConverterRustBuffer {
+    typealias SwiftType = SparkHtlcStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SparkHtlcStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .waitingForPreimage
+        
+        case 2: return .preimageShared
+        
+        case 3: return .returned
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SparkHtlcStatus, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .waitingForPreimage:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .preimageShared:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .returned:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkHtlcStatus_lift(_ buf: RustBuffer) throws -> SparkHtlcStatus {
+    return try FfiConverterTypeSparkHtlcStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkHtlcStatus_lower(_ value: SparkHtlcStatus) -> RustBuffer {
+    return FfiConverterTypeSparkHtlcStatus.lower(value)
+}
+
+
+
+extension SparkHtlcStatus: Equatable, Hashable {}
+
+
 
 
 /**
@@ -17000,6 +17433,54 @@ fileprivate struct FfiConverterOptionTypeRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeSparkHtlcDetails: FfiConverterRustBuffer {
+    typealias SwiftType = SparkHtlcDetails?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSparkHtlcDetails.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSparkHtlcDetails.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeSparkHtlcOptions: FfiConverterRustBuffer {
+    typealias SwiftType = SparkHtlcOptions?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSparkHtlcOptions.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSparkHtlcOptions.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeSparkInvoicePaymentDetails: FfiConverterRustBuffer {
     typealias SwiftType = SparkInvoicePaymentDetails?
 
@@ -17328,6 +17809,30 @@ fileprivate struct FfiConverterOptionSequenceTypePaymentType: FfiConverterRustBu
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterSequenceTypePaymentType.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionSequenceTypeSparkHtlcStatus: FfiConverterRustBuffer {
+    typealias SwiftType = [SparkHtlcStatus]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceTypeSparkHtlcStatus.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceTypeSparkHtlcStatus.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -17909,6 +18414,31 @@ fileprivate struct FfiConverterSequenceTypePaymentType: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeSparkHtlcStatus: FfiConverterRustBuffer {
+    typealias SwiftType = [SparkHtlcStatus]
+
+    public static func write(_ value: [SparkHtlcStatus], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSparkHtlcStatus.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SparkHtlcStatus] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SparkHtlcStatus]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSparkHtlcStatus.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterDictionaryStringString: FfiConverterRustBuffer {
     public static func write(_ value: [String: String], into buf: inout [UInt8]) {
         let len = Int32(value.count)
@@ -18211,6 +18741,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_claim_deposit() != 43529) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_claim_htlc_payment() != 57587) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_delete_lightning_address() != 44132) {
