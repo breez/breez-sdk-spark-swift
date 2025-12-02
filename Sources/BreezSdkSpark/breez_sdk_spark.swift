@@ -3341,6 +3341,8 @@ public protocol Storage : AnyObject {
      */
     func updateDeposit(txid: String, vout: UInt32, payload: UpdateDepositPayload) async throws 
     
+    func setLnurlMetadata(metadata: [SetLnurlMetadataItem]) async throws 
+    
 }
 
 /**
@@ -3684,6 +3686,23 @@ open func updateDeposit(txid: String, vout: UInt32, payload: UpdateDepositPayloa
                 uniffi_breez_sdk_spark_fn_method_storage_update_deposit(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(txid),FfiConverterUInt32.lower(vout),FfiConverterTypeUpdateDepositPayload.lower(payload)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeStorageError.lift
+        )
+}
+    
+open func setLnurlMetadata(metadata: [SetLnurlMetadataItem])async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_set_lnurl_metadata(
+                    self.uniffiClonePointer(),
+                    FfiConverterSequenceTypeSetLnurlMetadataItem.lower(metadata)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -4191,6 +4210,47 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                      txid: try FfiConverterString.lift(txid),
                      vout: try FfiConverterUInt32.lift(vout),
                      payload: try FfiConverterTypeUpdateDepositPayload.lift(payload)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeStorageError.lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        setLnurlMetadata: { (
+            uniffiHandle: UInt64,
+            metadata: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.setLnurlMetadata(
+                     metadata: try FfiConverterSequenceTypeSetLnurlMetadataItem.lift(metadata)
                 )
             }
 
@@ -9773,6 +9833,80 @@ public func FfiConverterTypeLnurlPayResponse_lower(_ value: LnurlPayResponse) ->
 }
 
 
+public struct LnurlReceiveMetadata {
+    public var nostrZapRequest: String?
+    public var nostrZapReceipt: String?
+    public var senderComment: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(nostrZapRequest: String?, nostrZapReceipt: String?, senderComment: String?) {
+        self.nostrZapRequest = nostrZapRequest
+        self.nostrZapReceipt = nostrZapReceipt
+        self.senderComment = senderComment
+    }
+}
+
+
+
+extension LnurlReceiveMetadata: Equatable, Hashable {
+    public static func ==(lhs: LnurlReceiveMetadata, rhs: LnurlReceiveMetadata) -> Bool {
+        if lhs.nostrZapRequest != rhs.nostrZapRequest {
+            return false
+        }
+        if lhs.nostrZapReceipt != rhs.nostrZapReceipt {
+            return false
+        }
+        if lhs.senderComment != rhs.senderComment {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(nostrZapRequest)
+        hasher.combine(nostrZapReceipt)
+        hasher.combine(senderComment)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLnurlReceiveMetadata: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LnurlReceiveMetadata {
+        return
+            try LnurlReceiveMetadata(
+                nostrZapRequest: FfiConverterOptionString.read(from: &buf), 
+                nostrZapReceipt: FfiConverterOptionString.read(from: &buf), 
+                senderComment: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LnurlReceiveMetadata, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.nostrZapRequest, into: &buf)
+        FfiConverterOptionString.write(value.nostrZapReceipt, into: &buf)
+        FfiConverterOptionString.write(value.senderComment, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlReceiveMetadata_lift(_ buf: RustBuffer) throws -> LnurlReceiveMetadata {
+    return try FfiConverterTypeLnurlReceiveMetadata.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlReceiveMetadata_lower(_ value: LnurlReceiveMetadata) -> RustBuffer {
+    return FfiConverterTypeLnurlReceiveMetadata.lower(value)
+}
+
+
 /**
  * Represents the withdraw LNURL info
  */
@@ -12357,6 +12491,88 @@ public func FfiConverterTypeSendPaymentResponse_lower(_ value: SendPaymentRespon
 }
 
 
+public struct SetLnurlMetadataItem {
+    public var paymentHash: String
+    public var senderComment: String?
+    public var nostrZapRequest: String?
+    public var nostrZapReceipt: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(paymentHash: String, senderComment: String?, nostrZapRequest: String?, nostrZapReceipt: String?) {
+        self.paymentHash = paymentHash
+        self.senderComment = senderComment
+        self.nostrZapRequest = nostrZapRequest
+        self.nostrZapReceipt = nostrZapReceipt
+    }
+}
+
+
+
+extension SetLnurlMetadataItem: Equatable, Hashable {
+    public static func ==(lhs: SetLnurlMetadataItem, rhs: SetLnurlMetadataItem) -> Bool {
+        if lhs.paymentHash != rhs.paymentHash {
+            return false
+        }
+        if lhs.senderComment != rhs.senderComment {
+            return false
+        }
+        if lhs.nostrZapRequest != rhs.nostrZapRequest {
+            return false
+        }
+        if lhs.nostrZapReceipt != rhs.nostrZapReceipt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(paymentHash)
+        hasher.combine(senderComment)
+        hasher.combine(nostrZapRequest)
+        hasher.combine(nostrZapReceipt)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSetLnurlMetadataItem: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SetLnurlMetadataItem {
+        return
+            try SetLnurlMetadataItem(
+                paymentHash: FfiConverterString.read(from: &buf), 
+                senderComment: FfiConverterOptionString.read(from: &buf), 
+                nostrZapRequest: FfiConverterOptionString.read(from: &buf), 
+                nostrZapReceipt: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SetLnurlMetadataItem, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.paymentHash, into: &buf)
+        FfiConverterOptionString.write(value.senderComment, into: &buf)
+        FfiConverterOptionString.write(value.nostrZapRequest, into: &buf)
+        FfiConverterOptionString.write(value.nostrZapReceipt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSetLnurlMetadataItem_lift(_ buf: RustBuffer) throws -> SetLnurlMetadataItem {
+    return try FfiConverterTypeSetLnurlMetadataItem.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSetLnurlMetadataItem_lower(_ value: SetLnurlMetadataItem) -> RustBuffer {
+    return FfiConverterTypeSetLnurlMetadataItem.lower(value)
+}
+
+
 public struct SignMessageRequest {
     public var message: String
     /**
@@ -14485,7 +14701,7 @@ extension ChainServiceError: Foundation.LocalizedError {
 
 public enum DepositClaimError {
     
-    case depositClaimFeeExceeded(tx: String, vout: UInt32, maxFee: Fee?, actualFee: UInt64
+    case maxDepositClaimFeeExceeded(tx: String, vout: UInt32, maxFee: Fee?, requiredFeeSats: UInt64, requiredFeeRateSatPerVbyte: UInt64
     )
     case missingUtxo(tx: String, vout: UInt32
     )
@@ -14504,7 +14720,7 @@ public struct FfiConverterTypeDepositClaimError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .depositClaimFeeExceeded(tx: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf), maxFee: try FfiConverterOptionTypeFee.read(from: &buf), actualFee: try FfiConverterUInt64.read(from: &buf)
+        case 1: return .maxDepositClaimFeeExceeded(tx: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf), maxFee: try FfiConverterOptionTypeFee.read(from: &buf), requiredFeeSats: try FfiConverterUInt64.read(from: &buf), requiredFeeRateSatPerVbyte: try FfiConverterUInt64.read(from: &buf)
         )
         
         case 2: return .missingUtxo(tx: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf)
@@ -14521,12 +14737,13 @@ public struct FfiConverterTypeDepositClaimError: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .depositClaimFeeExceeded(tx,vout,maxFee,actualFee):
+        case let .maxDepositClaimFeeExceeded(tx,vout,maxFee,requiredFeeSats,requiredFeeRateSatPerVbyte):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(tx, into: &buf)
             FfiConverterUInt32.write(vout, into: &buf)
             FfiConverterOptionTypeFee.write(maxFee, into: &buf)
-            FfiConverterUInt64.write(actualFee, into: &buf)
+            FfiConverterUInt64.write(requiredFeeSats, into: &buf)
+            FfiConverterUInt64.write(requiredFeeRateSatPerVbyte, into: &buf)
             
         
         case let .missingUtxo(tx,vout):
@@ -15085,7 +15302,10 @@ public enum PaymentDetails {
          */lnurlPayInfo: LnurlPayInfo?, 
         /**
          * Lnurl withdrawal information if this was an lnurl payment.
-         */lnurlWithdrawInfo: LnurlWithdrawInfo?
+         */lnurlWithdrawInfo: LnurlWithdrawInfo?, 
+        /**
+         * Lnurl receive information if this was a received lnurl payment.
+         */lnurlReceiveMetadata: LnurlReceiveMetadata?
     )
     case withdraw(txId: String
     )
@@ -15110,7 +15330,7 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
         case 2: return .token(metadata: try FfiConverterTypeTokenMetadata.read(from: &buf), txHash: try FfiConverterString.read(from: &buf), invoiceDetails: try FfiConverterOptionTypeSparkInvoicePaymentDetails.read(from: &buf)
         )
         
-        case 3: return .lightning(description: try FfiConverterOptionString.read(from: &buf), preimage: try FfiConverterOptionString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), paymentHash: try FfiConverterString.read(from: &buf), destinationPubkey: try FfiConverterString.read(from: &buf), lnurlPayInfo: try FfiConverterOptionTypeLnurlPayInfo.read(from: &buf), lnurlWithdrawInfo: try FfiConverterOptionTypeLnurlWithdrawInfo.read(from: &buf)
+        case 3: return .lightning(description: try FfiConverterOptionString.read(from: &buf), preimage: try FfiConverterOptionString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), paymentHash: try FfiConverterString.read(from: &buf), destinationPubkey: try FfiConverterString.read(from: &buf), lnurlPayInfo: try FfiConverterOptionTypeLnurlPayInfo.read(from: &buf), lnurlWithdrawInfo: try FfiConverterOptionTypeLnurlWithdrawInfo.read(from: &buf), lnurlReceiveMetadata: try FfiConverterOptionTypeLnurlReceiveMetadata.read(from: &buf)
         )
         
         case 4: return .withdraw(txId: try FfiConverterString.read(from: &buf)
@@ -15140,7 +15360,7 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
             FfiConverterOptionTypeSparkInvoicePaymentDetails.write(invoiceDetails, into: &buf)
             
         
-        case let .lightning(description,preimage,invoice,paymentHash,destinationPubkey,lnurlPayInfo,lnurlWithdrawInfo):
+        case let .lightning(description,preimage,invoice,paymentHash,destinationPubkey,lnurlPayInfo,lnurlWithdrawInfo,lnurlReceiveMetadata):
             writeInt(&buf, Int32(3))
             FfiConverterOptionString.write(description, into: &buf)
             FfiConverterOptionString.write(preimage, into: &buf)
@@ -15149,6 +15369,7 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
             FfiConverterString.write(destinationPubkey, into: &buf)
             FfiConverterOptionTypeLnurlPayInfo.write(lnurlPayInfo, into: &buf)
             FfiConverterOptionTypeLnurlWithdrawInfo.write(lnurlWithdrawInfo, into: &buf)
+            FfiConverterOptionTypeLnurlReceiveMetadata.write(lnurlReceiveMetadata, into: &buf)
             
         
         case let .withdraw(txId):
@@ -15738,7 +15959,7 @@ public enum SdkError {
     )
     case ChainServiceError(String
     )
-    case DepositClaimFeeExceeded(tx: String, vout: UInt32, maxFee: Fee?, actualFee: UInt64
+    case MaxDepositClaimFeeExceeded(tx: String, vout: UInt32, maxFee: Fee?, requiredFeeSats: UInt64, requiredFeeRateSatPerVbyte: UInt64
     )
     case MissingUtxo(tx: String, vout: UInt32
     )
@@ -15780,11 +16001,12 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
         case 6: return .ChainServiceError(
             try FfiConverterString.read(from: &buf)
             )
-        case 7: return .DepositClaimFeeExceeded(
+        case 7: return .MaxDepositClaimFeeExceeded(
             tx: try FfiConverterString.read(from: &buf), 
             vout: try FfiConverterUInt32.read(from: &buf), 
             maxFee: try FfiConverterOptionTypeFee.read(from: &buf), 
-            actualFee: try FfiConverterUInt64.read(from: &buf)
+            requiredFeeSats: try FfiConverterUInt64.read(from: &buf), 
+            requiredFeeRateSatPerVbyte: try FfiConverterUInt64.read(from: &buf)
             )
         case 8: return .MissingUtxo(
             tx: try FfiConverterString.read(from: &buf), 
@@ -15838,12 +16060,13 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .DepositClaimFeeExceeded(tx,vout,maxFee,actualFee):
+        case let .MaxDepositClaimFeeExceeded(tx,vout,maxFee,requiredFeeSats,requiredFeeRateSatPerVbyte):
             writeInt(&buf, Int32(7))
             FfiConverterString.write(tx, into: &buf)
             FfiConverterUInt32.write(vout, into: &buf)
             FfiConverterOptionTypeFee.write(maxFee, into: &buf)
-            FfiConverterUInt64.write(actualFee, into: &buf)
+            FfiConverterUInt64.write(requiredFeeSats, into: &buf)
+            FfiConverterUInt64.write(requiredFeeRateSatPerVbyte, into: &buf)
             
         
         case let .MissingUtxo(tx,vout):
@@ -17337,6 +17560,30 @@ fileprivate struct FfiConverterOptionTypeLnurlPayInfo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeLnurlReceiveMetadata: FfiConverterRustBuffer {
+    typealias SwiftType = LnurlReceiveMetadata?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeLnurlReceiveMetadata.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeLnurlReceiveMetadata.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeLnurlWithdrawInfo: FfiConverterRustBuffer {
     typealias SwiftType = LnurlWithdrawInfo?
 
@@ -18289,6 +18536,31 @@ fileprivate struct FfiConverterSequenceTypeRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeSetLnurlMetadataItem: FfiConverterRustBuffer {
+    typealias SwiftType = [SetLnurlMetadataItem]
+
+    public static func write(_ value: [SetLnurlMetadataItem], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSetLnurlMetadataItem.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SetLnurlMetadataItem] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SetLnurlMetadataItem]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSetLnurlMetadataItem.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTokenMetadata: FfiConverterRustBuffer {
     typealias SwiftType = [TokenMetadata]
 
@@ -18906,6 +19178,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_storage_update_deposit() != 39803) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_storage_set_lnurl_metadata() != 7460) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_syncstorage_add_outgoing_change() != 19087) {
