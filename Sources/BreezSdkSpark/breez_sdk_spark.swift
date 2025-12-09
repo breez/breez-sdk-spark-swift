@@ -7064,11 +7064,11 @@ public func FfiConverterTypeCheckMessageResponse_lower(_ value: CheckMessageResp
 public struct ClaimDepositRequest {
     public var txid: String
     public var vout: UInt32
-    public var maxFee: Fee?
+    public var maxFee: MaxFee?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(txid: String, vout: UInt32, maxFee: Fee? = nil) {
+    public init(txid: String, vout: UInt32, maxFee: MaxFee? = nil) {
         self.txid = txid
         self.vout = vout
         self.maxFee = maxFee
@@ -7108,14 +7108,14 @@ public struct FfiConverterTypeClaimDepositRequest: FfiConverterRustBuffer {
             try ClaimDepositRequest(
                 txid: FfiConverterString.read(from: &buf), 
                 vout: FfiConverterUInt32.read(from: &buf), 
-                maxFee: FfiConverterOptionTypeFee.read(from: &buf)
+                maxFee: FfiConverterOptionTypeMaxFee.read(from: &buf)
         )
     }
 
     public static func write(_ value: ClaimDepositRequest, into buf: inout [UInt8]) {
         FfiConverterString.write(value.txid, into: &buf)
         FfiConverterUInt32.write(value.vout, into: &buf)
-        FfiConverterOptionTypeFee.write(value.maxFee, into: &buf)
+        FfiConverterOptionTypeMaxFee.write(value.maxFee, into: &buf)
     }
 }
 
@@ -7313,7 +7313,7 @@ public struct Config {
     public var apiKey: String?
     public var network: Network
     public var syncIntervalSecs: UInt32
-    public var maxDepositClaimFee: Fee?
+    public var maxDepositClaimFee: MaxFee?
     /**
      * The domain used for receiving through lnurl-pay and lightning address.
      */
@@ -7350,7 +7350,7 @@ public struct Config {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(apiKey: String?, network: Network, syncIntervalSecs: UInt32, maxDepositClaimFee: Fee?, 
+    public init(apiKey: String?, network: Network, syncIntervalSecs: UInt32, maxDepositClaimFee: MaxFee?, 
         /**
          * The domain used for receiving through lnurl-pay and lightning address.
          */lnurlDomain: String?, 
@@ -7453,7 +7453,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
                 apiKey: FfiConverterOptionString.read(from: &buf), 
                 network: FfiConverterTypeNetwork.read(from: &buf), 
                 syncIntervalSecs: FfiConverterUInt32.read(from: &buf), 
-                maxDepositClaimFee: FfiConverterOptionTypeFee.read(from: &buf), 
+                maxDepositClaimFee: FfiConverterOptionTypeMaxFee.read(from: &buf), 
                 lnurlDomain: FfiConverterOptionString.read(from: &buf), 
                 preferSparkOverLightning: FfiConverterBool.read(from: &buf), 
                 externalInputParsers: FfiConverterOptionSequenceTypeExternalInputParser.read(from: &buf), 
@@ -7467,7 +7467,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.apiKey, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterUInt32.write(value.syncIntervalSecs, into: &buf)
-        FfiConverterOptionTypeFee.write(value.maxDepositClaimFee, into: &buf)
+        FfiConverterOptionTypeMaxFee.write(value.maxDepositClaimFee, into: &buf)
         FfiConverterOptionString.write(value.lnurlDomain, into: &buf)
         FfiConverterBool.write(value.preferSparkOverLightning, into: &buf)
         FfiConverterOptionSequenceTypeExternalInputParser.write(value.externalInputParsers, into: &buf)
@@ -15129,6 +15129,86 @@ extension KeySetType: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum MaxFee {
+    
+    case fixed(amount: UInt64
+    )
+    case rate(satPerVbyte: UInt64
+    )
+    case networkRecommended(leewaySatPerVbyte: UInt64
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMaxFee: FfiConverterRustBuffer {
+    typealias SwiftType = MaxFee
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MaxFee {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .fixed(amount: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 2: return .rate(satPerVbyte: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 3: return .networkRecommended(leewaySatPerVbyte: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MaxFee, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .fixed(amount):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt64.write(amount, into: &buf)
+            
+        
+        case let .rate(satPerVbyte):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt64.write(satPerVbyte, into: &buf)
+            
+        
+        case let .networkRecommended(leewaySatPerVbyte):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt64.write(leewaySatPerVbyte, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMaxFee_lift(_ buf: RustBuffer) throws -> MaxFee {
+    return try FfiConverterTypeMaxFee.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMaxFee_lower(_ value: MaxFee) -> RustBuffer {
+    return FfiConverterTypeMaxFee.lower(value)
+}
+
+
+
+extension MaxFee: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum Network {
     
     case mainnet
@@ -16110,14 +16190,6 @@ public enum SdkEvent {
      */
     case synced
     /**
-     * Emitted when data was pushed and/or pulled to/from real-time sync storage.
-     */
-    case dataSynced(
-        /**
-         * Value indicating whether new data was pulled through real-time sync.
-         */didPullNewRecords: Bool
-    )
-    /**
      * Emitted when the SDK was unable to claim deposits
      */
     case unclaimedDeposits(unclaimedDeposits: [DepositInfo]
@@ -16145,22 +16217,19 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
         
         case 1: return .synced
         
-        case 2: return .dataSynced(didPullNewRecords: try FfiConverterBool.read(from: &buf)
+        case 2: return .unclaimedDeposits(unclaimedDeposits: try FfiConverterSequenceTypeDepositInfo.read(from: &buf)
         )
         
-        case 3: return .unclaimedDeposits(unclaimedDeposits: try FfiConverterSequenceTypeDepositInfo.read(from: &buf)
+        case 3: return .claimedDeposits(claimedDeposits: try FfiConverterSequenceTypeDepositInfo.read(from: &buf)
         )
         
-        case 4: return .claimedDeposits(claimedDeposits: try FfiConverterSequenceTypeDepositInfo.read(from: &buf)
+        case 4: return .paymentSucceeded(payment: try FfiConverterTypePayment.read(from: &buf)
         )
         
-        case 5: return .paymentSucceeded(payment: try FfiConverterTypePayment.read(from: &buf)
+        case 5: return .paymentPending(payment: try FfiConverterTypePayment.read(from: &buf)
         )
         
-        case 6: return .paymentPending(payment: try FfiConverterTypePayment.read(from: &buf)
-        )
-        
-        case 7: return .paymentFailed(payment: try FfiConverterTypePayment.read(from: &buf)
+        case 6: return .paymentFailed(payment: try FfiConverterTypePayment.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -16175,33 +16244,28 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
         
         
-        case let .dataSynced(didPullNewRecords):
-            writeInt(&buf, Int32(2))
-            FfiConverterBool.write(didPullNewRecords, into: &buf)
-            
-        
         case let .unclaimedDeposits(unclaimedDeposits):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(2))
             FfiConverterSequenceTypeDepositInfo.write(unclaimedDeposits, into: &buf)
             
         
         case let .claimedDeposits(claimedDeposits):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(3))
             FfiConverterSequenceTypeDepositInfo.write(claimedDeposits, into: &buf)
             
         
         case let .paymentSucceeded(payment):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(4))
             FfiConverterTypePayment.write(payment, into: &buf)
             
         
         case let .paymentPending(payment):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(5))
             FfiConverterTypePayment.write(payment, into: &buf)
             
         
         case let .paymentFailed(payment):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(6))
             FfiConverterTypePayment.write(payment, into: &buf)
             
         }
@@ -17864,6 +17928,30 @@ fileprivate struct FfiConverterOptionTypeFee: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeFee.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeMaxFee: FfiConverterRustBuffer {
+    typealias SwiftType = MaxFee?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMaxFee.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMaxFee.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
