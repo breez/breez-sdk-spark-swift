@@ -400,6 +400,22 @@ fileprivate class UniffiHandleMap<T> {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
+    typealias FfiType = UInt8
+    typealias SwiftType = UInt8
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt8 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: UInt8, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
     typealias FfiType = UInt16
     typealias SwiftType = UInt16
@@ -1013,6 +1029,18 @@ public protocol BreezSdkProtocol : AnyObject {
      */
     func addEventListener(listener: EventListener) async  -> String
     
+    /**
+     * Cancels the ongoing leaf optimization.
+     *
+     * This method cancels the ongoing optimization and waits for it to fully stop.
+     * The current round will complete before stopping. This method blocks
+     * until the optimization has fully stopped and leaves reserved for optimization
+     * are available again.
+     *
+     * If no optimization is running, this method returns immediately.
+     */
+    func cancelLeafOptimization() async throws 
+    
     func checkLightningAddressAvailable(req: CheckLightningAddressRequest) async throws  -> Bool
     
     /**
@@ -1044,6 +1072,11 @@ public protocol BreezSdkProtocol : AnyObject {
      * Returns the balance of the wallet in satoshis
      */
     func getInfo(request: GetInfoRequest) async throws  -> GetInfoResponse
+    
+    /**
+     * Returns the current optimization progress snapshot.
+     */
+    func getLeafOptimizationProgress()  -> OptimizationProgress
     
     func getLightningAddress() async throws  -> LightningAddressInfo?
     
@@ -1173,6 +1206,15 @@ public protocol BreezSdkProtocol : AnyObject {
     func signMessage(request: SignMessageRequest) async throws  -> SignMessageResponse
     
     /**
+     * Starts leaf optimization in the background.
+     *
+     * This method spawns the optimization work in a background task and returns
+     * immediately. Progress is reported via events.
+     * If optimization is already running, no new task will be started.
+     */
+    func startLeafOptimization() 
+    
+    /**
      * Synchronizes the wallet with the Spark network
      */
     func syncWallet(request: SyncWalletRequest) async throws  -> SyncWalletResponse
@@ -1266,6 +1308,33 @@ open func addEventListener(listener: EventListener)async  -> String {
             liftFunc: FfiConverterString.lift,
             errorHandler: nil
             
+        )
+}
+    
+    /**
+     * Cancels the ongoing leaf optimization.
+     *
+     * This method cancels the ongoing optimization and waits for it to fully stop.
+     * The current round will complete before stopping. This method blocks
+     * until the optimization has fully stopped and leaves reserved for optimization
+     * are available again.
+     *
+     * If no optimization is running, this method returns immediately.
+     */
+open func cancelLeafOptimization()async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_cancel_leaf_optimization(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -1404,6 +1473,16 @@ open func getInfo(request: GetInfoRequest)async throws  -> GetInfoResponse {
             liftFunc: FfiConverterTypeGetInfoResponse.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
+}
+    
+    /**
+     * Returns the current optimization progress snapshot.
+     */
+open func getLeafOptimizationProgress() -> OptimizationProgress {
+    return try!  FfiConverterTypeOptimizationProgress.lift(try! rustCall() {
+    uniffi_breez_sdk_spark_fn_method_breezsdk_get_leaf_optimization_progress(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 open func getLightningAddress()async throws  -> LightningAddressInfo? {
@@ -1837,6 +1916,19 @@ open func signMessage(request: SignMessageRequest)async throws  -> SignMessageRe
             liftFunc: FfiConverterTypeSignMessageResponse.lift,
             errorHandler: FfiConverterTypeSdkError.lift
         )
+}
+    
+    /**
+     * Starts leaf optimization in the background.
+     *
+     * This method spawns the optimization work in a background task and returns
+     * immediately. Progress is reported via events.
+     * If optimization is already running, no new task will be started.
+     */
+open func startLeafOptimization() {try! rustCall() {
+    uniffi_breez_sdk_spark_fn_method_breezsdk_start_leaf_optimization(self.uniffiClonePointer(),$0
+    )
+}
 }
     
     /**
@@ -7347,6 +7439,14 @@ public struct Config {
      * If set to false, no changes will be made to the Spark private mode.
      */
     public var privateEnabledDefault: Bool
+    /**
+     * Configuration for leaf optimization.
+     *
+     * Leaf optimization controls the denominations of leaves that are held in the wallet.
+     * Fewer, bigger leaves allow for more funds to be exited unilaterally.
+     * More leaves allow payments to be made without needing a swap, reducing payment latency.
+     */
+    public var optimizationConfig: OptimizationConfig
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -7377,7 +7477,14 @@ public struct Config {
          *
          * If set to true, the Spark private mode will be enabled on the first initialization of the SDK.
          * If set to false, no changes will be made to the Spark private mode.
-         */privateEnabledDefault: Bool) {
+         */privateEnabledDefault: Bool, 
+        /**
+         * Configuration for leaf optimization.
+         *
+         * Leaf optimization controls the denominations of leaves that are held in the wallet.
+         * Fewer, bigger leaves allow for more funds to be exited unilaterally.
+         * More leaves allow payments to be made without needing a swap, reducing payment latency.
+         */optimizationConfig: OptimizationConfig) {
         self.apiKey = apiKey
         self.network = network
         self.syncIntervalSecs = syncIntervalSecs
@@ -7388,6 +7495,7 @@ public struct Config {
         self.useDefaultExternalInputParsers = useDefaultExternalInputParsers
         self.realTimeSyncServerUrl = realTimeSyncServerUrl
         self.privateEnabledDefault = privateEnabledDefault
+        self.optimizationConfig = optimizationConfig
     }
 }
 
@@ -7425,6 +7533,9 @@ extension Config: Equatable, Hashable {
         if lhs.privateEnabledDefault != rhs.privateEnabledDefault {
             return false
         }
+        if lhs.optimizationConfig != rhs.optimizationConfig {
+            return false
+        }
         return true
     }
 
@@ -7439,6 +7550,7 @@ extension Config: Equatable, Hashable {
         hasher.combine(useDefaultExternalInputParsers)
         hasher.combine(realTimeSyncServerUrl)
         hasher.combine(privateEnabledDefault)
+        hasher.combine(optimizationConfig)
     }
 }
 
@@ -7459,7 +7571,8 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
                 externalInputParsers: FfiConverterOptionSequenceTypeExternalInputParser.read(from: &buf), 
                 useDefaultExternalInputParsers: FfiConverterBool.read(from: &buf), 
                 realTimeSyncServerUrl: FfiConverterOptionString.read(from: &buf), 
-                privateEnabledDefault: FfiConverterBool.read(from: &buf)
+                privateEnabledDefault: FfiConverterBool.read(from: &buf), 
+                optimizationConfig: FfiConverterTypeOptimizationConfig.read(from: &buf)
         )
     }
 
@@ -7474,6 +7587,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
         FfiConverterBool.write(value.useDefaultExternalInputParsers, into: &buf)
         FfiConverterOptionString.write(value.realTimeSyncServerUrl, into: &buf)
         FfiConverterBool.write(value.privateEnabledDefault, into: &buf)
+        FfiConverterTypeOptimizationConfig.write(value.optimizationConfig, into: &buf)
     }
 }
 
@@ -10559,6 +10673,180 @@ public func FfiConverterTypeMintIssuerTokenRequest_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeMintIssuerTokenRequest_lower(_ value: MintIssuerTokenRequest) -> RustBuffer {
     return FfiConverterTypeMintIssuerTokenRequest.lower(value)
+}
+
+
+public struct OptimizationConfig {
+    /**
+     * Whether automatic leaf optimization is enabled.
+     *
+     * If set to true, the SDK will automatically optimize the leaf set when it changes.
+     * Otherwise, the manual optimization API must be used to optimize the leaf set.
+     *
+     * Default value is true.
+     */
+    public var autoEnabled: Bool
+    /**
+     * The desired multiplicity for the leaf set. Acceptable values are 0-5.
+     *
+     * Setting this to 0 will optimize for maximizing unilateral exit.
+     * Higher values will optimize for minimizing transfer swaps, with higher values
+     * being more aggressive.
+     *
+     * Default value is 1.
+     */
+    public var multiplicity: UInt8
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Whether automatic leaf optimization is enabled.
+         *
+         * If set to true, the SDK will automatically optimize the leaf set when it changes.
+         * Otherwise, the manual optimization API must be used to optimize the leaf set.
+         *
+         * Default value is true.
+         */autoEnabled: Bool, 
+        /**
+         * The desired multiplicity for the leaf set. Acceptable values are 0-5.
+         *
+         * Setting this to 0 will optimize for maximizing unilateral exit.
+         * Higher values will optimize for minimizing transfer swaps, with higher values
+         * being more aggressive.
+         *
+         * Default value is 1.
+         */multiplicity: UInt8) {
+        self.autoEnabled = autoEnabled
+        self.multiplicity = multiplicity
+    }
+}
+
+
+
+extension OptimizationConfig: Equatable, Hashable {
+    public static func ==(lhs: OptimizationConfig, rhs: OptimizationConfig) -> Bool {
+        if lhs.autoEnabled != rhs.autoEnabled {
+            return false
+        }
+        if lhs.multiplicity != rhs.multiplicity {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(autoEnabled)
+        hasher.combine(multiplicity)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOptimizationConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OptimizationConfig {
+        return
+            try OptimizationConfig(
+                autoEnabled: FfiConverterBool.read(from: &buf), 
+                multiplicity: FfiConverterUInt8.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OptimizationConfig, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.autoEnabled, into: &buf)
+        FfiConverterUInt8.write(value.multiplicity, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptimizationConfig_lift(_ buf: RustBuffer) throws -> OptimizationConfig {
+    return try FfiConverterTypeOptimizationConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptimizationConfig_lower(_ value: OptimizationConfig) -> RustBuffer {
+    return FfiConverterTypeOptimizationConfig.lower(value)
+}
+
+
+public struct OptimizationProgress {
+    public var isRunning: Bool
+    public var currentRound: UInt32
+    public var totalRounds: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(isRunning: Bool, currentRound: UInt32, totalRounds: UInt32) {
+        self.isRunning = isRunning
+        self.currentRound = currentRound
+        self.totalRounds = totalRounds
+    }
+}
+
+
+
+extension OptimizationProgress: Equatable, Hashable {
+    public static func ==(lhs: OptimizationProgress, rhs: OptimizationProgress) -> Bool {
+        if lhs.isRunning != rhs.isRunning {
+            return false
+        }
+        if lhs.currentRound != rhs.currentRound {
+            return false
+        }
+        if lhs.totalRounds != rhs.totalRounds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(isRunning)
+        hasher.combine(currentRound)
+        hasher.combine(totalRounds)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOptimizationProgress: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OptimizationProgress {
+        return
+            try OptimizationProgress(
+                isRunning: FfiConverterBool.read(from: &buf), 
+                currentRound: FfiConverterUInt32.read(from: &buf), 
+                totalRounds: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OptimizationProgress, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.isRunning, into: &buf)
+        FfiConverterUInt32.write(value.currentRound, into: &buf)
+        FfiConverterUInt32.write(value.totalRounds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptimizationProgress_lift(_ buf: RustBuffer) throws -> OptimizationProgress {
+    return try FfiConverterTypeOptimizationProgress.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptimizationProgress_lower(_ value: OptimizationProgress) -> RustBuffer {
+    return FfiConverterTypeOptimizationProgress.lower(value)
 }
 
 
@@ -15344,6 +15632,126 @@ extension OnchainConfirmationSpeed: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum OptimizationEvent {
+    
+    /**
+     * Optimization has started with the given number of rounds.
+     */
+    case started(totalRounds: UInt32
+    )
+    /**
+     * A round has completed.
+     */
+    case roundCompleted(currentRound: UInt32, totalRounds: UInt32
+    )
+    /**
+     * Optimization completed successfully.
+     */
+    case completed
+    /**
+     * Optimization was cancelled.
+     */
+    case cancelled
+    /**
+     * Optimization failed with an error.
+     */
+    case failed(error: String
+    )
+    /**
+     * Optimization was skipped because leaves are already optimal.
+     */
+    case skipped
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOptimizationEvent: FfiConverterRustBuffer {
+    typealias SwiftType = OptimizationEvent
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OptimizationEvent {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .started(totalRounds: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        case 2: return .roundCompleted(currentRound: try FfiConverterUInt32.read(from: &buf), totalRounds: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        case 3: return .completed
+        
+        case 4: return .cancelled
+        
+        case 5: return .failed(error: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 6: return .skipped
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: OptimizationEvent, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .started(totalRounds):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt32.write(totalRounds, into: &buf)
+            
+        
+        case let .roundCompleted(currentRound,totalRounds):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt32.write(currentRound, into: &buf)
+            FfiConverterUInt32.write(totalRounds, into: &buf)
+            
+        
+        case .completed:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .cancelled:
+            writeInt(&buf, Int32(4))
+        
+        
+        case let .failed(error):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(error, into: &buf)
+            
+        
+        case .skipped:
+            writeInt(&buf, Int32(6))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptimizationEvent_lift(_ buf: RustBuffer) throws -> OptimizationEvent {
+    return try FfiConverterTypeOptimizationEvent.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptimizationEvent_lower(_ value: OptimizationEvent) -> RustBuffer {
+    return FfiConverterTypeOptimizationEvent.lower(value)
+}
+
+
+
+extension OptimizationEvent: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum PaymentDetails {
     
     case spark(
@@ -15930,7 +16338,10 @@ public enum ReceivePaymentMethod {
          */senderPublicKey: String?
     )
     case bitcoinAddress
-    case bolt11Invoice(description: String, amountSats: UInt64?
+    case bolt11Invoice(description: String, amountSats: UInt64?, 
+        /**
+         * The expiry time of the invoice in seconds
+         */expirySecs: UInt32?
     )
 }
 
@@ -15952,7 +16363,7 @@ public struct FfiConverterTypeReceivePaymentMethod: FfiConverterRustBuffer {
         
         case 3: return .bitcoinAddress
         
-        case 4: return .bolt11Invoice(description: try FfiConverterString.read(from: &buf), amountSats: try FfiConverterOptionUInt64.read(from: &buf)
+        case 4: return .bolt11Invoice(description: try FfiConverterString.read(from: &buf), amountSats: try FfiConverterOptionUInt64.read(from: &buf), expirySecs: try FfiConverterOptionUInt32.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -15980,10 +16391,11 @@ public struct FfiConverterTypeReceivePaymentMethod: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         
         
-        case let .bolt11Invoice(description,amountSats):
+        case let .bolt11Invoice(description,amountSats,expirySecs):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(description, into: &buf)
             FfiConverterOptionUInt64.write(amountSats, into: &buf)
+            FfiConverterOptionUInt32.write(expirySecs, into: &buf)
             
         }
     }
@@ -16202,6 +16614,8 @@ public enum SdkEvent {
     )
     case paymentFailed(payment: Payment
     )
+    case optimization(optimizationEvent: OptimizationEvent
+    )
 }
 
 
@@ -16230,6 +16644,9 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
         )
         
         case 6: return .paymentFailed(payment: try FfiConverterTypePayment.read(from: &buf)
+        )
+        
+        case 7: return .optimization(optimizationEvent: try FfiConverterTypeOptimizationEvent.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -16267,6 +16684,11 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
         case let .paymentFailed(payment):
             writeInt(&buf, Int32(6))
             FfiConverterTypePayment.write(payment, into: &buf)
+            
+        
+        case let .optimization(optimizationEvent):
+            writeInt(&buf, Int32(7))
+            FfiConverterTypeOptimizationEvent.write(optimizationEvent, into: &buf)
             
         }
     }
@@ -19094,6 +19516,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_add_event_listener() != 37737) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_cancel_leaf_optimization() != 56996) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_check_lightning_address_available() != 31624) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19113,6 +19538,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_info() != 6771) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_leaf_optimization_progress() != 38008) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_lightning_address() != 36552) {
@@ -19176,6 +19604,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_sign_message() != 57563) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_start_leaf_optimization() != 22827) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_sync_wallet() != 30368) {

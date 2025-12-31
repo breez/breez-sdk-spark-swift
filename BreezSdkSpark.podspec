@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name                   = "BreezSdkSpark"
-  spec.version                = "0.6.4-rc3"
+  spec.version                = "0.6.5"
   spec.license                = { :type => "MIT" }
   spec.summary                = "Swift bindings to the Breez Spark SDK"
   spec.homepage               = "https://breez.technology"
