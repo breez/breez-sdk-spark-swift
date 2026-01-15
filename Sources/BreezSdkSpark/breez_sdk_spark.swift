@@ -1137,6 +1137,57 @@ public protocol BreezSdkProtocol : AnyObject {
     
     func listUnclaimedDeposits(request: ListUnclaimedDepositsRequest) async throws  -> ListUnclaimedDepositsResponse
     
+    /**
+     * Performs LNURL-auth with the service.
+     *
+     * This method implements the LNURL-auth protocol as specified in LUD-04 and LUD-05.
+     * It derives a domain-specific linking key, signs the challenge, and sends the
+     * authentication request to the service.
+     *
+     * # Arguments
+     *
+     * * `request_data` - The parsed LNURL-auth request details obtained from [`parse`]
+     *
+     * # Returns
+     *
+     * * `Ok(LnurlCallbackStatus::Ok)` - Authentication was successful
+     * * `Ok(LnurlCallbackStatus::ErrorStatus{reason})` - Service returned an error
+     * * `Err(SdkError)` - An error occurred during the authentication process
+     *
+     * # Example
+     *
+     * ```rust,no_run
+     * # use breez_sdk_spark::{BreezSdk, InputType};
+     * # async fn example(sdk: BreezSdk) -> Result<(), Box<dyn std::error::Error>> {
+     * // 1. Parse the LNURL-auth string
+     * let input = sdk.parse("lnurl1...").await?;
+     * let auth_request = match input {
+     * InputType::LnurlAuth(data) => data,
+     * _ => return Err("Not an auth request".into()),
+     * };
+     *
+     * // 2. Show user the domain and get confirmation
+     * println!("Authenticate with {}?", auth_request.domain);
+     *
+     * // 3. Perform authentication
+     * let status = sdk.lnurl_auth(auth_request).await?;
+     * match status {
+     * breez_sdk_spark::LnurlCallbackStatus::Ok => println!("Success!"),
+     * breez_sdk_spark::LnurlCallbackStatus::ErrorStatus { error_details } => {
+     * println!("Error: {}", error_details.reason)
+     * }
+     * }
+     * # Ok(())
+     * # }
+     * ```
+     *
+     * # See Also
+     *
+     * * LUD-04: <https://github.com/lnurl/luds/blob/luds/04.md>
+     * * LUD-05: <https://github.com/lnurl/luds/blob/luds/05.md>
+     */
+    func lnurlAuth(requestData: LnurlAuthRequestDetails) async throws  -> LnurlCallbackStatus
+    
     func lnurlPay(request: LnurlPayRequest) async throws  -> LnurlPayResponse
     
     /**
@@ -1686,6 +1737,72 @@ open func listUnclaimedDeposits(request: ListUnclaimedDepositsRequest)async thro
         )
 }
     
+    /**
+     * Performs LNURL-auth with the service.
+     *
+     * This method implements the LNURL-auth protocol as specified in LUD-04 and LUD-05.
+     * It derives a domain-specific linking key, signs the challenge, and sends the
+     * authentication request to the service.
+     *
+     * # Arguments
+     *
+     * * `request_data` - The parsed LNURL-auth request details obtained from [`parse`]
+     *
+     * # Returns
+     *
+     * * `Ok(LnurlCallbackStatus::Ok)` - Authentication was successful
+     * * `Ok(LnurlCallbackStatus::ErrorStatus{reason})` - Service returned an error
+     * * `Err(SdkError)` - An error occurred during the authentication process
+     *
+     * # Example
+     *
+     * ```rust,no_run
+     * # use breez_sdk_spark::{BreezSdk, InputType};
+     * # async fn example(sdk: BreezSdk) -> Result<(), Box<dyn std::error::Error>> {
+     * // 1. Parse the LNURL-auth string
+     * let input = sdk.parse("lnurl1...").await?;
+     * let auth_request = match input {
+     * InputType::LnurlAuth(data) => data,
+     * _ => return Err("Not an auth request".into()),
+     * };
+     *
+     * // 2. Show user the domain and get confirmation
+     * println!("Authenticate with {}?", auth_request.domain);
+     *
+     * // 3. Perform authentication
+     * let status = sdk.lnurl_auth(auth_request).await?;
+     * match status {
+     * breez_sdk_spark::LnurlCallbackStatus::Ok => println!("Success!"),
+     * breez_sdk_spark::LnurlCallbackStatus::ErrorStatus { error_details } => {
+     * println!("Error: {}", error_details.reason)
+     * }
+     * }
+     * # Ok(())
+     * # }
+     * ```
+     *
+     * # See Also
+     *
+     * * LUD-04: <https://github.com/lnurl/luds/blob/luds/04.md>
+     * * LUD-05: <https://github.com/lnurl/luds/blob/luds/05.md>
+     */
+open func lnurlAuth(requestData: LnurlAuthRequestDetails)async throws  -> LnurlCallbackStatus {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_lnurl_auth(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeLnurlAuthRequestDetails.lower(requestData)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeLnurlCallbackStatus.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
+        )
+}
+    
 open func lnurlPay(request: LnurlPayRequest)async throws  -> LnurlPayResponse {
     return
         try  await uniffiRustCallAsync(
@@ -2083,26 +2200,30 @@ public protocol ExternalSigner : AnyObject {
     /**
      * Signs a message using ECDSA at the given derivation path.
      *
+     * The message should be a 32-byte digest (typically a hash of the original data).
+     *
      * # Arguments
-     * * `message` - The message to sign
+     * * `message` - The 32-byte message digest to sign
      * * `path` - BIP32 derivation path as a string
      *
      * # Returns
      * 64-byte compact ECDSA signature, or a `SignerError`
      */
-    func signEcdsa(message: Data, path: String) async throws  -> EcdsaSignatureBytes
+    func signEcdsa(message: MessageBytes, path: String) async throws  -> EcdsaSignatureBytes
     
     /**
      * Signs a message using recoverable ECDSA at the given derivation path.
      *
+     * The message should be a 32-byte digest (typically a hash of the original data).
+     *
      * # Arguments
-     * * `message` - The message to sign (will be double-SHA256 hashed)
+     * * `message` - The 32-byte message digest to sign
      * * `path` - BIP32 derivation path as a string
      *
      * # Returns
      * 65 bytes: recovery ID (31 + `recovery_id`) + 64-byte signature, or a `SignerError`
      */
-    func signEcdsaRecoverable(message: Data, path: String) async throws  -> RecoverableEcdsaSignatureBytes
+    func signEcdsaRecoverable(message: MessageBytes, path: String) async throws  -> RecoverableEcdsaSignatureBytes
     
     /**
      * Encrypts a message using ECIES at the given derivation path.
@@ -2139,6 +2260,18 @@ public protocol ExternalSigner : AnyObject {
      * 64-byte Schnorr signature, or a `SignerError`
      */
     func signHashSchnorr(hash: Data, path: String) async throws  -> SchnorrSignatureBytes
+    
+    /**
+     * HMAC-SHA256 of a message at the given derivation path.
+     *
+     * # Arguments
+     * * `message` - The message to hash
+     * * `path` - BIP32 derivation path as a string
+     *
+     * # Returns
+     * 32-byte HMAC-SHA256, or a `SignerError`
+     */
+    func hmacSha256(message: Data, path: String) async throws  -> HashedMessageBytes
     
     /**
      * Generates Frost signing commitments for multi-party signing.
@@ -2374,20 +2507,22 @@ open func derivePublicKey(path: String)async throws  -> PublicKeyBytes {
     /**
      * Signs a message using ECDSA at the given derivation path.
      *
+     * The message should be a 32-byte digest (typically a hash of the original data).
+     *
      * # Arguments
-     * * `message` - The message to sign
+     * * `message` - The 32-byte message digest to sign
      * * `path` - BIP32 derivation path as a string
      *
      * # Returns
      * 64-byte compact ECDSA signature, or a `SignerError`
      */
-open func signEcdsa(message: Data, path: String)async throws  -> EcdsaSignatureBytes {
+open func signEcdsa(message: MessageBytes, path: String)async throws  -> EcdsaSignatureBytes {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_externalsigner_sign_ecdsa(
                     self.uniffiClonePointer(),
-                    FfiConverterData.lower(message),FfiConverterString.lower(path)
+                    FfiConverterTypeMessageBytes.lower(message),FfiConverterString.lower(path)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
@@ -2401,20 +2536,22 @@ open func signEcdsa(message: Data, path: String)async throws  -> EcdsaSignatureB
     /**
      * Signs a message using recoverable ECDSA at the given derivation path.
      *
+     * The message should be a 32-byte digest (typically a hash of the original data).
+     *
      * # Arguments
-     * * `message` - The message to sign (will be double-SHA256 hashed)
+     * * `message` - The 32-byte message digest to sign
      * * `path` - BIP32 derivation path as a string
      *
      * # Returns
      * 65 bytes: recovery ID (31 + `recovery_id`) + 64-byte signature, or a `SignerError`
      */
-open func signEcdsaRecoverable(message: Data, path: String)async throws  -> RecoverableEcdsaSignatureBytes {
+open func signEcdsaRecoverable(message: MessageBytes, path: String)async throws  -> RecoverableEcdsaSignatureBytes {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_externalsigner_sign_ecdsa_recoverable(
                     self.uniffiClonePointer(),
-                    FfiConverterData.lower(message),FfiConverterString.lower(path)
+                    FfiConverterTypeMessageBytes.lower(message),FfiConverterString.lower(path)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
@@ -2502,6 +2639,33 @@ open func signHashSchnorr(hash: Data, path: String)async throws  -> SchnorrSigna
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSchnorrSignatureBytes.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
+        )
+}
+    
+    /**
+     * HMAC-SHA256 of a message at the given derivation path.
+     *
+     * # Arguments
+     * * `message` - The message to hash
+     * * `path` - BIP32 derivation path as a string
+     *
+     * # Returns
+     * 32-byte HMAC-SHA256, or a `SignerError`
+     */
+open func hmacSha256(message: Data, path: String)async throws  -> HashedMessageBytes {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_externalsigner_hmac_sha256(
+                    self.uniffiClonePointer(),
+                    FfiConverterData.lower(message),FfiConverterString.lower(path)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeHashedMessageBytes.lift,
             errorHandler: FfiConverterTypeSignerError.lift
         )
 }
@@ -2906,7 +3070,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.signEcdsa(
-                     message: try FfiConverterData.lift(message),
+                     message: try FfiConverterTypeMessageBytes.lift(message),
                      path: try FfiConverterString.lift(path)
                 )
             }
@@ -2951,7 +3115,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.signEcdsaRecoverable(
-                     message: try FfiConverterData.lift(message),
+                     message: try FfiConverterTypeMessageBytes.lift(message),
                      path: try FfiConverterString.lift(path)
                 )
             }
@@ -3096,6 +3260,51 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
                         returnValue: FfiConverterTypeSchnorrSignatureBytes.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeSignerError.lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        hmacSha256: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            path: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> HashedMessageBytes in
+                guard let uniffiObj = try? FfiConverterTypeExternalSigner.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.hmacSha256(
+                     message: try FfiConverterData.lift(message),
+                     path: try FfiConverterString.lift(path)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: HashedMessageBytes) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterTypeHashedMessageBytes.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -12076,6 +12285,64 @@ public func FfiConverterTypeGetTokensMetadataResponse_lower(_ value: GetTokensMe
 }
 
 
+public struct HashedMessageBytes {
+    public var bytes: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(bytes: Data) {
+        self.bytes = bytes
+    }
+}
+
+
+
+extension HashedMessageBytes: Equatable, Hashable {
+    public static func ==(lhs: HashedMessageBytes, rhs: HashedMessageBytes) -> Bool {
+        if lhs.bytes != rhs.bytes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(bytes)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHashedMessageBytes: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HashedMessageBytes {
+        return
+            try HashedMessageBytes(
+                bytes: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HashedMessageBytes, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.bytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHashedMessageBytes_lift(_ buf: RustBuffer) throws -> HashedMessageBytes {
+    return try FfiConverterTypeHashedMessageBytes.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHashedMessageBytes_lower(_ value: HashedMessageBytes) -> RustBuffer {
+    return FfiConverterTypeHashedMessageBytes.lower(value)
+}
+
+
 /**
  * FFI-safe wrapper for (Identifier, `SigningCommitments`) pair
  */
@@ -13175,6 +13442,67 @@ public func FfiConverterTypeLnurlAuthRequestDetails_lower(_ value: LnurlAuthRequ
 
 
 /**
+ * LNURL error details
+ */
+public struct LnurlErrorDetails {
+    public var reason: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(reason: String) {
+        self.reason = reason
+    }
+}
+
+
+
+extension LnurlErrorDetails: Equatable, Hashable {
+    public static func ==(lhs: LnurlErrorDetails, rhs: LnurlErrorDetails) -> Bool {
+        if lhs.reason != rhs.reason {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(reason)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLnurlErrorDetails: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LnurlErrorDetails {
+        return
+            try LnurlErrorDetails(
+                reason: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LnurlErrorDetails, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.reason, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlErrorDetails_lift(_ buf: RustBuffer) throws -> LnurlErrorDetails {
+    return try FfiConverterTypeLnurlErrorDetails.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlErrorDetails_lower(_ value: LnurlErrorDetails) -> RustBuffer {
+    return FfiConverterTypeLnurlErrorDetails.lower(value)
+}
+
+
+/**
  * Represents the payment LNURL info
  */
 public struct LnurlPayInfo {
@@ -14229,6 +14557,67 @@ public func FfiConverterTypeLogEntry_lift(_ buf: RustBuffer) throws -> LogEntry 
 #endif
 public func FfiConverterTypeLogEntry_lower(_ value: LogEntry) -> RustBuffer {
     return FfiConverterTypeLogEntry.lower(value)
+}
+
+
+/**
+ * FFI-safe representation of a 32-byte message digest for ECDSA signing
+ */
+public struct MessageBytes {
+    public var bytes: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(bytes: Data) {
+        self.bytes = bytes
+    }
+}
+
+
+
+extension MessageBytes: Equatable, Hashable {
+    public static func ==(lhs: MessageBytes, rhs: MessageBytes) -> Bool {
+        if lhs.bytes != rhs.bytes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(bytes)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMessageBytes: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MessageBytes {
+        return
+            try MessageBytes(
+                bytes: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MessageBytes, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.bytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMessageBytes_lift(_ buf: RustBuffer) throws -> MessageBytes {
+    return try FfiConverterTypeMessageBytes.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMessageBytes_lower(_ value: MessageBytes) -> RustBuffer {
+    return FfiConverterTypeMessageBytes.lower(value)
 }
 
 
@@ -19771,6 +20160,82 @@ extension KeySetType: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * The response from a LNURL-auth callback, indicating success or failure.
+ */
+
+public enum LnurlCallbackStatus {
+    
+    /**
+     * On-wire format is: `{"status": "OK"}`
+     */
+    case ok
+    /**
+     * On-wire format is: `{"status": "ERROR", "reason": "error details..."}`
+     */
+    case errorStatus(errorDetails: LnurlErrorDetails
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLnurlCallbackStatus: FfiConverterRustBuffer {
+    typealias SwiftType = LnurlCallbackStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LnurlCallbackStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .ok
+        
+        case 2: return .errorStatus(errorDetails: try FfiConverterTypeLnurlErrorDetails.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LnurlCallbackStatus, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .ok:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .errorStatus(errorDetails):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeLnurlErrorDetails.write(errorDetails, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlCallbackStatus_lift(_ buf: RustBuffer) throws -> LnurlCallbackStatus {
+    return try FfiConverterTypeLnurlCallbackStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlCallbackStatus_lower(_ value: LnurlCallbackStatus) -> RustBuffer {
+    return FfiConverterTypeLnurlCallbackStatus.lower(value)
+}
+
+
+
+extension LnurlCallbackStatus: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum MaxFee {
     
@@ -24533,6 +24998,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_list_unclaimed_deposits() != 22486) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_lnurl_auth() != 37942) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_lnurl_pay() != 10147) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24584,10 +25052,10 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_externalsigner_derive_public_key() != 63908) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_sign_ecdsa() != 52291) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_sign_ecdsa() != 37648) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_sign_ecdsa_recoverable() != 8564) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_sign_ecdsa_recoverable() != 3107) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_externalsigner_ecies_encrypt() != 19449) {
@@ -24599,40 +25067,43 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_externalsigner_sign_hash_schnorr() != 57220) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_generate_frost_signing_commitments() != 24826) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_hmac_sha256() != 19799) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_public_key_for_node() != 32818) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_generate_frost_signing_commitments() != 24833) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_generate_random_key() != 22789) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_public_key_for_node() != 62425) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_static_deposit_private_key_source() != 37751) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_generate_random_key() != 21363) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_static_deposit_private_key() != 55375) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_static_deposit_private_key_source() != 61352) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_static_deposit_public_key() != 49264) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_static_deposit_private_key() != 57038) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_subtract_private_keys() != 46671) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_static_deposit_public_key() != 47081) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_split_secret() != 840) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_subtract_private_keys() != 63060) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_encrypt_private_key_for_receiver() != 42476) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_split_secret() != 22937) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_public_key_from_private_key_source() != 38684) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_encrypt_private_key_for_receiver() != 52786) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_sign_frost() != 1497) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_public_key_from_private_key_source() != 58178) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_aggregate_frost_signatures() != 26523) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_sign_frost() != 44847) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_aggregate_frost_signatures() != 61746) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_fiatservice_fetch_fiat_currencies() != 19092) {
