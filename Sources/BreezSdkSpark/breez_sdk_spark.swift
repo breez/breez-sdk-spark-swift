@@ -2298,26 +2298,39 @@ public protocol ExternalSigner : AnyObject {
      * * `id` - The tree node identifier
      *
      * # Returns
-     * The public key for the node, or an error string
+     * The public key for the node, or a `SignerError`
      */
     func getPublicKeyForNode(id: ExternalTreeNodeId) async throws  -> PublicKeyBytes
     
     /**
-     * Generates a random secret.
+     * Generates a random secret that is encrypted and known only to the signer.
+     *
+     * This method creates a new random secret and returns it in encrypted form.
+     * The plaintext secret never leaves the signer boundary, providing a secure way
+     * to create secrets that can be referenced in subsequent operations without
+     * exposing them.
+     *
+     * This is conceptually similar to Spark's key derivation system where secrets
+     * are represented by opaque references (like tree node IDs or Random) rather than raw values.
+     * The encrypted secret can be passed to other signer methods that need to operate
+     * on it, while keeping the actual secret material protected within the signer.
      *
      * # Returns
-     * A randomly generated secret source, or an error string
+     * An encrypted secret that can be used in subsequent signer operations,
+     * or a `SignerError` if generation fails.
+     *
+     * See also: [Key Derivation System](https://docs.spark.money/wallets/spark-signer#the-keyderivation-system)
      */
-    func generateRandomKey() async throws  -> ExternalSecretSource
+    func generateRandomSecret() async throws  -> ExternalEncryptedSecret
     
     /**
      * Gets an encrypted static deposit secret by index.
      *
      * # Arguments
-     * * `index` - The index of the static deposit key
+     * * `index` - The index of the static deposit secret
      *
      * # Returns
-     * The encrypted secret source, or an error string
+     * The encrypted secret, or a `SignerError`
      *
      * This is the encrypted version of: [JavaScript `getStaticDepositSecretKey`](https://docs.spark.money/wallets/spark-signer#get-static-deposit-secret-key)
      */
@@ -2327,23 +2340,23 @@ public protocol ExternalSigner : AnyObject {
      * Gets a static deposit secret by index.
      *
      * # Arguments
-     * * `index` - The index of the static deposit key
+     * * `index` - The index of the static deposit secret
      *
      * # Returns
-     * The 32-byte secret, or an error string
+     * The 32-byte secret, or a `SignerError`
      *
      * See also: [JavaScript `getStaticDepositSecretKey`](https://docs.spark.money/wallets/spark-signer#get-static-deposit-secret-key)
      */
     func staticDepositSecret(index: UInt32) async throws  -> SecretBytes
     
     /**
-     * Gets a static deposit public key by index.
+     * Gets a static deposit signing public key by index.
      *
      * # Arguments
-     * * `index` - The index of the static deposit key
+     * * `index` - The index of the static deposit public signing key
      *
      * # Returns
-     * The 33-byte public key, or an error string
+     * The 33-byte public key, or a `SignerError`
      *
      * See also: [JavaScript `getStaticDepositSigningKey`](https://docs.spark.money/wallets/spark-signer#get-static-deposit-signing-key)
      */
@@ -2353,11 +2366,11 @@ public protocol ExternalSigner : AnyObject {
      * Subtracts one secret from another.
      *
      * # Arguments
-     * * `signing_key` - The first secret source
-     * * `new_signing_key` - The second secret source to subtract
+     * * `signing_key` - The first secret
+     * * `new_signing_key` - The second secret to subtract
      *
      * # Returns
-     * The resulting secret source, or an error string
+     * The resulting secret, or a `SignerError`
      *
      * See also: [JavaScript `subtractSplitAndEncrypt`](https://docs.spark.money/wallets/spark-signer#subtract,-split,-and-encrypt)
      * (this method provides the subtraction step of that higher-level operation)
@@ -2373,7 +2386,7 @@ public protocol ExternalSigner : AnyObject {
      * * `num_shares` - Total number of shares to create
      *
      * # Returns
-     * Vector of verifiable secret shares, or an error string
+     * Vector of verifiable secret shares, or a `SignerError`
      *
      * See also: [JavaScript `splitSecretWithProofs`](https://docs.spark.money/wallets/spark-signer#split-secret-with-proofs)
      */
@@ -2387,18 +2400,20 @@ public protocol ExternalSigner : AnyObject {
      * * `receiver_public_key` - The receiver's 33-byte public key
      *
      * # Returns
-     * Encrypted data for the receiver, or an error string
+     * Encrypted data for the receiver, or a `SignerError`
      */
     func encryptSecretForReceiver(encryptedSecret: ExternalEncryptedSecret, receiverPublicKey: PublicKeyBytes) async throws  -> Data
     
     /**
-     * Gets the public key from a secret source.
+     * Gets the public key from a secret.
      *
      * # Arguments
-     * * `secret` - The secret source
+     * * `secret` - The secret
      *
      * # Returns
-     * The corresponding 33-byte public key, or an error string
+     * The corresponding 33-byte public key, or a `SignerError`
+     *
+     * See also: [JavaScript `getPublicKeyFromDerivation`](https://docs.spark.money/wallets/spark-signer#get-public-key-from-derivation)
      */
     func publicKeyFromSecret(secret: ExternalSecretSource) async throws  -> PublicKeyBytes
     
@@ -2409,7 +2424,7 @@ public protocol ExternalSigner : AnyObject {
      * * `request` - The Frost signing request
      *
      * # Returns
-     * A signature share, or an error string
+     * A signature share, or a `SignerError`
      *
      * See also: [JavaScript `signFrost`](https://docs.spark.money/wallets/spark-signer#frost-signing)
      */
@@ -2422,7 +2437,7 @@ public protocol ExternalSigner : AnyObject {
      * * `request` - The Frost aggregation request
      *
      * # Returns
-     * The aggregated Frost signature, or an error string
+     * The aggregated Frost signature, or a `SignerError`
      *
      * See also: [JavaScript `aggregateFrost`](https://docs.spark.money/wallets/spark-signer#aggregate-frost-signatures)
      */
@@ -2735,7 +2750,7 @@ open func generateRandomSigningCommitment()async throws  -> ExternalFrostCommitm
      * * `id` - The tree node identifier
      *
      * # Returns
-     * The public key for the node, or an error string
+     * The public key for the node, or a `SignerError`
      */
 open func getPublicKeyForNode(id: ExternalTreeNodeId)async throws  -> PublicKeyBytes {
     return
@@ -2755,16 +2770,29 @@ open func getPublicKeyForNode(id: ExternalTreeNodeId)async throws  -> PublicKeyB
 }
     
     /**
-     * Generates a random secret.
+     * Generates a random secret that is encrypted and known only to the signer.
+     *
+     * This method creates a new random secret and returns it in encrypted form.
+     * The plaintext secret never leaves the signer boundary, providing a secure way
+     * to create secrets that can be referenced in subsequent operations without
+     * exposing them.
+     *
+     * This is conceptually similar to Spark's key derivation system where secrets
+     * are represented by opaque references (like tree node IDs or Random) rather than raw values.
+     * The encrypted secret can be passed to other signer methods that need to operate
+     * on it, while keeping the actual secret material protected within the signer.
      *
      * # Returns
-     * A randomly generated secret source, or an error string
+     * An encrypted secret that can be used in subsequent signer operations,
+     * or a `SignerError` if generation fails.
+     *
+     * See also: [Key Derivation System](https://docs.spark.money/wallets/spark-signer#the-keyderivation-system)
      */
-open func generateRandomKey()async throws  -> ExternalSecretSource {
+open func generateRandomSecret()async throws  -> ExternalEncryptedSecret {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_externalsigner_generate_random_key(
+                uniffi_breez_sdk_spark_fn_method_externalsigner_generate_random_secret(
                     self.uniffiClonePointer()
                     
                 )
@@ -2772,7 +2800,7 @@ open func generateRandomKey()async throws  -> ExternalSecretSource {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeExternalSecretSource.lift,
+            liftFunc: FfiConverterTypeExternalEncryptedSecret.lift,
             errorHandler: FfiConverterTypeSignerError.lift
         )
 }
@@ -2781,10 +2809,10 @@ open func generateRandomKey()async throws  -> ExternalSecretSource {
      * Gets an encrypted static deposit secret by index.
      *
      * # Arguments
-     * * `index` - The index of the static deposit key
+     * * `index` - The index of the static deposit secret
      *
      * # Returns
-     * The encrypted secret source, or an error string
+     * The encrypted secret, or a `SignerError`
      *
      * This is the encrypted version of: [JavaScript `getStaticDepositSecretKey`](https://docs.spark.money/wallets/spark-signer#get-static-deposit-secret-key)
      */
@@ -2809,10 +2837,10 @@ open func staticDepositSecretEncrypted(index: UInt32)async throws  -> ExternalSe
      * Gets a static deposit secret by index.
      *
      * # Arguments
-     * * `index` - The index of the static deposit key
+     * * `index` - The index of the static deposit secret
      *
      * # Returns
-     * The 32-byte secret, or an error string
+     * The 32-byte secret, or a `SignerError`
      *
      * See also: [JavaScript `getStaticDepositSecretKey`](https://docs.spark.money/wallets/spark-signer#get-static-deposit-secret-key)
      */
@@ -2834,13 +2862,13 @@ open func staticDepositSecret(index: UInt32)async throws  -> SecretBytes {
 }
     
     /**
-     * Gets a static deposit public key by index.
+     * Gets a static deposit signing public key by index.
      *
      * # Arguments
-     * * `index` - The index of the static deposit key
+     * * `index` - The index of the static deposit public signing key
      *
      * # Returns
-     * The 33-byte public key, or an error string
+     * The 33-byte public key, or a `SignerError`
      *
      * See also: [JavaScript `getStaticDepositSigningKey`](https://docs.spark.money/wallets/spark-signer#get-static-deposit-signing-key)
      */
@@ -2865,11 +2893,11 @@ open func staticDepositSigningKey(index: UInt32)async throws  -> PublicKeyBytes 
      * Subtracts one secret from another.
      *
      * # Arguments
-     * * `signing_key` - The first secret source
-     * * `new_signing_key` - The second secret source to subtract
+     * * `signing_key` - The first secret
+     * * `new_signing_key` - The second secret to subtract
      *
      * # Returns
-     * The resulting secret source, or an error string
+     * The resulting secret, or a `SignerError`
      *
      * See also: [JavaScript `subtractSplitAndEncrypt`](https://docs.spark.money/wallets/spark-signer#subtract,-split,-and-encrypt)
      * (this method provides the subtraction step of that higher-level operation)
@@ -2900,7 +2928,7 @@ open func subtractSecrets(signingKey: ExternalSecretSource, newSigningKey: Exter
      * * `num_shares` - Total number of shares to create
      *
      * # Returns
-     * Vector of verifiable secret shares, or an error string
+     * Vector of verifiable secret shares, or a `SignerError`
      *
      * See also: [JavaScript `splitSecretWithProofs`](https://docs.spark.money/wallets/spark-signer#split-secret-with-proofs)
      */
@@ -2929,7 +2957,7 @@ open func splitSecretWithProofs(secret: ExternalSecretToSplit, threshold: UInt32
      * * `receiver_public_key` - The receiver's 33-byte public key
      *
      * # Returns
-     * Encrypted data for the receiver, or an error string
+     * Encrypted data for the receiver, or a `SignerError`
      */
 open func encryptSecretForReceiver(encryptedSecret: ExternalEncryptedSecret, receiverPublicKey: PublicKeyBytes)async throws  -> Data {
     return
@@ -2949,13 +2977,15 @@ open func encryptSecretForReceiver(encryptedSecret: ExternalEncryptedSecret, rec
 }
     
     /**
-     * Gets the public key from a secret source.
+     * Gets the public key from a secret.
      *
      * # Arguments
-     * * `secret` - The secret source
+     * * `secret` - The secret
      *
      * # Returns
-     * The corresponding 33-byte public key, or an error string
+     * The corresponding 33-byte public key, or a `SignerError`
+     *
+     * See also: [JavaScript `getPublicKeyFromDerivation`](https://docs.spark.money/wallets/spark-signer#get-public-key-from-derivation)
      */
 open func publicKeyFromSecret(secret: ExternalSecretSource)async throws  -> PublicKeyBytes {
     return
@@ -2981,7 +3011,7 @@ open func publicKeyFromSecret(secret: ExternalSecretSource)async throws  -> Publ
      * * `request` - The Frost signing request
      *
      * # Returns
-     * A signature share, or an error string
+     * A signature share, or a `SignerError`
      *
      * See also: [JavaScript `signFrost`](https://docs.spark.money/wallets/spark-signer#frost-signing)
      */
@@ -3009,7 +3039,7 @@ open func signFrost(request: ExternalSignFrostRequest)async throws  -> ExternalF
      * * `request` - The Frost aggregation request
      *
      * # Returns
-     * The aggregated Frost signature, or an error string
+     * The aggregated Frost signature, or a `SignerError`
      *
      * See also: [JavaScript `aggregateFrost`](https://docs.spark.money/wallets/spark-signer#aggregate-frost-signatures)
      */
@@ -3460,26 +3490,26 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
-        generateRandomKey: { (
+        generateRandomSecret: { (
             uniffiHandle: UInt64,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
             uniffiCallbackData: UInt64,
             uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () async throws -> ExternalSecretSource in
+                () async throws -> ExternalEncryptedSecret in
                 guard let uniffiObj = try? FfiConverterTypeExternalSigner.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try await uniffiObj.generateRandomKey(
+                return try await uniffiObj.generateRandomSecret(
                 )
             }
 
-            let uniffiHandleSuccess = { (returnValue: ExternalSecretSource) in
+            let uniffiHandleSuccess = { (returnValue: ExternalEncryptedSecret) in
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeExternalSecretSource.lower(returnValue),
+                        returnValue: FfiConverterTypeExternalEncryptedSecret.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -25123,37 +25153,37 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_externalsigner_generate_random_signing_commitment() != 31862) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_public_key_for_node() != 62425) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_public_key_for_node() != 37434) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_generate_random_key() != 63908) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_generate_random_secret() != 26114) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_static_deposit_secret_encrypted() != 64635) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_static_deposit_secret_encrypted() != 38925) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_static_deposit_secret() != 35967) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_static_deposit_secret() != 45280) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_static_deposit_signing_key() != 15562) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_static_deposit_signing_key() != 62519) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_subtract_secrets() != 43864) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_subtract_secrets() != 51106) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_split_secret_with_proofs() != 6228) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_split_secret_with_proofs() != 19489) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_encrypt_secret_for_receiver() != 61924) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_encrypt_secret_for_receiver() != 51627) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_public_key_from_secret() != 27909) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_public_key_from_secret() != 53055) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_sign_frost() != 2993) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_sign_frost() != 20635) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_aggregate_frost() != 27769) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_aggregate_frost() != 53544) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_fiatservice_fetch_fiat_currencies() != 19092) {
