@@ -2303,32 +2303,32 @@ public protocol ExternalSigner : AnyObject {
     func getPublicKeyForNode(id: ExternalTreeNodeId) async throws  -> PublicKeyBytes
     
     /**
-     * Generates a random private key.
+     * Generates a random secret key.
      *
      * # Returns
-     * A randomly generated private key source, or an error string
+     * A randomly generated secret key source, or an error string
      */
-    func generateRandomKey() async throws  -> ExternalPrivateKeySource
+    func generateRandomKey() async throws  -> ExternalSecretKeySource
     
     /**
-     * Gets a static deposit private key source by index.
+     * Gets an encrypted static deposit secret key by index.
      *
      * # Arguments
      * * `index` - The index of the static deposit key
      *
      * # Returns
-     * The private key source, or an error string
+     * The encrypted secret key, or an error string
      */
-    func getStaticDepositPrivateKeySource(index: UInt32) async throws  -> ExternalPrivateKeySource
+    func staticDepositSecretKeyEncrypted(index: UInt32) async throws  -> ExternalSecretKeySource
     
     /**
-     * Gets a static deposit private key by index.
+     * Gets a static deposit secret key by index.
      *
      * # Arguments
      * * `index` - The index of the static deposit key
      *
      * # Returns
-     * The 32-byte private key, or an error string
+     * The 32-byte secret key, or an error string
      *
      * See also: [JavaScript `getStaticDepositSecretKey`](https://docs.spark.money/wallets/spark-signer#get-static-deposit-secret-key)
      */
@@ -2348,16 +2348,19 @@ public protocol ExternalSigner : AnyObject {
     func staticDepositSigningKey(index: UInt32) async throws  -> PublicKeyBytes
     
     /**
-     * Subtracts one private key from another.
+     * Subtracts one secret key from another.
      *
      * # Arguments
-     * * `signing_key` - The first private key source
-     * * `new_signing_key` - The second private key source to subtract
+     * * `signing_key` - The first secret key source
+     * * `new_signing_key` - The second secret key source to subtract
      *
      * # Returns
-     * The resulting private key source, or an error string
+     * The resulting secret key source, or an error string
+     *
+     * See also: [JavaScript `subtractSplitAndEncrypt`](https://docs.spark.money/wallets/spark-signer#subtract,-split,-and-encrypt)
+     * (this method provides the subtraction step of that higher-level operation)
      */
-    func subtractSecretKeys(signingKey: ExternalPrivateKeySource, newSigningKey: ExternalPrivateKeySource) async throws  -> ExternalPrivateKeySource
+    func subtractSecretKeys(signingKey: ExternalSecretKeySource, newSigningKey: ExternalSecretKeySource) async throws  -> ExternalSecretKeySource
     
     /**
      * Splits a secret with proofs using Shamir's Secret Sharing.
@@ -2375,27 +2378,27 @@ public protocol ExternalSigner : AnyObject {
     func splitSecretWithProofs(secret: ExternalSecretToSplit, threshold: UInt32, numShares: UInt32) async throws  -> [ExternalVerifiableSecretShare]
     
     /**
-     * Encrypts a private key for a specific receiver's public key.
+     * Encrypts a secret key for a specific receiver's public key.
      *
      * # Arguments
-     * * `private_key` - The encrypted private key to re-encrypt
+     * * `secret_key` - The encrypted secret key to re-encrypt
      * * `receiver_public_key` - The receiver's 33-byte public key
      *
      * # Returns
      * Encrypted data for the receiver, or an error string
      */
-    func encryptPrivateKeyForReceiver(privateKey: ExternalEncryptedPrivateKey, receiverPublicKey: PublicKeyBytes) async throws  -> Data
+    func encryptSecretKeyForReceiver(secretKey: ExternalEncryptedPrivateKey, receiverPublicKey: PublicKeyBytes) async throws  -> Data
     
     /**
-     * Gets the public key from a private key source.
+     * Gets the public key from a secret key source.
      *
      * # Arguments
-     * * `private_key` - The private key source
+     * * `secret_key` - The secret key source
      *
      * # Returns
      * The corresponding 33-byte public key, or an error string
      */
-    func getPublicKeyFromPrivateKeySource(privateKey: ExternalPrivateKeySource) async throws  -> PublicKeyBytes
+    func publicKeyFromSecretKeySource(secretKey: ExternalSecretKeySource) async throws  -> PublicKeyBytes
     
     /**
      * Signs using Frost protocol (multi-party signing).
@@ -2750,12 +2753,12 @@ open func getPublicKeyForNode(id: ExternalTreeNodeId)async throws  -> PublicKeyB
 }
     
     /**
-     * Generates a random private key.
+     * Generates a random secret key.
      *
      * # Returns
-     * A randomly generated private key source, or an error string
+     * A randomly generated secret key source, or an error string
      */
-open func generateRandomKey()async throws  -> ExternalPrivateKeySource {
+open func generateRandomKey()async throws  -> ExternalSecretKeySource {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2767,25 +2770,25 @@ open func generateRandomKey()async throws  -> ExternalPrivateKeySource {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeExternalPrivateKeySource.lift,
+            liftFunc: FfiConverterTypeExternalSecretKeySource.lift,
             errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
     /**
-     * Gets a static deposit private key source by index.
+     * Gets an encrypted static deposit secret key by index.
      *
      * # Arguments
      * * `index` - The index of the static deposit key
      *
      * # Returns
-     * The private key source, or an error string
+     * The encrypted secret key, or an error string
      */
-open func getStaticDepositPrivateKeySource(index: UInt32)async throws  -> ExternalPrivateKeySource {
+open func staticDepositSecretKeyEncrypted(index: UInt32)async throws  -> ExternalSecretKeySource {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_externalsigner_get_static_deposit_private_key_source(
+                uniffi_breez_sdk_spark_fn_method_externalsigner_static_deposit_secret_key_encrypted(
                     self.uniffiClonePointer(),
                     FfiConverterUInt32.lower(index)
                 )
@@ -2793,19 +2796,19 @@ open func getStaticDepositPrivateKeySource(index: UInt32)async throws  -> Extern
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeExternalPrivateKeySource.lift,
+            liftFunc: FfiConverterTypeExternalSecretKeySource.lift,
             errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
     /**
-     * Gets a static deposit private key by index.
+     * Gets a static deposit secret key by index.
      *
      * # Arguments
      * * `index` - The index of the static deposit key
      *
      * # Returns
-     * The 32-byte private key, or an error string
+     * The 32-byte secret key, or an error string
      *
      * See also: [JavaScript `getStaticDepositSecretKey`](https://docs.spark.money/wallets/spark-signer#get-static-deposit-secret-key)
      */
@@ -2855,28 +2858,31 @@ open func staticDepositSigningKey(index: UInt32)async throws  -> PublicKeyBytes 
 }
     
     /**
-     * Subtracts one private key from another.
+     * Subtracts one secret key from another.
      *
      * # Arguments
-     * * `signing_key` - The first private key source
-     * * `new_signing_key` - The second private key source to subtract
+     * * `signing_key` - The first secret key source
+     * * `new_signing_key` - The second secret key source to subtract
      *
      * # Returns
-     * The resulting private key source, or an error string
+     * The resulting secret key source, or an error string
+     *
+     * See also: [JavaScript `subtractSplitAndEncrypt`](https://docs.spark.money/wallets/spark-signer#subtract,-split,-and-encrypt)
+     * (this method provides the subtraction step of that higher-level operation)
      */
-open func subtractSecretKeys(signingKey: ExternalPrivateKeySource, newSigningKey: ExternalPrivateKeySource)async throws  -> ExternalPrivateKeySource {
+open func subtractSecretKeys(signingKey: ExternalSecretKeySource, newSigningKey: ExternalSecretKeySource)async throws  -> ExternalSecretKeySource {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_externalsigner_subtract_secret_keys(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeExternalPrivateKeySource.lower(signingKey),FfiConverterTypeExternalPrivateKeySource.lower(newSigningKey)
+                    FfiConverterTypeExternalSecretKeySource.lower(signingKey),FfiConverterTypeExternalSecretKeySource.lower(newSigningKey)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeExternalPrivateKeySource.lift,
+            liftFunc: FfiConverterTypeExternalSecretKeySource.lift,
             errorHandler: FfiConverterTypeSignerError.lift
         )
 }
@@ -2912,22 +2918,22 @@ open func splitSecretWithProofs(secret: ExternalSecretToSplit, threshold: UInt32
 }
     
     /**
-     * Encrypts a private key for a specific receiver's public key.
+     * Encrypts a secret key for a specific receiver's public key.
      *
      * # Arguments
-     * * `private_key` - The encrypted private key to re-encrypt
+     * * `secret_key` - The encrypted secret key to re-encrypt
      * * `receiver_public_key` - The receiver's 33-byte public key
      *
      * # Returns
      * Encrypted data for the receiver, or an error string
      */
-open func encryptPrivateKeyForReceiver(privateKey: ExternalEncryptedPrivateKey, receiverPublicKey: PublicKeyBytes)async throws  -> Data {
+open func encryptSecretKeyForReceiver(secretKey: ExternalEncryptedPrivateKey, receiverPublicKey: PublicKeyBytes)async throws  -> Data {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_externalsigner_encrypt_private_key_for_receiver(
+                uniffi_breez_sdk_spark_fn_method_externalsigner_encrypt_secret_key_for_receiver(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeExternalEncryptedPrivateKey.lower(privateKey),FfiConverterTypePublicKeyBytes.lower(receiverPublicKey)
+                    FfiConverterTypeExternalEncryptedPrivateKey.lower(secretKey),FfiConverterTypePublicKeyBytes.lower(receiverPublicKey)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
@@ -2939,21 +2945,21 @@ open func encryptPrivateKeyForReceiver(privateKey: ExternalEncryptedPrivateKey, 
 }
     
     /**
-     * Gets the public key from a private key source.
+     * Gets the public key from a secret key source.
      *
      * # Arguments
-     * * `private_key` - The private key source
+     * * `secret_key` - The secret key source
      *
      * # Returns
      * The corresponding 33-byte public key, or an error string
      */
-open func getPublicKeyFromPrivateKeySource(privateKey: ExternalPrivateKeySource)async throws  -> PublicKeyBytes {
+open func publicKeyFromSecretKeySource(secretKey: ExternalSecretKeySource)async throws  -> PublicKeyBytes {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_externalsigner_get_public_key_from_private_key_source(
+                uniffi_breez_sdk_spark_fn_method_externalsigner_public_key_from_secret_key_source(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeExternalPrivateKeySource.lower(privateKey)
+                    FfiConverterTypeExternalSecretKeySource.lower(secretKey)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
@@ -3457,7 +3463,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
             uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () async throws -> ExternalPrivateKeySource in
+                () async throws -> ExternalSecretKeySource in
                 guard let uniffiObj = try? FfiConverterTypeExternalSigner.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
@@ -3465,11 +3471,11 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 )
             }
 
-            let uniffiHandleSuccess = { (returnValue: ExternalPrivateKeySource) in
+            let uniffiHandleSuccess = { (returnValue: ExternalSecretKeySource) in
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeExternalPrivateKeySource.lower(returnValue),
+                        returnValue: FfiConverterTypeExternalSecretKeySource.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3491,7 +3497,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
-        getStaticDepositPrivateKeySource: { (
+        staticDepositSecretKeyEncrypted: { (
             uniffiHandle: UInt64,
             index: UInt32,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
@@ -3499,20 +3505,20 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
             uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () async throws -> ExternalPrivateKeySource in
+                () async throws -> ExternalSecretKeySource in
                 guard let uniffiObj = try? FfiConverterTypeExternalSigner.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try await uniffiObj.getStaticDepositPrivateKeySource(
+                return try await uniffiObj.staticDepositSecretKeyEncrypted(
                      index: try FfiConverterUInt32.lift(index)
                 )
             }
 
-            let uniffiHandleSuccess = { (returnValue: ExternalPrivateKeySource) in
+            let uniffiHandleSuccess = { (returnValue: ExternalSecretKeySource) in
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeExternalPrivateKeySource.lower(returnValue),
+                        returnValue: FfiConverterTypeExternalSecretKeySource.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3629,21 +3635,21 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
             uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () async throws -> ExternalPrivateKeySource in
+                () async throws -> ExternalSecretKeySource in
                 guard let uniffiObj = try? FfiConverterTypeExternalSigner.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.subtractSecretKeys(
-                     signingKey: try FfiConverterTypeExternalPrivateKeySource.lift(signingKey),
-                     newSigningKey: try FfiConverterTypeExternalPrivateKeySource.lift(newSigningKey)
+                     signingKey: try FfiConverterTypeExternalSecretKeySource.lift(signingKey),
+                     newSigningKey: try FfiConverterTypeExternalSecretKeySource.lift(newSigningKey)
                 )
             }
 
-            let uniffiHandleSuccess = { (returnValue: ExternalPrivateKeySource) in
+            let uniffiHandleSuccess = { (returnValue: ExternalSecretKeySource) in
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeExternalPrivateKeySource.lower(returnValue),
+                        returnValue: FfiConverterTypeExternalSecretKeySource.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3712,9 +3718,9 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
-        encryptPrivateKeyForReceiver: { (
+        encryptSecretKeyForReceiver: { (
             uniffiHandle: UInt64,
-            privateKey: RustBuffer,
+            secretKey: RustBuffer,
             receiverPublicKey: RustBuffer,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
             uniffiCallbackData: UInt64,
@@ -3725,8 +3731,8 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 guard let uniffiObj = try? FfiConverterTypeExternalSigner.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try await uniffiObj.encryptPrivateKeyForReceiver(
-                     privateKey: try FfiConverterTypeExternalEncryptedPrivateKey.lift(privateKey),
+                return try await uniffiObj.encryptSecretKeyForReceiver(
+                     secretKey: try FfiConverterTypeExternalEncryptedPrivateKey.lift(secretKey),
                      receiverPublicKey: try FfiConverterTypePublicKeyBytes.lift(receiverPublicKey)
                 )
             }
@@ -3757,9 +3763,9 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
-        getPublicKeyFromPrivateKeySource: { (
+        publicKeyFromSecretKeySource: { (
             uniffiHandle: UInt64,
-            privateKey: RustBuffer,
+            secretKey: RustBuffer,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
             uniffiCallbackData: UInt64,
             uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
@@ -3769,8 +3775,8 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 guard let uniffiObj = try? FfiConverterTypeExternalSigner.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try await uniffiObj.getPublicKeyFromPrivateKeySource(
-                     privateKey: try FfiConverterTypeExternalPrivateKeySource.lift(privateKey)
+                return try await uniffiObj.publicKeyFromSecretKeySource(
+                     secretKey: try FfiConverterTypeExternalSecretKeySource.lift(secretKey)
                 )
             }
 
@@ -11233,7 +11239,7 @@ public struct ExternalSignFrostRequest {
     /**
      * The private key source
      */
-    public var privateKey: ExternalPrivateKeySource
+    public var privateKey: ExternalSecretKeySource
     /**
      * The verifying key (33 bytes compressed)
      */
@@ -11262,7 +11268,7 @@ public struct ExternalSignFrostRequest {
          */publicKey: Data, 
         /**
          * The private key source
-         */privateKey: ExternalPrivateKeySource, 
+         */privateKey: ExternalSecretKeySource, 
         /**
          * The verifying key (33 bytes compressed)
          */verifyingKey: Data, 
@@ -11334,7 +11340,7 @@ public struct FfiConverterTypeExternalSignFrostRequest: FfiConverterRustBuffer {
             try ExternalSignFrostRequest(
                 message: FfiConverterData.read(from: &buf), 
                 publicKey: FfiConverterData.read(from: &buf), 
-                privateKey: FfiConverterTypeExternalPrivateKeySource.read(from: &buf), 
+                privateKey: FfiConverterTypeExternalSecretKeySource.read(from: &buf), 
                 verifyingKey: FfiConverterData.read(from: &buf), 
                 selfNonceCommitment: FfiConverterTypeExternalFrostCommitments.read(from: &buf), 
                 statechainCommitments: FfiConverterSequenceTypeIdentifierCommitmentPair.read(from: &buf), 
@@ -11345,7 +11351,7 @@ public struct FfiConverterTypeExternalSignFrostRequest: FfiConverterRustBuffer {
     public static func write(_ value: ExternalSignFrostRequest, into buf: inout [UInt8]) {
         FfiConverterData.write(value.message, into: &buf)
         FfiConverterData.write(value.publicKey, into: &buf)
-        FfiConverterTypeExternalPrivateKeySource.write(value.privateKey, into: &buf)
+        FfiConverterTypeExternalSecretKeySource.write(value.privateKey, into: &buf)
         FfiConverterData.write(value.verifyingKey, into: &buf)
         FfiConverterTypeExternalFrostCommitments.write(value.selfNonceCommitment, into: &buf)
         FfiConverterSequenceTypeIdentifierCommitmentPair.write(value.statechainCommitments, into: &buf)
@@ -19698,10 +19704,10 @@ extension DepositClaimError: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
- * FFI-safe representation of `spark_wallet::PrivateKeySource`
+ * FFI-safe representation of `spark_wallet::SecretKeySource`
  */
 
-public enum ExternalPrivateKeySource {
+public enum ExternalSecretKeySource {
     
     /**
      * Private key derived from a tree node
@@ -19719,10 +19725,10 @@ public enum ExternalPrivateKeySource {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeExternalPrivateKeySource: FfiConverterRustBuffer {
-    typealias SwiftType = ExternalPrivateKeySource
+public struct FfiConverterTypeExternalSecretKeySource: FfiConverterRustBuffer {
+    typealias SwiftType = ExternalSecretKeySource
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExternalPrivateKeySource {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExternalSecretKeySource {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
@@ -19736,7 +19742,7 @@ public struct FfiConverterTypeExternalPrivateKeySource: FfiConverterRustBuffer {
         }
     }
 
-    public static func write(_ value: ExternalPrivateKeySource, into buf: inout [UInt8]) {
+    public static func write(_ value: ExternalSecretKeySource, into buf: inout [UInt8]) {
         switch value {
         
         
@@ -19757,20 +19763,20 @@ public struct FfiConverterTypeExternalPrivateKeySource: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeExternalPrivateKeySource_lift(_ buf: RustBuffer) throws -> ExternalPrivateKeySource {
-    return try FfiConverterTypeExternalPrivateKeySource.lift(buf)
+public func FfiConverterTypeExternalSecretKeySource_lift(_ buf: RustBuffer) throws -> ExternalSecretKeySource {
+    return try FfiConverterTypeExternalSecretKeySource.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeExternalPrivateKeySource_lower(_ value: ExternalPrivateKeySource) -> RustBuffer {
-    return FfiConverterTypeExternalPrivateKeySource.lower(value)
+public func FfiConverterTypeExternalSecretKeySource_lower(_ value: ExternalSecretKeySource) -> RustBuffer {
+    return FfiConverterTypeExternalSecretKeySource.lower(value)
 }
 
 
 
-extension ExternalPrivateKeySource: Equatable, Hashable {}
+extension ExternalSecretKeySource: Equatable, Hashable {}
 
 
 
@@ -19785,7 +19791,7 @@ public enum ExternalSecretToSplit {
     /**
      * A private key to split
      */
-    case privateKey(source: ExternalPrivateKeySource
+    case privateKey(source: ExternalSecretKeySource
     )
     /**
      * A preimage to split (32 bytes)
@@ -19805,7 +19811,7 @@ public struct FfiConverterTypeExternalSecretToSplit: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .privateKey(source: try FfiConverterTypeExternalPrivateKeySource.read(from: &buf)
+        case 1: return .privateKey(source: try FfiConverterTypeExternalSecretKeySource.read(from: &buf)
         )
         
         case 2: return .preimage(data: try FfiConverterData.read(from: &buf)
@@ -19821,7 +19827,7 @@ public struct FfiConverterTypeExternalSecretToSplit: FfiConverterRustBuffer {
         
         case let .privateKey(source):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeExternalPrivateKeySource.write(source, into: &buf)
+            FfiConverterTypeExternalSecretKeySource.write(source, into: &buf)
             
         
         case let .preimage(data):
@@ -25116,28 +25122,28 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_public_key_for_node() != 62425) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_generate_random_key() != 21363) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_generate_random_key() != 24906) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_static_deposit_private_key_source() != 61352) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_static_deposit_secret_key_encrypted() != 50023) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_static_deposit_secret_key() != 8728) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_static_deposit_secret_key() != 61854) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_externalsigner_static_deposit_signing_key() != 15562) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_subtract_secret_keys() != 2714) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_subtract_secret_keys() != 4979) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_externalsigner_split_secret_with_proofs() != 6228) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_encrypt_private_key_for_receiver() != 52786) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_encrypt_secret_key_for_receiver() != 43011) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_get_public_key_from_private_key_source() != 58178) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsigner_public_key_from_secret_key_source() != 35440) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_externalsigner_sign_frost() != 2993) {
