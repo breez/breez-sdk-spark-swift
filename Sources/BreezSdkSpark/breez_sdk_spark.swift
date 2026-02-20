@@ -4446,6 +4446,13 @@ public func FfiConverterTypePaymentObserver_lower(_ value: PaymentObserver) -> U
 
 
 
+/**
+ * REST client trait for making HTTP requests.
+ *
+ * This trait provides a way for users to supply their own HTTP client implementation
+ * for use with the SDK. The SDK will use this client for all HTTP operations including
+ * LNURL flows and chain service requests.
+ */
 public protocol RestClient : AnyObject {
     
     /**
@@ -4476,6 +4483,13 @@ public protocol RestClient : AnyObject {
     
 }
 
+/**
+ * REST client trait for making HTTP requests.
+ *
+ * This trait provides a way for users to supply their own HTTP client implementation
+ * for use with the SDK. The SDK will use this client for all HTTP operations including
+ * LNURL flows and chain service requests.
+ */
 open class RestClientImpl:
     RestClient {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -9396,6 +9410,13 @@ public struct Config {
      * More leaves allow payments to be made without needing a swap, reducing payment latency.
      */
     public var optimizationConfig: OptimizationConfig
+    /**
+     * Configuration for automatic conversion of Bitcoin to stable tokens.
+     *
+     * When set, received sats will be automatically converted to the specified token
+     * once the balance exceeds the threshold.
+     */
+    public var stableBalanceConfig: StableBalanceConfig?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -9433,7 +9454,13 @@ public struct Config {
          * Leaf optimization controls the denominations of leaves that are held in the wallet.
          * Fewer, bigger leaves allow for more funds to be exited unilaterally.
          * More leaves allow payments to be made without needing a swap, reducing payment latency.
-         */optimizationConfig: OptimizationConfig) {
+         */optimizationConfig: OptimizationConfig, 
+        /**
+         * Configuration for automatic conversion of Bitcoin to stable tokens.
+         *
+         * When set, received sats will be automatically converted to the specified token
+         * once the balance exceeds the threshold.
+         */stableBalanceConfig: StableBalanceConfig?) {
         self.apiKey = apiKey
         self.network = network
         self.syncIntervalSecs = syncIntervalSecs
@@ -9445,6 +9472,7 @@ public struct Config {
         self.realTimeSyncServerUrl = realTimeSyncServerUrl
         self.privateEnabledDefault = privateEnabledDefault
         self.optimizationConfig = optimizationConfig
+        self.stableBalanceConfig = stableBalanceConfig
     }
 }
 
@@ -9485,6 +9513,9 @@ extension Config: Equatable, Hashable {
         if lhs.optimizationConfig != rhs.optimizationConfig {
             return false
         }
+        if lhs.stableBalanceConfig != rhs.stableBalanceConfig {
+            return false
+        }
         return true
     }
 
@@ -9500,6 +9531,7 @@ extension Config: Equatable, Hashable {
         hasher.combine(realTimeSyncServerUrl)
         hasher.combine(privateEnabledDefault)
         hasher.combine(optimizationConfig)
+        hasher.combine(stableBalanceConfig)
     }
 }
 
@@ -9521,7 +9553,8 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
                 useDefaultExternalInputParsers: FfiConverterBool.read(from: &buf), 
                 realTimeSyncServerUrl: FfiConverterOptionString.read(from: &buf), 
                 privateEnabledDefault: FfiConverterBool.read(from: &buf), 
-                optimizationConfig: FfiConverterTypeOptimizationConfig.read(from: &buf)
+                optimizationConfig: FfiConverterTypeOptimizationConfig.read(from: &buf), 
+                stableBalanceConfig: FfiConverterOptionTypeStableBalanceConfig.read(from: &buf)
         )
     }
 
@@ -9537,6 +9570,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.realTimeSyncServerUrl, into: &buf)
         FfiConverterBool.write(value.privateEnabledDefault, into: &buf)
         FfiConverterTypeOptimizationConfig.write(value.optimizationConfig, into: &buf)
+        FfiConverterOptionTypeStableBalanceConfig.write(value.stableBalanceConfig, into: &buf)
     }
 }
 
@@ -18669,6 +18703,141 @@ public func FfiConverterTypeSparkStatus_lower(_ value: SparkStatus) -> RustBuffe
 
 
 /**
+ * Configuration for automatic conversion of Bitcoin to stable tokens.
+ *
+ * When configured, the SDK automatically monitors the Bitcoin balance after each
+ * wallet sync. When the balance exceeds the configured threshold plus the reserved
+ * amount, the SDK automatically converts the excess balance (above the reserve)
+ * to the specified stable token.
+ *
+ * When the balance is held in a stable token, Bitcoin payments can still be sent.
+ * The SDK automatically detects when there's not enough Bitcoin balance to cover a
+ * payment and auto-populates the token-to-Bitcoin conversion options to facilitate
+ * the payment.
+ */
+public struct StableBalanceConfig {
+    /**
+     * The token identifier to convert Bitcoin to (required).
+     */
+    public var tokenIdentifier: String
+    /**
+     * The minimum sats balance that triggers auto-conversion.
+     *
+     * If not provided, uses the minimum from conversion limits.
+     * If provided but less than the conversion limit minimum, the limit minimum is used.
+     */
+    public var thresholdSats: UInt64?
+    /**
+     * Maximum slippage in basis points (1/100 of a percent).
+     *
+     * Defaults to 50 bps (0.5%) if not set.
+     */
+    public var maxSlippageBps: UInt32?
+    /**
+     * Amount of sats to keep as Bitcoin and not convert to stable tokens.
+     *
+     * This reserve ensures you can send Bitcoin payments without hitting
+     * the minimum conversion limit. Defaults to the conversion minimum if not set.
+     */
+    public var reservedSats: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The token identifier to convert Bitcoin to (required).
+         */tokenIdentifier: String, 
+        /**
+         * The minimum sats balance that triggers auto-conversion.
+         *
+         * If not provided, uses the minimum from conversion limits.
+         * If provided but less than the conversion limit minimum, the limit minimum is used.
+         */thresholdSats: UInt64? = nil, 
+        /**
+         * Maximum slippage in basis points (1/100 of a percent).
+         *
+         * Defaults to 50 bps (0.5%) if not set.
+         */maxSlippageBps: UInt32? = nil, 
+        /**
+         * Amount of sats to keep as Bitcoin and not convert to stable tokens.
+         *
+         * This reserve ensures you can send Bitcoin payments without hitting
+         * the minimum conversion limit. Defaults to the conversion minimum if not set.
+         */reservedSats: UInt64? = nil) {
+        self.tokenIdentifier = tokenIdentifier
+        self.thresholdSats = thresholdSats
+        self.maxSlippageBps = maxSlippageBps
+        self.reservedSats = reservedSats
+    }
+}
+
+
+
+extension StableBalanceConfig: Equatable, Hashable {
+    public static func ==(lhs: StableBalanceConfig, rhs: StableBalanceConfig) -> Bool {
+        if lhs.tokenIdentifier != rhs.tokenIdentifier {
+            return false
+        }
+        if lhs.thresholdSats != rhs.thresholdSats {
+            return false
+        }
+        if lhs.maxSlippageBps != rhs.maxSlippageBps {
+            return false
+        }
+        if lhs.reservedSats != rhs.reservedSats {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(tokenIdentifier)
+        hasher.combine(thresholdSats)
+        hasher.combine(maxSlippageBps)
+        hasher.combine(reservedSats)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStableBalanceConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StableBalanceConfig {
+        return
+            try StableBalanceConfig(
+                tokenIdentifier: FfiConverterString.read(from: &buf), 
+                thresholdSats: FfiConverterOptionUInt64.read(from: &buf), 
+                maxSlippageBps: FfiConverterOptionUInt32.read(from: &buf), 
+                reservedSats: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StableBalanceConfig, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.tokenIdentifier, into: &buf)
+        FfiConverterOptionUInt64.write(value.thresholdSats, into: &buf)
+        FfiConverterOptionUInt32.write(value.maxSlippageBps, into: &buf)
+        FfiConverterOptionUInt64.write(value.reservedSats, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStableBalanceConfig_lift(_ buf: RustBuffer) throws -> StableBalanceConfig {
+    return try FfiConverterTypeStableBalanceConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStableBalanceConfig_lower(_ value: StableBalanceConfig) -> RustBuffer {
+    return FfiConverterTypeStableBalanceConfig.lower(value)
+}
+
+
+/**
  * Settings for the symbol representation of a currency
  */
 public struct Symbol {
@@ -20080,6 +20249,10 @@ public enum ConversionPurpose {
      * Conversion is for self-transfer
      */
     case selfTransfer
+    /**
+     * Conversion triggered automatically
+     */
+    case autoConversion
 }
 
 
@@ -20098,6 +20271,8 @@ public struct FfiConverterTypeConversionPurpose: FfiConverterRustBuffer {
         
         case 2: return .selfTransfer
         
+        case 3: return .autoConversion
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -20113,6 +20288,10 @@ public struct FfiConverterTypeConversionPurpose: FfiConverterRustBuffer {
         
         case .selfTransfer:
             writeInt(&buf, Int32(2))
+        
+        
+        case .autoConversion:
+            writeInt(&buf, Int32(3))
         
         }
     }
@@ -21399,19 +21578,16 @@ public enum PaymentDetails {
          * Represents the invoice description
          */description: String?, 
         /**
-         * The preimage of the paid invoice (proof of payment).
-         */preimage: String?, 
-        /**
          * Represents the Bolt11/Bolt12 invoice associated with a payment
          * In the case of a Send payment, this is the invoice paid by the user
          * In the case of a Receive payment, this is the invoice paid to the user
          */invoice: String, 
         /**
-         * The payment hash of the invoice
-         */paymentHash: String, 
-        /**
          * The invoice destination/payee pubkey
          */destinationPubkey: String, 
+        /**
+         * The HTLC transfer details
+         */htlcDetails: SparkHtlcDetails, 
         /**
          * Lnurl payment information if this was an lnurl payment.
          */lnurlPayInfo: LnurlPayInfo?, 
@@ -21445,7 +21621,7 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
         case 2: return .token(metadata: try FfiConverterTypeTokenMetadata.read(from: &buf), txHash: try FfiConverterString.read(from: &buf), txType: try FfiConverterTypeTokenTransactionType.read(from: &buf), invoiceDetails: try FfiConverterOptionTypeSparkInvoicePaymentDetails.read(from: &buf), conversionInfo: try FfiConverterOptionTypeConversionInfo.read(from: &buf)
         )
         
-        case 3: return .lightning(description: try FfiConverterOptionString.read(from: &buf), preimage: try FfiConverterOptionString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), paymentHash: try FfiConverterString.read(from: &buf), destinationPubkey: try FfiConverterString.read(from: &buf), lnurlPayInfo: try FfiConverterOptionTypeLnurlPayInfo.read(from: &buf), lnurlWithdrawInfo: try FfiConverterOptionTypeLnurlWithdrawInfo.read(from: &buf), lnurlReceiveMetadata: try FfiConverterOptionTypeLnurlReceiveMetadata.read(from: &buf)
+        case 3: return .lightning(description: try FfiConverterOptionString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), destinationPubkey: try FfiConverterString.read(from: &buf), htlcDetails: try FfiConverterTypeSparkHtlcDetails.read(from: &buf), lnurlPayInfo: try FfiConverterOptionTypeLnurlPayInfo.read(from: &buf), lnurlWithdrawInfo: try FfiConverterOptionTypeLnurlWithdrawInfo.read(from: &buf), lnurlReceiveMetadata: try FfiConverterOptionTypeLnurlReceiveMetadata.read(from: &buf)
         )
         
         case 4: return .withdraw(txId: try FfiConverterString.read(from: &buf)
@@ -21478,13 +21654,12 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
             FfiConverterOptionTypeConversionInfo.write(conversionInfo, into: &buf)
             
         
-        case let .lightning(description,preimage,invoice,paymentHash,destinationPubkey,lnurlPayInfo,lnurlWithdrawInfo,lnurlReceiveMetadata):
+        case let .lightning(description,invoice,destinationPubkey,htlcDetails,lnurlPayInfo,lnurlWithdrawInfo,lnurlReceiveMetadata):
             writeInt(&buf, Int32(3))
             FfiConverterOptionString.write(description, into: &buf)
-            FfiConverterOptionString.write(preimage, into: &buf)
             FfiConverterString.write(invoice, into: &buf)
-            FfiConverterString.write(paymentHash, into: &buf)
             FfiConverterString.write(destinationPubkey, into: &buf)
+            FfiConverterTypeSparkHtlcDetails.write(htlcDetails, into: &buf)
             FfiConverterOptionTypeLnurlPayInfo.write(lnurlPayInfo, into: &buf)
             FfiConverterOptionTypeLnurlWithdrawInfo.write(lnurlWithdrawInfo, into: &buf)
             FfiConverterOptionTypeLnurlReceiveMetadata.write(lnurlReceiveMetadata, into: &buf)
@@ -21548,6 +21723,11 @@ public enum PaymentDetailsFilter {
          * Filter by transaction type
          */txType: TokenTransactionType?
     )
+    case lightning(
+        /**
+         * Filter specific Spark HTLC statuses
+         */htlcStatus: [SparkHtlcStatus]?
+    )
 }
 
 
@@ -21565,6 +21745,9 @@ public struct FfiConverterTypePaymentDetailsFilter: FfiConverterRustBuffer {
         )
         
         case 2: return .token(conversionRefundNeeded: try FfiConverterOptionBool.read(from: &buf), txHash: try FfiConverterOptionString.read(from: &buf), txType: try FfiConverterOptionTypeTokenTransactionType.read(from: &buf)
+        )
+        
+        case 3: return .lightning(htlcStatus: try FfiConverterOptionSequenceTypeSparkHtlcStatus.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -21586,6 +21769,11 @@ public struct FfiConverterTypePaymentDetailsFilter: FfiConverterRustBuffer {
             FfiConverterOptionBool.write(conversionRefundNeeded, into: &buf)
             FfiConverterOptionString.write(txHash, into: &buf)
             FfiConverterOptionTypeTokenTransactionType.write(txType, into: &buf)
+            
+        
+        case let .lightning(htlcStatus):
+            writeInt(&buf, Int32(3))
+            FfiConverterOptionSequenceTypeSparkHtlcStatus.write(htlcStatus, into: &buf)
             
         }
     }
@@ -22138,7 +22326,12 @@ public enum ReceivePaymentMethod {
     case bolt11Invoice(description: String, amountSats: UInt64?, 
         /**
          * The expiry of the invoice as a duration in seconds
-         */expirySecs: UInt32?
+         */expirySecs: UInt32?, 
+        /**
+         * If set, creates a HODL invoice with this payment hash (hex-encoded).
+         * The payer's HTLC will be held until the preimage is provided via
+         * `claim_htlc_payment` or the HTLC expires.
+         */paymentHash: String?
     )
 }
 
@@ -22160,7 +22353,7 @@ public struct FfiConverterTypeReceivePaymentMethod: FfiConverterRustBuffer {
         
         case 3: return .bitcoinAddress
         
-        case 4: return .bolt11Invoice(description: try FfiConverterString.read(from: &buf), amountSats: try FfiConverterOptionUInt64.read(from: &buf), expirySecs: try FfiConverterOptionUInt32.read(from: &buf)
+        case 4: return .bolt11Invoice(description: try FfiConverterString.read(from: &buf), amountSats: try FfiConverterOptionUInt64.read(from: &buf), expirySecs: try FfiConverterOptionUInt32.read(from: &buf), paymentHash: try FfiConverterOptionString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -22188,11 +22381,12 @@ public struct FfiConverterTypeReceivePaymentMethod: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         
         
-        case let .bolt11Invoice(description,amountSats,expirySecs):
+        case let .bolt11Invoice(description,amountSats,expirySecs,paymentHash):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(description, into: &buf)
             FfiConverterOptionUInt64.write(amountSats, into: &buf)
             FfiConverterOptionUInt32.write(expirySecs, into: &buf)
+            FfiConverterOptionString.write(paymentHash, into: &buf)
             
         }
     }
@@ -24415,6 +24609,30 @@ fileprivate struct FfiConverterOptionTypeSparkInvoicePaymentDetails: FfiConverte
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeSparkInvoicePaymentDetails.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeStableBalanceConfig: FfiConverterRustBuffer {
+    typealias SwiftType = StableBalanceConfig?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStableBalanceConfig.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStableBalanceConfig.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
