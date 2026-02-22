@@ -9417,6 +9417,12 @@ public struct Config {
      * once the balance exceeds the threshold.
      */
     public var stableBalanceConfig: StableBalanceConfig?
+    /**
+     * Maximum number of concurrent transfer claims.
+     *
+     * Default is 4. Increase for server environments with high incoming payment volume.
+     */
+    public var maxConcurrentClaims: UInt32
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -9460,7 +9466,12 @@ public struct Config {
          *
          * When set, received sats will be automatically converted to the specified token
          * once the balance exceeds the threshold.
-         */stableBalanceConfig: StableBalanceConfig?) {
+         */stableBalanceConfig: StableBalanceConfig?, 
+        /**
+         * Maximum number of concurrent transfer claims.
+         *
+         * Default is 4. Increase for server environments with high incoming payment volume.
+         */maxConcurrentClaims: UInt32) {
         self.apiKey = apiKey
         self.network = network
         self.syncIntervalSecs = syncIntervalSecs
@@ -9473,6 +9484,7 @@ public struct Config {
         self.privateEnabledDefault = privateEnabledDefault
         self.optimizationConfig = optimizationConfig
         self.stableBalanceConfig = stableBalanceConfig
+        self.maxConcurrentClaims = maxConcurrentClaims
     }
 }
 
@@ -9516,6 +9528,9 @@ extension Config: Equatable, Hashable {
         if lhs.stableBalanceConfig != rhs.stableBalanceConfig {
             return false
         }
+        if lhs.maxConcurrentClaims != rhs.maxConcurrentClaims {
+            return false
+        }
         return true
     }
 
@@ -9532,6 +9547,7 @@ extension Config: Equatable, Hashable {
         hasher.combine(privateEnabledDefault)
         hasher.combine(optimizationConfig)
         hasher.combine(stableBalanceConfig)
+        hasher.combine(maxConcurrentClaims)
     }
 }
 
@@ -9554,7 +9570,8 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
                 realTimeSyncServerUrl: FfiConverterOptionString.read(from: &buf), 
                 privateEnabledDefault: FfiConverterBool.read(from: &buf), 
                 optimizationConfig: FfiConverterTypeOptimizationConfig.read(from: &buf), 
-                stableBalanceConfig: FfiConverterOptionTypeStableBalanceConfig.read(from: &buf)
+                stableBalanceConfig: FfiConverterOptionTypeStableBalanceConfig.read(from: &buf), 
+                maxConcurrentClaims: FfiConverterUInt32.read(from: &buf)
         )
     }
 
@@ -9571,6 +9588,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
         FfiConverterBool.write(value.privateEnabledDefault, into: &buf)
         FfiConverterTypeOptimizationConfig.write(value.optimizationConfig, into: &buf)
         FfiConverterOptionTypeStableBalanceConfig.write(value.stableBalanceConfig, into: &buf)
+        FfiConverterUInt32.write(value.maxConcurrentClaims, into: &buf)
     }
 }
 
@@ -15132,11 +15150,15 @@ public struct OptimizationConfig {
      */
     public var autoEnabled: Bool
     /**
-     * The desired multiplicity for the leaf set. Acceptable values are 0-5.
+     * The desired multiplicity for the leaf set.
      *
      * Setting this to 0 will optimize for maximizing unilateral exit.
      * Higher values will optimize for minimizing transfer swaps, with higher values
-     * being more aggressive.
+     * being more aggressive and allowing better TPS rates.
+     *
+     * For end-user wallets, values of 1-5 are recommended. Values above 5 are
+     * intended for high-throughput server environments and are not recommended
+     * for end-user wallets due to significantly higher unilateral exit costs.
      *
      * Default value is 1.
      */
@@ -15154,11 +15176,15 @@ public struct OptimizationConfig {
          * Default value is true.
          */autoEnabled: Bool, 
         /**
-         * The desired multiplicity for the leaf set. Acceptable values are 0-5.
+         * The desired multiplicity for the leaf set.
          *
          * Setting this to 0 will optimize for maximizing unilateral exit.
          * Higher values will optimize for minimizing transfer swaps, with higher values
-         * being more aggressive.
+         * being more aggressive and allowing better TPS rates.
+         *
+         * For end-user wallets, values of 1-5 are recommended. Values above 5 are
+         * intended for high-throughput server environments and are not recommended
+         * for end-user wallets due to significantly higher unilateral exit costs.
          *
          * Default value is 1.
          */multiplicity: UInt8) {
