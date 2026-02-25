@@ -4881,6 +4881,14 @@ public protocol SdkBuilderProtocol : AnyObject {
     func withPaymentObserver(paymentObserver: PaymentObserver) async 
     
     /**
+     * Sets `PostgreSQL` storage to be used by the SDK.
+     * The storage instance will be created during `build()`.
+     * Arguments:
+     * - `config`: The `PostgreSQL` storage configuration.
+     */
+    func withPostgresStorage(config: PostgresStorageConfig) async 
+    
+    /**
      * Sets the REST chain service to be used by the SDK.
      * Arguments:
      * - `url`: The base URL of the REST API.
@@ -5122,6 +5130,30 @@ open func withPaymentObserver(paymentObserver: PaymentObserver)async  {
 }
     
     /**
+     * Sets `PostgreSQL` storage to be used by the SDK.
+     * The storage instance will be created during `build()`.
+     * Arguments:
+     * - `config`: The `PostgreSQL` storage configuration.
+     */
+open func withPostgresStorage(config: PostgresStorageConfig)async  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_postgres_storage(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePostgresStorageConfig.lower(config)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
+}
+    
+    /**
      * Sets the REST chain service to be used by the SDK.
      * Arguments:
      * - `url`: The base URL of the REST API.
@@ -5248,7 +5280,7 @@ public protocol Storage : AnyObject {
      *
      * A vector of payments or a `StorageError`
      */
-    func listPayments(request: ListPaymentsRequest) async throws  -> [Payment]
+    func listPayments(request: StorageListPaymentsRequest) async throws  -> [Payment]
     
     /**
      * Inserts a payment into storage
@@ -5523,13 +5555,13 @@ open func setCachedItem(key: String, value: String)async throws  {
      *
      * A vector of payments or a `StorageError`
      */
-open func listPayments(request: ListPaymentsRequest)async throws  -> [Payment] {
+open func listPayments(request: StorageListPaymentsRequest)async throws  -> [Payment] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_storage_list_payments(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeListPaymentsRequest.lower(request)
+                    FfiConverterTypeStorageListPaymentsRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
@@ -6131,7 +6163,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.listPayments(
-                     request: try FfiConverterTypeListPaymentsRequest.lift(request)
+                     request: try FfiConverterTypeStorageListPaymentsRequest.lift(request)
                 )
             }
 
@@ -9423,6 +9455,11 @@ public struct Config {
      * Default is 4. Increase for server environments with high incoming payment volume.
      */
     public var maxConcurrentClaims: UInt32
+    /**
+     * When true, enables LNURL verify support (LUD-21) and zap receipts (NIP-57).
+     * When false (default), these features are disabled for privacy.
+     */
+    public var supportLnurlVerify: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -9471,7 +9508,11 @@ public struct Config {
          * Maximum number of concurrent transfer claims.
          *
          * Default is 4. Increase for server environments with high incoming payment volume.
-         */maxConcurrentClaims: UInt32) {
+         */maxConcurrentClaims: UInt32, 
+        /**
+         * When true, enables LNURL verify support (LUD-21) and zap receipts (NIP-57).
+         * When false (default), these features are disabled for privacy.
+         */supportLnurlVerify: Bool) {
         self.apiKey = apiKey
         self.network = network
         self.syncIntervalSecs = syncIntervalSecs
@@ -9485,6 +9526,7 @@ public struct Config {
         self.optimizationConfig = optimizationConfig
         self.stableBalanceConfig = stableBalanceConfig
         self.maxConcurrentClaims = maxConcurrentClaims
+        self.supportLnurlVerify = supportLnurlVerify
     }
 }
 
@@ -9531,6 +9573,9 @@ extension Config: Equatable, Hashable {
         if lhs.maxConcurrentClaims != rhs.maxConcurrentClaims {
             return false
         }
+        if lhs.supportLnurlVerify != rhs.supportLnurlVerify {
+            return false
+        }
         return true
     }
 
@@ -9548,6 +9593,7 @@ extension Config: Equatable, Hashable {
         hasher.combine(optimizationConfig)
         hasher.combine(stableBalanceConfig)
         hasher.combine(maxConcurrentClaims)
+        hasher.combine(supportLnurlVerify)
     }
 }
 
@@ -9571,7 +9617,8 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
                 privateEnabledDefault: FfiConverterBool.read(from: &buf), 
                 optimizationConfig: FfiConverterTypeOptimizationConfig.read(from: &buf), 
                 stableBalanceConfig: FfiConverterOptionTypeStableBalanceConfig.read(from: &buf), 
-                maxConcurrentClaims: FfiConverterUInt32.read(from: &buf)
+                maxConcurrentClaims: FfiConverterUInt32.read(from: &buf), 
+                supportLnurlVerify: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -9589,6 +9636,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
         FfiConverterTypeOptimizationConfig.write(value.optimizationConfig, into: &buf)
         FfiConverterOptionTypeStableBalanceConfig.write(value.stableBalanceConfig, into: &buf)
         FfiConverterUInt32.write(value.maxConcurrentClaims, into: &buf)
+        FfiConverterBool.write(value.supportLnurlVerify, into: &buf)
     }
 }
 
@@ -17838,14 +17886,16 @@ public struct SetLnurlMetadataItem {
     public var senderComment: String?
     public var nostrZapRequest: String?
     public var nostrZapReceipt: String?
+    public var preimage: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(paymentHash: String, senderComment: String?, nostrZapRequest: String?, nostrZapReceipt: String?) {
+    public init(paymentHash: String, senderComment: String?, nostrZapRequest: String?, nostrZapReceipt: String?, preimage: String?) {
         self.paymentHash = paymentHash
         self.senderComment = senderComment
         self.nostrZapRequest = nostrZapRequest
         self.nostrZapReceipt = nostrZapReceipt
+        self.preimage = preimage
     }
 }
 
@@ -17865,6 +17915,9 @@ extension SetLnurlMetadataItem: Equatable, Hashable {
         if lhs.nostrZapReceipt != rhs.nostrZapReceipt {
             return false
         }
+        if lhs.preimage != rhs.preimage {
+            return false
+        }
         return true
     }
 
@@ -17873,6 +17926,7 @@ extension SetLnurlMetadataItem: Equatable, Hashable {
         hasher.combine(senderComment)
         hasher.combine(nostrZapRequest)
         hasher.combine(nostrZapReceipt)
+        hasher.combine(preimage)
     }
 }
 
@@ -17887,7 +17941,8 @@ public struct FfiConverterTypeSetLnurlMetadataItem: FfiConverterRustBuffer {
                 paymentHash: FfiConverterString.read(from: &buf), 
                 senderComment: FfiConverterOptionString.read(from: &buf), 
                 nostrZapRequest: FfiConverterOptionString.read(from: &buf), 
-                nostrZapReceipt: FfiConverterOptionString.read(from: &buf)
+                nostrZapReceipt: FfiConverterOptionString.read(from: &buf), 
+                preimage: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -17896,6 +17951,7 @@ public struct FfiConverterTypeSetLnurlMetadataItem: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.senderComment, into: &buf)
         FfiConverterOptionString.write(value.nostrZapRequest, into: &buf)
         FfiConverterOptionString.write(value.nostrZapReceipt, into: &buf)
+        FfiConverterOptionString.write(value.preimage, into: &buf)
     }
 }
 
@@ -18860,6 +18916,132 @@ public func FfiConverterTypeStableBalanceConfig_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeStableBalanceConfig_lower(_ value: StableBalanceConfig) -> RustBuffer {
     return FfiConverterTypeStableBalanceConfig.lower(value)
+}
+
+
+/**
+ * Storage-internal variant of [`ListPaymentsRequest`] that uses
+ * [`StoragePaymentDetailsFilter`] instead of the public [`PaymentDetailsFilter`].
+ */
+public struct StorageListPaymentsRequest {
+    public var typeFilter: [PaymentType]?
+    public var statusFilter: [PaymentStatus]?
+    public var assetFilter: AssetFilter?
+    public var paymentDetailsFilter: [StoragePaymentDetailsFilter]?
+    public var fromTimestamp: UInt64?
+    public var toTimestamp: UInt64?
+    public var offset: UInt32?
+    public var limit: UInt32?
+    public var sortAscending: Bool?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(typeFilter: [PaymentType]? = nil, statusFilter: [PaymentStatus]? = nil, assetFilter: AssetFilter? = nil, paymentDetailsFilter: [StoragePaymentDetailsFilter]? = nil, fromTimestamp: UInt64? = nil, toTimestamp: UInt64? = nil, offset: UInt32? = nil, limit: UInt32? = nil, sortAscending: Bool? = nil) {
+        self.typeFilter = typeFilter
+        self.statusFilter = statusFilter
+        self.assetFilter = assetFilter
+        self.paymentDetailsFilter = paymentDetailsFilter
+        self.fromTimestamp = fromTimestamp
+        self.toTimestamp = toTimestamp
+        self.offset = offset
+        self.limit = limit
+        self.sortAscending = sortAscending
+    }
+}
+
+
+
+extension StorageListPaymentsRequest: Equatable, Hashable {
+    public static func ==(lhs: StorageListPaymentsRequest, rhs: StorageListPaymentsRequest) -> Bool {
+        if lhs.typeFilter != rhs.typeFilter {
+            return false
+        }
+        if lhs.statusFilter != rhs.statusFilter {
+            return false
+        }
+        if lhs.assetFilter != rhs.assetFilter {
+            return false
+        }
+        if lhs.paymentDetailsFilter != rhs.paymentDetailsFilter {
+            return false
+        }
+        if lhs.fromTimestamp != rhs.fromTimestamp {
+            return false
+        }
+        if lhs.toTimestamp != rhs.toTimestamp {
+            return false
+        }
+        if lhs.offset != rhs.offset {
+            return false
+        }
+        if lhs.limit != rhs.limit {
+            return false
+        }
+        if lhs.sortAscending != rhs.sortAscending {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(typeFilter)
+        hasher.combine(statusFilter)
+        hasher.combine(assetFilter)
+        hasher.combine(paymentDetailsFilter)
+        hasher.combine(fromTimestamp)
+        hasher.combine(toTimestamp)
+        hasher.combine(offset)
+        hasher.combine(limit)
+        hasher.combine(sortAscending)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStorageListPaymentsRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StorageListPaymentsRequest {
+        return
+            try StorageListPaymentsRequest(
+                typeFilter: FfiConverterOptionSequenceTypePaymentType.read(from: &buf), 
+                statusFilter: FfiConverterOptionSequenceTypePaymentStatus.read(from: &buf), 
+                assetFilter: FfiConverterOptionTypeAssetFilter.read(from: &buf), 
+                paymentDetailsFilter: FfiConverterOptionSequenceTypeStoragePaymentDetailsFilter.read(from: &buf), 
+                fromTimestamp: FfiConverterOptionUInt64.read(from: &buf), 
+                toTimestamp: FfiConverterOptionUInt64.read(from: &buf), 
+                offset: FfiConverterOptionUInt32.read(from: &buf), 
+                limit: FfiConverterOptionUInt32.read(from: &buf), 
+                sortAscending: FfiConverterOptionBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StorageListPaymentsRequest, into buf: inout [UInt8]) {
+        FfiConverterOptionSequenceTypePaymentType.write(value.typeFilter, into: &buf)
+        FfiConverterOptionSequenceTypePaymentStatus.write(value.statusFilter, into: &buf)
+        FfiConverterOptionTypeAssetFilter.write(value.assetFilter, into: &buf)
+        FfiConverterOptionSequenceTypeStoragePaymentDetailsFilter.write(value.paymentDetailsFilter, into: &buf)
+        FfiConverterOptionUInt64.write(value.fromTimestamp, into: &buf)
+        FfiConverterOptionUInt64.write(value.toTimestamp, into: &buf)
+        FfiConverterOptionUInt32.write(value.offset, into: &buf)
+        FfiConverterOptionUInt32.write(value.limit, into: &buf)
+        FfiConverterOptionBool.write(value.sortAscending, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStorageListPaymentsRequest_lift(_ buf: RustBuffer) throws -> StorageListPaymentsRequest {
+    return try FfiConverterTypeStorageListPaymentsRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStorageListPaymentsRequest_lower(_ value: StorageListPaymentsRequest) -> RustBuffer {
+    return FfiConverterTypeStorageListPaymentsRequest.lower(value)
 }
 
 
@@ -23586,6 +23768,95 @@ extension StorageError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Storage-internal variant of [`PaymentDetailsFilter`] that includes the
+ * `has_lnurl_preimage` field on the `Lightning` variant, which is not exposed
+ * in the public API.
+ */
+
+public enum StoragePaymentDetailsFilter {
+    
+    case spark(htlcStatus: [SparkHtlcStatus]?, conversionRefundNeeded: Bool?
+    )
+    case token(conversionRefundNeeded: Bool?, txHash: String?, txType: TokenTransactionType?
+    )
+    case lightning(htlcStatus: [SparkHtlcStatus]?, hasLnurlPreimage: Bool?
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoragePaymentDetailsFilter: FfiConverterRustBuffer {
+    typealias SwiftType = StoragePaymentDetailsFilter
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoragePaymentDetailsFilter {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .spark(htlcStatus: try FfiConverterOptionSequenceTypeSparkHtlcStatus.read(from: &buf), conversionRefundNeeded: try FfiConverterOptionBool.read(from: &buf)
+        )
+        
+        case 2: return .token(conversionRefundNeeded: try FfiConverterOptionBool.read(from: &buf), txHash: try FfiConverterOptionString.read(from: &buf), txType: try FfiConverterOptionTypeTokenTransactionType.read(from: &buf)
+        )
+        
+        case 3: return .lightning(htlcStatus: try FfiConverterOptionSequenceTypeSparkHtlcStatus.read(from: &buf), hasLnurlPreimage: try FfiConverterOptionBool.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: StoragePaymentDetailsFilter, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .spark(htlcStatus,conversionRefundNeeded):
+            writeInt(&buf, Int32(1))
+            FfiConverterOptionSequenceTypeSparkHtlcStatus.write(htlcStatus, into: &buf)
+            FfiConverterOptionBool.write(conversionRefundNeeded, into: &buf)
+            
+        
+        case let .token(conversionRefundNeeded,txHash,txType):
+            writeInt(&buf, Int32(2))
+            FfiConverterOptionBool.write(conversionRefundNeeded, into: &buf)
+            FfiConverterOptionString.write(txHash, into: &buf)
+            FfiConverterOptionTypeTokenTransactionType.write(txType, into: &buf)
+            
+        
+        case let .lightning(htlcStatus,hasLnurlPreimage):
+            writeInt(&buf, Int32(3))
+            FfiConverterOptionSequenceTypeSparkHtlcStatus.write(htlcStatus, into: &buf)
+            FfiConverterOptionBool.write(hasLnurlPreimage, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoragePaymentDetailsFilter_lift(_ buf: RustBuffer) throws -> StoragePaymentDetailsFilter {
+    return try FfiConverterTypeStoragePaymentDetailsFilter.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoragePaymentDetailsFilter_lower(_ value: StoragePaymentDetailsFilter) -> RustBuffer {
+    return FfiConverterTypeStoragePaymentDetailsFilter.lower(value)
+}
+
+
+
+extension StoragePaymentDetailsFilter: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Supported success action types
  *
  * Receiving any other (unsupported) success action type will result in a failed parsing,
@@ -25147,6 +25418,30 @@ fileprivate struct FfiConverterOptionSequenceTypeSparkHtlcStatus: FfiConverterRu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionSequenceTypeStoragePaymentDetailsFilter: FfiConverterRustBuffer {
+    typealias SwiftType = [StoragePaymentDetailsFilter]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceTypeStoragePaymentDetailsFilter.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceTypeStoragePaymentDetailsFilter.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionDictionaryStringString: FfiConverterRustBuffer {
     typealias SwiftType = [String: String]?
 
@@ -25920,6 +26215,31 @@ fileprivate struct FfiConverterSequenceTypeSparkHtlcStatus: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeStoragePaymentDetailsFilter: FfiConverterRustBuffer {
+    typealias SwiftType = [StoragePaymentDetailsFilter]
+
+    public static func write(_ value: [StoragePaymentDetailsFilter], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStoragePaymentDetailsFilter.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StoragePaymentDetailsFilter] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StoragePaymentDetailsFilter]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStoragePaymentDetailsFilter.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterDictionaryStringString: FfiConverterRustBuffer {
     public static func write(_ value: [String: String], into buf: inout [UInt8]) {
         let len = Int32(value.count)
@@ -26211,44 +26531,6 @@ public func connectWithSigner(request: ConnectWithSignerRequest)async throws  ->
             errorHandler: FfiConverterTypeSdkError.lift
         )
 }
-/**
- * Creates a `PostgreSQL` storage instance for use with the SDK builder.
- *
- * Returns a `Storage` trait object backed by the `PostgreSQL` connection pool.
- *
- * # Arguments
- *
- * * `config` - Configuration for the `PostgreSQL` connection pool
- *
- * # Example
- *
- * ```ignore
- * use breez_sdk_core::{create_postgres_storage, default_postgres_storage_config};
- *
- * let storage = create_postgres_storage(default_postgres_storage_config(
- * "host=localhost user=postgres dbname=spark".to_string()
- * )).await?;
- *
- * let sdk = SdkBuilder::new(config, seed)
- * .with_storage(storage)
- * .build()
- * .await?;
- * ```
- */
-public func createPostgresStorage(config: PostgresStorageConfig)async throws  -> Storage {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_func_create_postgres_storage(FfiConverterTypePostgresStorageConfig.lower(config)
-                )
-            },
-            pollFunc: ffi_breez_sdk_spark_rust_future_poll_pointer,
-            completeFunc: ffi_breez_sdk_spark_rust_future_complete_pointer,
-            freeFunc: ffi_breez_sdk_spark_rust_future_free_pointer,
-            liftFunc: FfiConverterTypeStorage.lift,
-            errorHandler: FfiConverterTypeStorageError.lift
-        )
-}
 public func defaultConfig(network: Network) -> Config {
     return try!  FfiConverterTypeConfig.lift(try! rustCall() {
     uniffi_breez_sdk_spark_fn_func_default_config(
@@ -26352,9 +26634,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_connect_with_signer() != 1399) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_breez_sdk_spark_checksum_func_create_postgres_storage() != 17676) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_default_config() != 62194) {
@@ -26597,6 +26876,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_payment_observer() != 21617) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_postgres_storage() != 4625) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_rest_chain_service() != 63155) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26612,7 +26894,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_storage_set_cached_item() != 7970) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_list_payments() != 19728) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_list_payments() != 51078) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_storage_insert_payment() != 28075) {
