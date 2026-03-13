@@ -282,7 +282,7 @@ private func makeRustCall<T, E: Swift.Error>(
     _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T,
     errorHandler: ((RustBuffer) throws -> E)?
 ) throws -> T {
-    uniffiEnsureBreezSdkSparkInitialized()
+    uniffiEnsureInitialized()
     var callStatus = RustCallStatus.init()
     let returnedVal = callback(&callStatus)
     try uniffiCheckCallStatus(callStatus: callStatus, errorHandler: errorHandler)
@@ -353,10 +353,9 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
-    // All mutation happens with this lock held, which is why we implement @unchecked Sendable.
-    private let lock = NSLock()
+fileprivate class UniffiHandleMap<T> {
     private var map: [UInt64: T] = [:]
+    private let lock = NSLock()
     private var currentHandle: UInt64 = 1
 
     func insert(obj: T) -> UInt64 {
@@ -396,13 +395,7 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
 
 
 // Public interface members begin here.
-// Magic number for the Rust proxy to call using the same mechanism as every other method,
-// to free the callback once it's dropped by Rust.
-private let IDX_CALLBACK_FREE: Int32 = 0
-// Callback return codes
-private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
-private let UNIFFI_CALLBACK_ERROR: Int32 = 1
-private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -570,7 +563,7 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 
-public protocol BitcoinChainService: AnyObject, Sendable {
+public protocol BitcoinChainService : AnyObject {
     
     func getAddressUtxos(address: String) async throws  -> [Utxo]
     
@@ -583,7 +576,9 @@ public protocol BitcoinChainService: AnyObject, Sendable {
     func recommendedFees() async throws  -> RecommendedFees
     
 }
-open class BitcoinChainServiceImpl: BitcoinChainService, @unchecked Sendable {
+
+open class BitcoinChainServiceImpl:
+    BitcoinChainService {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -597,9 +592,6 @@ open class BitcoinChainServiceImpl: BitcoinChainService, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -635,7 +627,7 @@ open class BitcoinChainServiceImpl: BitcoinChainService, @unchecked Sendable {
     
 
     
-open func getAddressUtxos(address: String)async throws  -> [Utxo]  {
+open func getAddressUtxos(address: String)async throws  -> [Utxo] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -648,11 +640,11 @@ open func getAddressUtxos(address: String)async throws  -> [Utxo]  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeUtxo.lift,
-            errorHandler: FfiConverterTypeChainServiceError_lift
+            errorHandler: FfiConverterTypeChainServiceError.lift
         )
 }
     
-open func getTransactionStatus(txid: String)async throws  -> TxStatus  {
+open func getTransactionStatus(txid: String)async throws  -> TxStatus {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -664,12 +656,12 @@ open func getTransactionStatus(txid: String)async throws  -> TxStatus  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeTxStatus_lift,
-            errorHandler: FfiConverterTypeChainServiceError_lift
+            liftFunc: FfiConverterTypeTxStatus.lift,
+            errorHandler: FfiConverterTypeChainServiceError.lift
         )
 }
     
-open func getTransactionHex(txid: String)async throws  -> String  {
+open func getTransactionHex(txid: String)async throws  -> String {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -682,11 +674,11 @@ open func getTransactionHex(txid: String)async throws  -> String  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeChainServiceError_lift
+            errorHandler: FfiConverterTypeChainServiceError.lift
         )
 }
     
-open func broadcastTransaction(tx: String)async throws   {
+open func broadcastTransaction(tx: String)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -699,11 +691,11 @@ open func broadcastTransaction(tx: String)async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeChainServiceError_lift
+            errorHandler: FfiConverterTypeChainServiceError.lift
         )
 }
     
-open func recommendedFees()async throws  -> RecommendedFees  {
+open func recommendedFees()async throws  -> RecommendedFees {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -715,24 +707,27 @@ open func recommendedFees()async throws  -> RecommendedFees  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRecommendedFees_lift,
-            errorHandler: FfiConverterTypeChainServiceError_lift
+            liftFunc: FfiConverterTypeRecommendedFees.lift,
+            errorHandler: FfiConverterTypeChainServiceError.lift
         )
 }
     
 
 }
-
+// Magic number for the Rust proxy to call using the same mechanism as every other method,
+// to free the callback once it's dropped by Rust.
+private let IDX_CALLBACK_FREE: Int32 = 0
+// Callback return codes
+private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
+private let UNIFFI_CALLBACK_ERROR: Int32 = 1
+private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
 fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
 
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
-    //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceBitcoinChainService] = [UniffiVTableCallbackInterfaceBitcoinChainService(
+    static var vtable: UniffiVTableCallbackInterfaceBitcoinChainService = UniffiVTableCallbackInterfaceBitcoinChainService(
         getAddressUtxos: { (
             uniffiHandle: UInt64,
             address: RustBuffer,
@@ -772,7 +767,7 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeChainServiceError_lower
+                lowerError: FfiConverterTypeChainServiceError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -797,7 +792,7 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeTxStatus_lower(returnValue),
+                        returnValue: FfiConverterTypeTxStatus.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -815,7 +810,7 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeChainServiceError_lower
+                lowerError: FfiConverterTypeChainServiceError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -858,7 +853,7 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeChainServiceError_lower
+                lowerError: FfiConverterTypeChainServiceError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -899,7 +894,7 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeChainServiceError_lower
+                lowerError: FfiConverterTypeChainServiceError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -922,7 +917,7 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeRecommendedFees_lower(returnValue),
+                        returnValue: FfiConverterTypeRecommendedFees.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -940,7 +935,7 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeChainServiceError_lower
+                lowerError: FfiConverterTypeChainServiceError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -950,19 +945,18 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                 print("Uniffi callback interface BitcoinChainService: handle missing in uniffiFree")
             }
         }
-    )]
+    )
 }
 
 private func uniffiCallbackInitBitcoinChainService() {
-    uniffi_breez_sdk_spark_fn_init_callback_vtable_bitcoinchainservice(UniffiCallbackInterfaceBitcoinChainService.vtable)
+    uniffi_breez_sdk_spark_fn_init_callback_vtable_bitcoinchainservice(&UniffiCallbackInterfaceBitcoinChainService.vtable)
 }
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeBitcoinChainService: FfiConverter {
-    fileprivate static let handleMap = UniffiHandleMap<BitcoinChainService>()
+    fileprivate static var handleMap = UniffiHandleMap<BitcoinChainService>()
 
     typealias FfiType = UnsafeMutableRawPointer
     typealias SwiftType = BitcoinChainService
@@ -997,6 +991,8 @@ public struct FfiConverterTypeBitcoinChainService: FfiConverter {
 }
 
 
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1014,13 +1010,11 @@ public func FfiConverterTypeBitcoinChainService_lower(_ value: BitcoinChainServi
 
 
 
-
-
 /**
  * `BreezSDK` is a wrapper around `SparkSDK` that provides a more structured API
  * with request/response objects and comprehensive error handling.
  */
-public protocol BreezSdkProtocol: AnyObject, Sendable {
+public protocol BreezSdkProtocol : AnyObject {
     
     /**
      * Adds a new contact.
@@ -1312,11 +1306,13 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     func updateUserSettings(request: UpdateUserSettingsRequest) async throws 
     
 }
+
 /**
  * `BreezSDK` is a wrapper around `SparkSDK` that provides a more structured API
  * with request/response objects and comprehensive error handling.
  */
-open class BreezSdk: BreezSdkProtocol, @unchecked Sendable {
+open class BreezSdk:
+    BreezSdkProtocol {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -1330,9 +1326,6 @@ open class BreezSdk: BreezSdkProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -1379,20 +1372,20 @@ open class BreezSdk: BreezSdkProtocol, @unchecked Sendable {
      *
      * The created contact or an error
      */
-open func addContact(request: AddContactRequest)async throws  -> Contact  {
+open func addContact(request: AddContactRequest)async throws  -> Contact {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_add_contact(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeAddContactRequest_lower(request)
+                    FfiConverterTypeAddContactRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeContact_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeContact.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -1407,13 +1400,13 @@ open func addContact(request: AddContactRequest)async throws  -> Contact  {
      *
      * A unique identifier for the listener, which can be used to remove it later
      */
-open func addEventListener(listener: EventListener)async  -> String  {
+open func addEventListener(listener: EventListener)async  -> String {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_add_event_listener(
                     self.uniffiClonePointer(),
-                    FfiConverterCallbackInterfaceEventListener_lower(listener)
+                    FfiConverterCallbackInterfaceEventListener.lower(listener)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
@@ -1440,20 +1433,20 @@ open func addEventListener(listener: EventListener)async  -> String  {
      *
      * A response containing the URL to open in a browser to complete the purchase
      */
-open func buyBitcoin(request: BuyBitcoinRequest)async throws  -> BuyBitcoinResponse  {
+open func buyBitcoin(request: BuyBitcoinRequest)async throws  -> BuyBitcoinResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_buy_bitcoin(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeBuyBitcoinRequest_lower(request)
+                    FfiConverterTypeBuyBitcoinRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBuyBitcoinResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeBuyBitcoinResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -1467,7 +1460,7 @@ open func buyBitcoin(request: BuyBitcoinRequest)async throws  -> BuyBitcoinRespo
      *
      * If no optimization is running, this method returns immediately.
      */
-open func cancelLeafOptimization()async throws   {
+open func cancelLeafOptimization()async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -1480,24 +1473,24 @@ open func cancelLeafOptimization()async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeSdkError_lift
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func checkLightningAddressAvailable(req: CheckLightningAddressRequest)async throws  -> Bool  {
+open func checkLightningAddressAvailable(req: CheckLightningAddressRequest)async throws  -> Bool {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_check_lightning_address_available(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeCheckLightningAddressRequest_lower(req)
+                    FfiConverterTypeCheckLightningAddressRequest.lower(req)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_i8,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_i8,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_i8,
             liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -1506,54 +1499,54 @@ open func checkLightningAddressAvailable(req: CheckLightningAddressRequest)async
      * is SHA256 hashed before verification. The signature can be hex encoded
      * in either DER or compact format.
      */
-open func checkMessage(request: CheckMessageRequest)async throws  -> CheckMessageResponse  {
+open func checkMessage(request: CheckMessageRequest)async throws  -> CheckMessageResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_check_message(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeCheckMessageRequest_lower(request)
+                    FfiConverterTypeCheckMessageRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCheckMessageResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeCheckMessageResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func claimDeposit(request: ClaimDepositRequest)async throws  -> ClaimDepositResponse  {
+open func claimDeposit(request: ClaimDepositRequest)async throws  -> ClaimDepositResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_claim_deposit(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeClaimDepositRequest_lower(request)
+                    FfiConverterTypeClaimDepositRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeClaimDepositResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeClaimDepositResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func claimHtlcPayment(request: ClaimHtlcPaymentRequest)async throws  -> ClaimHtlcPaymentResponse  {
+open func claimHtlcPayment(request: ClaimHtlcPaymentRequest)async throws  -> ClaimHtlcPaymentResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_claim_htlc_payment(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeClaimHtlcPaymentRequest_lower(request)
+                    FfiConverterTypeClaimHtlcPaymentRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeClaimHtlcPaymentResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeClaimHtlcPaymentResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -1568,7 +1561,7 @@ open func claimHtlcPayment(request: ClaimHtlcPaymentRequest)async throws  -> Cla
      *
      * Success or an error
      */
-open func deleteContact(id: String)async throws   {
+open func deleteContact(id: String)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -1581,11 +1574,11 @@ open func deleteContact(id: String)async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeSdkError_lift
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func deleteLightningAddress()async throws   {
+open func deleteLightningAddress()async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -1598,7 +1591,7 @@ open func deleteLightningAddress()async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeSdkError_lift
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -1612,7 +1605,7 @@ open func deleteLightningAddress()async throws   {
      *
      * Result containing either success or an `SdkError` if the background task couldn't be stopped
      */
-open func disconnect()async throws   {
+open func disconnect()async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -1625,58 +1618,58 @@ open func disconnect()async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeSdkError_lift
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func fetchConversionLimits(request: FetchConversionLimitsRequest)async throws  -> FetchConversionLimitsResponse  {
+open func fetchConversionLimits(request: FetchConversionLimitsRequest)async throws  -> FetchConversionLimitsResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_fetch_conversion_limits(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeFetchConversionLimitsRequest_lower(request)
+                    FfiConverterTypeFetchConversionLimitsRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeFetchConversionLimitsResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeFetchConversionLimitsResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
     /**
      * Returns the balance of the wallet in satoshis
      */
-open func getInfo(request: GetInfoRequest)async throws  -> GetInfoResponse  {
+open func getInfo(request: GetInfoRequest)async throws  -> GetInfoResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_get_info(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeGetInfoRequest_lower(request)
+                    FfiConverterTypeGetInfoRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeGetInfoResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeGetInfoResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
     /**
      * Returns the current optimization progress snapshot.
      */
-open func getLeafOptimizationProgress() -> OptimizationProgress  {
-    return try!  FfiConverterTypeOptimizationProgress_lift(try! rustCall() {
+open func getLeafOptimizationProgress() -> OptimizationProgress {
+    return try!  FfiConverterTypeOptimizationProgress.lift(try! rustCall() {
     uniffi_breez_sdk_spark_fn_method_breezsdk_get_leaf_optimization_progress(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func getLightningAddress()async throws  -> LightningAddressInfo?  {
+open func getLightningAddress()async throws  -> LightningAddressInfo? {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -1689,32 +1682,32 @@ open func getLightningAddress()async throws  -> LightningAddressInfo?  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionTypeLightningAddressInfo.lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func getPayment(request: GetPaymentRequest)async throws  -> GetPaymentResponse  {
+open func getPayment(request: GetPaymentRequest)async throws  -> GetPaymentResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_get_payment(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeGetPaymentRequest_lower(request)
+                    FfiConverterTypeGetPaymentRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeGetPaymentResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeGetPaymentResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
     /**
      * Returns an instance of the [`TokenIssuer`] for managing token issuance.
      */
-open func getTokenIssuer() -> TokenIssuer  {
-    return try!  FfiConverterTypeTokenIssuer_lift(try! rustCall() {
+open func getTokenIssuer() -> TokenIssuer {
+    return try!  FfiConverterTypeTokenIssuer.lift(try! rustCall() {
     uniffi_breez_sdk_spark_fn_method_breezsdk_get_token_issuer(self.uniffiClonePointer(),$0
     )
 })
@@ -1728,20 +1721,20 @@ open func getTokenIssuer() -> TokenIssuer  {
      * If the metadata is not found locally in cache, it will be queried from
      * the Spark network and then cached.
      */
-open func getTokensMetadata(request: GetTokensMetadataRequest)async throws  -> GetTokensMetadataResponse  {
+open func getTokensMetadata(request: GetTokensMetadataRequest)async throws  -> GetTokensMetadataResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_get_tokens_metadata(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeGetTokensMetadataRequest_lower(request)
+                    FfiConverterTypeGetTokensMetadataRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeGetTokensMetadataResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeGetTokensMetadataResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -1750,7 +1743,7 @@ open func getTokensMetadata(request: GetTokensMetadataRequest)async throws  -> G
      *
      * Some settings are fetched from the Spark network so network requests are performed.
      */
-open func getUserSettings()async throws  -> UserSettings  {
+open func getUserSettings()async throws  -> UserSettings {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -1762,8 +1755,8 @@ open func getUserSettings()async throws  -> UserSettings  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeUserSettings_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeUserSettings.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -1778,20 +1771,20 @@ open func getUserSettings()async throws  -> UserSettings  {
      *
      * A list of contacts or an error
      */
-open func listContacts(request: ListContactsRequest)async throws  -> [Contact]  {
+open func listContacts(request: ListContactsRequest)async throws  -> [Contact] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_list_contacts(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeListContactsRequest_lower(request)
+                    FfiConverterTypeListContactsRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeContact.lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -1799,7 +1792,7 @@ open func listContacts(request: ListContactsRequest)async throws  -> [Contact]  
      * List fiat currencies for which there is a known exchange rate,
      * sorted by the canonical name of the currency.
      */
-open func listFiatCurrencies()async throws  -> ListFiatCurrenciesResponse  {
+open func listFiatCurrencies()async throws  -> ListFiatCurrenciesResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -1811,15 +1804,15 @@ open func listFiatCurrencies()async throws  -> ListFiatCurrenciesResponse  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeListFiatCurrenciesResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeListFiatCurrenciesResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
     /**
      * List the latest rates of fiat currencies, sorted by name.
      */
-open func listFiatRates()async throws  -> ListFiatRatesResponse  {
+open func listFiatRates()async throws  -> ListFiatRatesResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -1831,8 +1824,8 @@ open func listFiatRates()async throws  -> ListFiatRatesResponse  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeListFiatRatesResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeListFiatRatesResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -1851,37 +1844,37 @@ open func listFiatRates()async throws  -> ListFiatRatesResponse  {
      * * `Ok(ListPaymentsResponse)` - Contains the list of payments if successful
      * * `Err(SdkError)` - If there was an error accessing the storage
      */
-open func listPayments(request: ListPaymentsRequest)async throws  -> ListPaymentsResponse  {
+open func listPayments(request: ListPaymentsRequest)async throws  -> ListPaymentsResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_list_payments(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeListPaymentsRequest_lower(request)
+                    FfiConverterTypeListPaymentsRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeListPaymentsResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeListPaymentsResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func listUnclaimedDeposits(request: ListUnclaimedDepositsRequest)async throws  -> ListUnclaimedDepositsResponse  {
+open func listUnclaimedDeposits(request: ListUnclaimedDepositsRequest)async throws  -> ListUnclaimedDepositsResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_list_unclaimed_deposits(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeListUnclaimedDepositsRequest_lower(request)
+                    FfiConverterTypeListUnclaimedDepositsRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeListUnclaimedDepositsResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeListUnclaimedDepositsResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -1892,37 +1885,37 @@ open func listUnclaimedDeposits(request: ListUnclaimedDepositsRequest)async thro
      * It derives a domain-specific linking key, signs the challenge, and sends the
      * authentication request to the service.
      */
-open func lnurlAuth(requestData: LnurlAuthRequestDetails)async throws  -> LnurlCallbackStatus  {
+open func lnurlAuth(requestData: LnurlAuthRequestDetails)async throws  -> LnurlCallbackStatus {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_lnurl_auth(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeLnurlAuthRequestDetails_lower(requestData)
+                    FfiConverterTypeLnurlAuthRequestDetails.lower(requestData)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeLnurlCallbackStatus_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeLnurlCallbackStatus.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func lnurlPay(request: LnurlPayRequest)async throws  -> LnurlPayResponse  {
+open func lnurlPay(request: LnurlPayRequest)async throws  -> LnurlPayResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_lnurl_pay(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeLnurlPayRequest_lower(request)
+                    FfiConverterTypeLnurlPayRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeLnurlPayResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeLnurlPayResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -1953,24 +1946,24 @@ open func lnurlPay(request: LnurlPayRequest)async throws  -> LnurlPayResponse  {
      * * `LnurlWithdrawResponse` - The payment details if the withdraw request was successful
      * * `SdkError` - If there was an error during the withdraw process
      */
-open func lnurlWithdraw(request: LnurlWithdrawRequest)async throws  -> LnurlWithdrawResponse  {
+open func lnurlWithdraw(request: LnurlWithdrawRequest)async throws  -> LnurlWithdrawResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_lnurl_withdraw(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeLnurlWithdrawRequest_lower(request)
+                    FfiConverterTypeLnurlWithdrawRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeLnurlWithdrawResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeLnurlWithdrawResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func parse(input: String)async throws  -> InputType  {
+open func parse(input: String)async throws  -> InputType {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -1982,66 +1975,66 @@ open func parse(input: String)async throws  -> InputType  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeInputType_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeInputType.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func prepareLnurlPay(request: PrepareLnurlPayRequest)async throws  -> PrepareLnurlPayResponse  {
+open func prepareLnurlPay(request: PrepareLnurlPayRequest)async throws  -> PrepareLnurlPayResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_prepare_lnurl_pay(
                     self.uniffiClonePointer(),
-                    FfiConverterTypePrepareLnurlPayRequest_lower(request)
+                    FfiConverterTypePrepareLnurlPayRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePrepareLnurlPayResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypePrepareLnurlPayResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func prepareSendPayment(request: PrepareSendPaymentRequest)async throws  -> PrepareSendPaymentResponse  {
+open func prepareSendPayment(request: PrepareSendPaymentRequest)async throws  -> PrepareSendPaymentResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_prepare_send_payment(
                     self.uniffiClonePointer(),
-                    FfiConverterTypePrepareSendPaymentRequest_lower(request)
+                    FfiConverterTypePrepareSendPaymentRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePrepareSendPaymentResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypePrepareSendPaymentResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func receivePayment(request: ReceivePaymentRequest)async throws  -> ReceivePaymentResponse  {
+open func receivePayment(request: ReceivePaymentRequest)async throws  -> ReceivePaymentResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_receive_payment(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeReceivePaymentRequest_lower(request)
+                    FfiConverterTypeReceivePaymentRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeReceivePaymentResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeReceivePaymentResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
     /**
      * Get the recommended BTC fees based on the configured chain service.
      */
-open func recommendedFees()async throws  -> RecommendedFees  {
+open func recommendedFees()async throws  -> RecommendedFees {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2053,42 +2046,42 @@ open func recommendedFees()async throws  -> RecommendedFees  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRecommendedFees_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeRecommendedFees.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func refundDeposit(request: RefundDepositRequest)async throws  -> RefundDepositResponse  {
+open func refundDeposit(request: RefundDepositRequest)async throws  -> RefundDepositResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_refund_deposit(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeRefundDepositRequest_lower(request)
+                    FfiConverterTypeRefundDepositRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRefundDepositResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeRefundDepositResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
-open func registerLightningAddress(request: RegisterLightningAddressRequest)async throws  -> LightningAddressInfo  {
+open func registerLightningAddress(request: RegisterLightningAddressRequest)async throws  -> LightningAddressInfo {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_register_lightning_address(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeRegisterLightningAddressRequest_lower(request)
+                    FfiConverterTypeRegisterLightningAddressRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeLightningAddressInfo_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeLightningAddressInfo.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -2103,7 +2096,7 @@ open func registerLightningAddress(request: RegisterLightningAddressRequest)asyn
      *
      * `true` if the listener was found and removed, `false` otherwise
      */
-open func removeEventListener(id: String)async  -> Bool  {
+open func removeEventListener(id: String)async  -> Bool {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2121,20 +2114,20 @@ open func removeEventListener(id: String)async  -> Bool  {
         )
 }
     
-open func sendPayment(request: SendPaymentRequest)async throws  -> SendPaymentResponse  {
+open func sendPayment(request: SendPaymentRequest)async throws  -> SendPaymentResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_send_payment(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeSendPaymentRequest_lower(request)
+                    FfiConverterTypeSendPaymentRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSendPaymentResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeSendPaymentResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -2143,20 +2136,20 @@ open func sendPayment(request: SendPaymentRequest)async throws  -> SendPaymentRe
      * hashed before signing. The returned signature will be hex encoded in
      * DER format by default, or compact format if specified.
      */
-open func signMessage(request: SignMessageRequest)async throws  -> SignMessageResponse  {
+open func signMessage(request: SignMessageRequest)async throws  -> SignMessageResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_sign_message(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeSignMessageRequest_lower(request)
+                    FfiConverterTypeSignMessageRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSignMessageResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeSignMessageResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -2167,7 +2160,7 @@ open func signMessage(request: SignMessageRequest)async throws  -> SignMessageRe
      * immediately. Progress is reported via events.
      * If optimization is already running, no new task will be started.
      */
-open func startLeafOptimization()  {try! rustCall() {
+open func startLeafOptimization() {try! rustCall() {
     uniffi_breez_sdk_spark_fn_method_breezsdk_start_leaf_optimization(self.uniffiClonePointer(),$0
     )
 }
@@ -2176,20 +2169,20 @@ open func startLeafOptimization()  {try! rustCall() {
     /**
      * Synchronizes the wallet with the Spark network
      */
-open func syncWallet(request: SyncWalletRequest)async throws  -> SyncWalletResponse  {
+open func syncWallet(request: SyncWalletRequest)async throws  -> SyncWalletResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_sync_wallet(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeSyncWalletRequest_lower(request)
+                    FfiConverterTypeSyncWalletRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSyncWalletResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeSyncWalletResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -2204,20 +2197,20 @@ open func syncWallet(request: SyncWalletRequest)async throws  -> SyncWalletRespo
      *
      * The updated contact or an error
      */
-open func updateContact(request: UpdateContactRequest)async throws  -> Contact  {
+open func updateContact(request: UpdateContactRequest)async throws  -> Contact {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_update_contact(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeUpdateContactRequest_lower(request)
+                    FfiConverterTypeUpdateContactRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeContact_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeContact.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -2226,26 +2219,25 @@ open func updateContact(request: UpdateContactRequest)async throws  -> Contact  
      *
      * Some settings are updated on the Spark network so network requests may be performed.
      */
-open func updateUserSettings(request: UpdateUserSettingsRequest)async throws   {
+open func updateUserSettings(request: UpdateUserSettingsRequest)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_breezsdk_update_user_settings(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeUpdateUserSettingsRequest_lower(request)
+                    FfiConverterTypeUpdateUserSettingsRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeSdkError_lift
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
 
 }
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2282,6 +2274,8 @@ public struct FfiConverterTypeBreezSdk: FfiConverter {
 }
 
 
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2299,8 +2293,6 @@ public func FfiConverterTypeBreezSdk_lower(_ value: BreezSdk) -> UnsafeMutableRa
 
 
 
-
-
 /**
  * External signer trait that can be implemented by users and passed to the SDK.
  *
@@ -2314,7 +2306,7 @@ public func FfiConverterTypeBreezSdk_lower(_ value: BreezSdk) -> UnsafeMutableRa
  *
  * Errors are returned as `SignerError` for FFI compatibility.
  */
-public protocol ExternalSigner: AnyObject, Sendable {
+public protocol ExternalSigner : AnyObject {
     
     /**
      * Returns the identity public key as 33 bytes (compressed secp256k1 key).
@@ -2581,6 +2573,7 @@ public protocol ExternalSigner: AnyObject, Sendable {
     func aggregateFrost(request: ExternalAggregateFrostRequest) async throws  -> ExternalFrostSignature
     
 }
+
 /**
  * External signer trait that can be implemented by users and passed to the SDK.
  *
@@ -2594,7 +2587,8 @@ public protocol ExternalSigner: AnyObject, Sendable {
  *
  * Errors are returned as `SignerError` for FFI compatibility.
  */
-open class ExternalSignerImpl: ExternalSigner, @unchecked Sendable {
+open class ExternalSignerImpl:
+    ExternalSigner {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -2608,9 +2602,6 @@ open class ExternalSignerImpl: ExternalSigner, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -2651,8 +2642,8 @@ open class ExternalSignerImpl: ExternalSigner, @unchecked Sendable {
      *
      * See also: [JavaScript `getIdentityPublicKey`](https://docs.spark.money/wallets/spark-signer#get-identity-public-key)
      */
-open func identityPublicKey()throws  -> PublicKeyBytes  {
-    return try  FfiConverterTypePublicKeyBytes_lift(try rustCallWithError(FfiConverterTypeSignerError_lift) {
+open func identityPublicKey()throws  -> PublicKeyBytes {
+    return try  FfiConverterTypePublicKeyBytes.lift(try rustCallWithError(FfiConverterTypeSignerError.lift) {
     uniffi_breez_sdk_spark_fn_method_externalsigner_identity_public_key(self.uniffiClonePointer(),$0
     )
 })
@@ -2669,7 +2660,7 @@ open func identityPublicKey()throws  -> PublicKeyBytes  {
      *
      * See also: [JavaScript `getPublicKeyFromDerivation`](https://docs.spark.money/wallets/spark-signer#get-public-key-from-derivation)
      */
-open func derivePublicKey(path: String)async throws  -> PublicKeyBytes  {
+open func derivePublicKey(path: String)async throws  -> PublicKeyBytes {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2681,8 +2672,8 @@ open func derivePublicKey(path: String)async throws  -> PublicKeyBytes  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePublicKeyBytes_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypePublicKeyBytes.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -2698,20 +2689,20 @@ open func derivePublicKey(path: String)async throws  -> PublicKeyBytes  {
      * # Returns
      * 64-byte compact ECDSA signature, or a `SignerError`
      */
-open func signEcdsa(message: MessageBytes, path: String)async throws  -> EcdsaSignatureBytes  {
+open func signEcdsa(message: MessageBytes, path: String)async throws  -> EcdsaSignatureBytes {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_externalsigner_sign_ecdsa(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeMessageBytes_lower(message),FfiConverterString.lower(path)
+                    FfiConverterTypeMessageBytes.lower(message),FfiConverterString.lower(path)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeEcdsaSignatureBytes_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypeEcdsaSignatureBytes.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -2727,20 +2718,20 @@ open func signEcdsa(message: MessageBytes, path: String)async throws  -> EcdsaSi
      * # Returns
      * 65 bytes: recovery ID (31 + `recovery_id`) + 64-byte signature, or a `SignerError`
      */
-open func signEcdsaRecoverable(message: MessageBytes, path: String)async throws  -> RecoverableEcdsaSignatureBytes  {
+open func signEcdsaRecoverable(message: MessageBytes, path: String)async throws  -> RecoverableEcdsaSignatureBytes {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_externalsigner_sign_ecdsa_recoverable(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeMessageBytes_lower(message),FfiConverterString.lower(path)
+                    FfiConverterTypeMessageBytes.lower(message),FfiConverterString.lower(path)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRecoverableEcdsaSignatureBytes_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypeRecoverableEcdsaSignatureBytes.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -2754,7 +2745,7 @@ open func signEcdsaRecoverable(message: MessageBytes, path: String)async throws 
      * # Returns
      * Encrypted data, or a `SignerError`
      */
-open func encryptEcies(message: Data, path: String)async throws  -> Data  {
+open func encryptEcies(message: Data, path: String)async throws  -> Data {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2767,7 +2758,7 @@ open func encryptEcies(message: Data, path: String)async throws  -> Data  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterData.lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -2783,7 +2774,7 @@ open func encryptEcies(message: Data, path: String)async throws  -> Data  {
      *
      * See also: [JavaScript `decryptEcies`](https://docs.spark.money/wallets/spark-signer#decrypt-ecies)
      */
-open func decryptEcies(message: Data, path: String)async throws  -> Data  {
+open func decryptEcies(message: Data, path: String)async throws  -> Data {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2796,7 +2787,7 @@ open func decryptEcies(message: Data, path: String)async throws  -> Data  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterData.lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -2810,7 +2801,7 @@ open func decryptEcies(message: Data, path: String)async throws  -> Data  {
      * # Returns
      * 64-byte Schnorr signature, or a `SignerError`
      */
-open func signHashSchnorr(hash: Data, path: String)async throws  -> SchnorrSignatureBytes  {
+open func signHashSchnorr(hash: Data, path: String)async throws  -> SchnorrSignatureBytes {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2822,8 +2813,8 @@ open func signHashSchnorr(hash: Data, path: String)async throws  -> SchnorrSigna
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSchnorrSignatureBytes_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypeSchnorrSignatureBytes.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -2839,7 +2830,7 @@ open func signHashSchnorr(hash: Data, path: String)async throws  -> SchnorrSigna
      *
      * See also: [JavaScript `htlcHMAC`](https://docs.spark.money/wallets/spark-signer#generate-htlc-hmac)
      */
-open func hmacSha256(message: Data, path: String)async throws  -> HashedMessageBytes  {
+open func hmacSha256(message: Data, path: String)async throws  -> HashedMessageBytes {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2851,8 +2842,8 @@ open func hmacSha256(message: Data, path: String)async throws  -> HashedMessageB
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHashedMessageBytes_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypeHashedMessageBytes.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -2864,7 +2855,7 @@ open func hmacSha256(message: Data, path: String)async throws  -> HashedMessageB
      *
      * See also: [JavaScript `getRandomSigningCommitment`](https://docs.spark.money/wallets/spark-signer#get-random-signing-commitment)
      */
-open func generateRandomSigningCommitment()async throws  -> ExternalFrostCommitments  {
+open func generateRandomSigningCommitment()async throws  -> ExternalFrostCommitments {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2876,8 +2867,8 @@ open func generateRandomSigningCommitment()async throws  -> ExternalFrostCommitm
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeExternalFrostCommitments_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypeExternalFrostCommitments.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -2890,20 +2881,20 @@ open func generateRandomSigningCommitment()async throws  -> ExternalFrostCommitm
      * # Returns
      * The public key for the node, or a `SignerError`
      */
-open func getPublicKeyForNode(id: ExternalTreeNodeId)async throws  -> PublicKeyBytes  {
+open func getPublicKeyForNode(id: ExternalTreeNodeId)async throws  -> PublicKeyBytes {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_externalsigner_get_public_key_for_node(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeExternalTreeNodeId_lower(id)
+                    FfiConverterTypeExternalTreeNodeId.lower(id)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePublicKeyBytes_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypePublicKeyBytes.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -2926,7 +2917,7 @@ open func getPublicKeyForNode(id: ExternalTreeNodeId)async throws  -> PublicKeyB
      *
      * See also: [Key Derivation System](https://docs.spark.money/wallets/spark-signer#the-keyderivation-system)
      */
-open func generateRandomSecret()async throws  -> ExternalEncryptedSecret  {
+open func generateRandomSecret()async throws  -> ExternalEncryptedSecret {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2938,8 +2929,8 @@ open func generateRandomSecret()async throws  -> ExternalEncryptedSecret  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeExternalEncryptedSecret_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypeExternalEncryptedSecret.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -2954,7 +2945,7 @@ open func generateRandomSecret()async throws  -> ExternalEncryptedSecret  {
      *
      * This is the encrypted version of: [JavaScript `getStaticDepositSecretKey`](https://docs.spark.money/wallets/spark-signer#get-static-deposit-secret-key)
      */
-open func staticDepositSecretEncrypted(index: UInt32)async throws  -> ExternalSecretSource  {
+open func staticDepositSecretEncrypted(index: UInt32)async throws  -> ExternalSecretSource {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2966,8 +2957,8 @@ open func staticDepositSecretEncrypted(index: UInt32)async throws  -> ExternalSe
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeExternalSecretSource_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypeExternalSecretSource.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -2982,7 +2973,7 @@ open func staticDepositSecretEncrypted(index: UInt32)async throws  -> ExternalSe
      *
      * See also: [JavaScript `getStaticDepositSecretKey`](https://docs.spark.money/wallets/spark-signer#get-static-deposit-secret-key)
      */
-open func staticDepositSecret(index: UInt32)async throws  -> SecretBytes  {
+open func staticDepositSecret(index: UInt32)async throws  -> SecretBytes {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2994,8 +2985,8 @@ open func staticDepositSecret(index: UInt32)async throws  -> SecretBytes  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSecretBytes_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypeSecretBytes.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -3010,7 +3001,7 @@ open func staticDepositSecret(index: UInt32)async throws  -> SecretBytes  {
      *
      * See also: [JavaScript `getStaticDepositSigningKey`](https://docs.spark.money/wallets/spark-signer#get-static-deposit-signing-key)
      */
-open func staticDepositSigningKey(index: UInt32)async throws  -> PublicKeyBytes  {
+open func staticDepositSigningKey(index: UInt32)async throws  -> PublicKeyBytes {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -3022,8 +3013,8 @@ open func staticDepositSigningKey(index: UInt32)async throws  -> PublicKeyBytes 
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePublicKeyBytes_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypePublicKeyBytes.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -3042,20 +3033,20 @@ open func staticDepositSigningKey(index: UInt32)async throws  -> PublicKeyBytes 
      * See also: [JavaScript `subtractSplitAndEncrypt`](https://docs.spark.money/wallets/spark-signer#subtract,-split,-and-encrypt)
      * (this method provides the subtraction step of that higher-level operation)
      */
-open func subtractSecrets(signingKey: ExternalSecretSource, newSigningKey: ExternalSecretSource)async throws  -> ExternalSecretSource  {
+open func subtractSecrets(signingKey: ExternalSecretSource, newSigningKey: ExternalSecretSource)async throws  -> ExternalSecretSource {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_externalsigner_subtract_secrets(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeExternalSecretSource_lower(signingKey),FfiConverterTypeExternalSecretSource_lower(newSigningKey)
+                    FfiConverterTypeExternalSecretSource.lower(signingKey),FfiConverterTypeExternalSecretSource.lower(newSigningKey)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeExternalSecretSource_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypeExternalSecretSource.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -3072,20 +3063,20 @@ open func subtractSecrets(signingKey: ExternalSecretSource, newSigningKey: Exter
      *
      * See also: [JavaScript `splitSecretWithProofs`](https://docs.spark.money/wallets/spark-signer#split-secret-with-proofs)
      */
-open func splitSecretWithProofs(secret: ExternalSecretToSplit, threshold: UInt32, numShares: UInt32)async throws  -> [ExternalVerifiableSecretShare]  {
+open func splitSecretWithProofs(secret: ExternalSecretToSplit, threshold: UInt32, numShares: UInt32)async throws  -> [ExternalVerifiableSecretShare] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_externalsigner_split_secret_with_proofs(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeExternalSecretToSplit_lower(secret),FfiConverterUInt32.lower(threshold),FfiConverterUInt32.lower(numShares)
+                    FfiConverterTypeExternalSecretToSplit.lower(secret),FfiConverterUInt32.lower(threshold),FfiConverterUInt32.lower(numShares)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeExternalVerifiableSecretShare.lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -3099,20 +3090,20 @@ open func splitSecretWithProofs(secret: ExternalSecretToSplit, threshold: UInt32
      * # Returns
      * Encrypted data for the receiver, or a `SignerError`
      */
-open func encryptSecretForReceiver(encryptedSecret: ExternalEncryptedSecret, receiverPublicKey: PublicKeyBytes)async throws  -> Data  {
+open func encryptSecretForReceiver(encryptedSecret: ExternalEncryptedSecret, receiverPublicKey: PublicKeyBytes)async throws  -> Data {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_externalsigner_encrypt_secret_for_receiver(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeExternalEncryptedSecret_lower(encryptedSecret),FfiConverterTypePublicKeyBytes_lower(receiverPublicKey)
+                    FfiConverterTypeExternalEncryptedSecret.lower(encryptedSecret),FfiConverterTypePublicKeyBytes.lower(receiverPublicKey)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterData.lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -3127,20 +3118,20 @@ open func encryptSecretForReceiver(encryptedSecret: ExternalEncryptedSecret, rec
      *
      * See also: [JavaScript `getPublicKeyFromDerivation`](https://docs.spark.money/wallets/spark-signer#get-public-key-from-derivation)
      */
-open func publicKeyFromSecret(secret: ExternalSecretSource)async throws  -> PublicKeyBytes  {
+open func publicKeyFromSecret(secret: ExternalSecretSource)async throws  -> PublicKeyBytes {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_externalsigner_public_key_from_secret(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeExternalSecretSource_lower(secret)
+                    FfiConverterTypeExternalSecretSource.lower(secret)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePublicKeyBytes_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypePublicKeyBytes.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -3155,20 +3146,20 @@ open func publicKeyFromSecret(secret: ExternalSecretSource)async throws  -> Publ
      *
      * See also: [JavaScript `signFrost`](https://docs.spark.money/wallets/spark-signer#frost-signing)
      */
-open func signFrost(request: ExternalSignFrostRequest)async throws  -> ExternalFrostSignatureShare  {
+open func signFrost(request: ExternalSignFrostRequest)async throws  -> ExternalFrostSignatureShare {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_externalsigner_sign_frost(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeExternalSignFrostRequest_lower(request)
+                    FfiConverterTypeExternalSignFrostRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeExternalFrostSignatureShare_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypeExternalFrostSignatureShare.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -3183,20 +3174,20 @@ open func signFrost(request: ExternalSignFrostRequest)async throws  -> ExternalF
      *
      * See also: [JavaScript `aggregateFrost`](https://docs.spark.money/wallets/spark-signer#aggregate-frost-signatures)
      */
-open func aggregateFrost(request: ExternalAggregateFrostRequest)async throws  -> ExternalFrostSignature  {
+open func aggregateFrost(request: ExternalAggregateFrostRequest)async throws  -> ExternalFrostSignature {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_externalsigner_aggregate_frost(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeExternalAggregateFrostRequest_lower(request)
+                    FfiConverterTypeExternalAggregateFrostRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeExternalFrostSignature_lift,
-            errorHandler: FfiConverterTypeSignerError_lift
+            liftFunc: FfiConverterTypeExternalFrostSignature.lift,
+            errorHandler: FfiConverterTypeSignerError.lift
         )
 }
     
@@ -3209,10 +3200,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
 
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
-    //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceExternalSigner] = [UniffiVTableCallbackInterfaceExternalSigner(
+    static var vtable: UniffiVTableCallbackInterfaceExternalSigner = UniffiVTableCallbackInterfaceExternalSigner(
         identityPublicKey: { (
             uniffiHandle: UInt64,
             uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
@@ -3228,12 +3216,12 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
             }
 
             
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypePublicKeyBytes_lower($0) }
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypePublicKeyBytes.lower($0) }
             uniffiTraitInterfaceCallWithError(
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
                 writeReturn: writeReturn,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
         },
         derivePublicKey: { (
@@ -3257,7 +3245,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypePublicKeyBytes_lower(returnValue),
+                        returnValue: FfiConverterTypePublicKeyBytes.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3275,7 +3263,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3293,7 +3281,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.signEcdsa(
-                     message: try FfiConverterTypeMessageBytes_lift(message),
+                     message: try FfiConverterTypeMessageBytes.lift(message),
                      path: try FfiConverterString.lift(path)
                 )
             }
@@ -3302,7 +3290,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeEcdsaSignatureBytes_lower(returnValue),
+                        returnValue: FfiConverterTypeEcdsaSignatureBytes.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3320,7 +3308,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3338,7 +3326,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.signEcdsaRecoverable(
-                     message: try FfiConverterTypeMessageBytes_lift(message),
+                     message: try FfiConverterTypeMessageBytes.lift(message),
                      path: try FfiConverterString.lift(path)
                 )
             }
@@ -3347,7 +3335,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeRecoverableEcdsaSignatureBytes_lower(returnValue),
+                        returnValue: FfiConverterTypeRecoverableEcdsaSignatureBytes.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3365,7 +3353,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3410,7 +3398,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3455,7 +3443,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3482,7 +3470,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeSchnorrSignatureBytes_lower(returnValue),
+                        returnValue: FfiConverterTypeSchnorrSignatureBytes.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3500,7 +3488,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3527,7 +3515,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeHashedMessageBytes_lower(returnValue),
+                        returnValue: FfiConverterTypeHashedMessageBytes.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3545,7 +3533,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3568,7 +3556,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeExternalFrostCommitments_lower(returnValue),
+                        returnValue: FfiConverterTypeExternalFrostCommitments.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3586,7 +3574,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3603,7 +3591,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.getPublicKeyForNode(
-                     id: try FfiConverterTypeExternalTreeNodeId_lift(id)
+                     id: try FfiConverterTypeExternalTreeNodeId.lift(id)
                 )
             }
 
@@ -3611,7 +3599,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypePublicKeyBytes_lower(returnValue),
+                        returnValue: FfiConverterTypePublicKeyBytes.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3629,7 +3617,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3652,7 +3640,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeExternalEncryptedSecret_lower(returnValue),
+                        returnValue: FfiConverterTypeExternalEncryptedSecret.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3670,7 +3658,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3695,7 +3683,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeExternalSecretSource_lower(returnValue),
+                        returnValue: FfiConverterTypeExternalSecretSource.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3713,7 +3701,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3738,7 +3726,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeSecretBytes_lower(returnValue),
+                        returnValue: FfiConverterTypeSecretBytes.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3756,7 +3744,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3781,7 +3769,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypePublicKeyBytes_lower(returnValue),
+                        returnValue: FfiConverterTypePublicKeyBytes.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3799,7 +3787,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3817,8 +3805,8 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.subtractSecrets(
-                     signingKey: try FfiConverterTypeExternalSecretSource_lift(signingKey),
-                     newSigningKey: try FfiConverterTypeExternalSecretSource_lift(newSigningKey)
+                     signingKey: try FfiConverterTypeExternalSecretSource.lift(signingKey),
+                     newSigningKey: try FfiConverterTypeExternalSecretSource.lift(newSigningKey)
                 )
             }
 
@@ -3826,7 +3814,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeExternalSecretSource_lower(returnValue),
+                        returnValue: FfiConverterTypeExternalSecretSource.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3844,7 +3832,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3863,7 +3851,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.splitSecretWithProofs(
-                     secret: try FfiConverterTypeExternalSecretToSplit_lift(secret),
+                     secret: try FfiConverterTypeExternalSecretToSplit.lift(secret),
                      threshold: try FfiConverterUInt32.lift(threshold),
                      numShares: try FfiConverterUInt32.lift(numShares)
                 )
@@ -3891,7 +3879,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3909,8 +3897,8 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.encryptSecretForReceiver(
-                     encryptedSecret: try FfiConverterTypeExternalEncryptedSecret_lift(encryptedSecret),
-                     receiverPublicKey: try FfiConverterTypePublicKeyBytes_lift(receiverPublicKey)
+                     encryptedSecret: try FfiConverterTypeExternalEncryptedSecret.lift(encryptedSecret),
+                     receiverPublicKey: try FfiConverterTypePublicKeyBytes.lift(receiverPublicKey)
                 )
             }
 
@@ -3936,7 +3924,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3953,7 +3941,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.publicKeyFromSecret(
-                     secret: try FfiConverterTypeExternalSecretSource_lift(secret)
+                     secret: try FfiConverterTypeExternalSecretSource.lift(secret)
                 )
             }
 
@@ -3961,7 +3949,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypePublicKeyBytes_lower(returnValue),
+                        returnValue: FfiConverterTypePublicKeyBytes.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -3979,7 +3967,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -3996,7 +3984,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.signFrost(
-                     request: try FfiConverterTypeExternalSignFrostRequest_lift(request)
+                     request: try FfiConverterTypeExternalSignFrostRequest.lift(request)
                 )
             }
 
@@ -4004,7 +3992,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeExternalFrostSignatureShare_lower(returnValue),
+                        returnValue: FfiConverterTypeExternalFrostSignatureShare.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -4022,7 +4010,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -4039,7 +4027,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.aggregateFrost(
-                     request: try FfiConverterTypeExternalAggregateFrostRequest_lift(request)
+                     request: try FfiConverterTypeExternalAggregateFrostRequest.lift(request)
                 )
             }
 
@@ -4047,7 +4035,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeExternalFrostSignature_lower(returnValue),
+                        returnValue: FfiConverterTypeExternalFrostSignature.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -4065,7 +4053,7 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeSignerError_lower
+                lowerError: FfiConverterTypeSignerError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -4075,19 +4063,18 @@ fileprivate struct UniffiCallbackInterfaceExternalSigner {
                 print("Uniffi callback interface ExternalSigner: handle missing in uniffiFree")
             }
         }
-    )]
+    )
 }
 
 private func uniffiCallbackInitExternalSigner() {
-    uniffi_breez_sdk_spark_fn_init_callback_vtable_externalsigner(UniffiCallbackInterfaceExternalSigner.vtable)
+    uniffi_breez_sdk_spark_fn_init_callback_vtable_externalsigner(&UniffiCallbackInterfaceExternalSigner.vtable)
 }
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeExternalSigner: FfiConverter {
-    fileprivate static let handleMap = UniffiHandleMap<ExternalSigner>()
+    fileprivate static var handleMap = UniffiHandleMap<ExternalSigner>()
 
     typealias FfiType = UnsafeMutableRawPointer
     typealias SwiftType = ExternalSigner
@@ -4122,6 +4109,8 @@ public struct FfiConverterTypeExternalSigner: FfiConverter {
 }
 
 
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4139,12 +4128,10 @@ public func FfiConverterTypeExternalSigner_lower(_ value: ExternalSigner) -> Uns
 
 
 
-
-
 /**
  * Trait covering fiat-related functionality
  */
-public protocol FiatService: AnyObject, Sendable {
+public protocol FiatService : AnyObject {
     
     /**
      * List all supported fiat currencies for which there is a known exchange rate.
@@ -4157,10 +4144,12 @@ public protocol FiatService: AnyObject, Sendable {
     func fetchFiatRates() async throws  -> [Rate]
     
 }
+
 /**
  * Trait covering fiat-related functionality
  */
-open class FiatServiceImpl: FiatService, @unchecked Sendable {
+open class FiatServiceImpl:
+    FiatService {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -4174,9 +4163,6 @@ open class FiatServiceImpl: FiatService, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -4215,7 +4201,7 @@ open class FiatServiceImpl: FiatService, @unchecked Sendable {
     /**
      * List all supported fiat currencies for which there is a known exchange rate.
      */
-open func fetchFiatCurrencies()async throws  -> [FiatCurrency]  {
+open func fetchFiatCurrencies()async throws  -> [FiatCurrency] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4228,14 +4214,14 @@ open func fetchFiatCurrencies()async throws  -> [FiatCurrency]  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeFiatCurrency.lift,
-            errorHandler: FfiConverterTypeServiceConnectivityError_lift
+            errorHandler: FfiConverterTypeServiceConnectivityError.lift
         )
 }
     
     /**
      * Get the live rates from the server.
      */
-open func fetchFiatRates()async throws  -> [Rate]  {
+open func fetchFiatRates()async throws  -> [Rate] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4248,7 +4234,7 @@ open func fetchFiatRates()async throws  -> [Rate]  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeRate.lift,
-            errorHandler: FfiConverterTypeServiceConnectivityError_lift
+            errorHandler: FfiConverterTypeServiceConnectivityError.lift
         )
 }
     
@@ -4261,10 +4247,7 @@ fileprivate struct UniffiCallbackInterfaceFiatService {
 
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
-    //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceFiatService] = [UniffiVTableCallbackInterfaceFiatService(
+    static var vtable: UniffiVTableCallbackInterfaceFiatService = UniffiVTableCallbackInterfaceFiatService(
         fetchFiatCurrencies: { (
             uniffiHandle: UInt64,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
@@ -4302,7 +4285,7 @@ fileprivate struct UniffiCallbackInterfaceFiatService {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeServiceConnectivityError_lower
+                lowerError: FfiConverterTypeServiceConnectivityError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -4343,7 +4326,7 @@ fileprivate struct UniffiCallbackInterfaceFiatService {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeServiceConnectivityError_lower
+                lowerError: FfiConverterTypeServiceConnectivityError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -4353,19 +4336,18 @@ fileprivate struct UniffiCallbackInterfaceFiatService {
                 print("Uniffi callback interface FiatService: handle missing in uniffiFree")
             }
         }
-    )]
+    )
 }
 
 private func uniffiCallbackInitFiatService() {
-    uniffi_breez_sdk_spark_fn_init_callback_vtable_fiatservice(UniffiCallbackInterfaceFiatService.vtable)
+    uniffi_breez_sdk_spark_fn_init_callback_vtable_fiatservice(&UniffiCallbackInterfaceFiatService.vtable)
 }
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeFiatService: FfiConverter {
-    fileprivate static let handleMap = UniffiHandleMap<FiatService>()
+    fileprivate static var handleMap = UniffiHandleMap<FiatService>()
 
     typealias FfiType = UnsafeMutableRawPointer
     typealias SwiftType = FiatService
@@ -4400,6 +4382,8 @@ public struct FfiConverterTypeFiatService: FfiConverter {
 }
 
 
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4417,25 +4401,71 @@ public func FfiConverterTypeFiatService_lower(_ value: FiatService) -> UnsafeMut
 
 
 
-
-
 /**
- * This interface is used to observe outgoing payments before Lightning, Spark and onchain Bitcoin payments.
- * If the implementation returns an error, the payment is cancelled.
+ * Orchestrates passkey-based wallet creation and restore operations.
+ *
+ * This struct coordinates between the platform's passkey PRF provider and
+ * Nostr relays to derive wallet mnemonics and manage wallet names.
+ *
+ * The Nostr identity (derived from the passkey's magic salt) is cached after
+ * the first derivation so that subsequent calls to [`Passkey::list_wallet_names`]
+ * and [`Passkey::store_wallet_name`] do not require additional PRF interactions.
  */
-public protocol PaymentObserver: AnyObject, Sendable {
+public protocol PasskeyProtocol : AnyObject {
     
     /**
-     * Called before Lightning, Spark or onchain Bitcoin payments are made
+     * Derive a wallet for a given wallet name.
+     *
+     * Uses the passkey PRF to derive a 24-word BIP39 mnemonic from the wallet name
+     * and returns it as a [`Wallet`] containing the seed and resolved name.
+     * This works for both creating a new wallet and restoring an existing one.
+     *
+     * # Arguments
+     * * `wallet_name` - A user-chosen wallet name (e.g., "personal", "business").
+     * If `None`, defaults to [`DEFAULT_WALLET_NAME`].
      */
-    func beforeSend(payments: [ProvisionalPayment]) async throws 
+    func getWallet(walletName: String?) async throws  -> Wallet
+    
+    /**
+     * Check if passkey PRF is available on this device.
+     *
+     * Delegates to the platform's `PasskeyPrfProvider` implementation.
+     */
+    func isAvailable() async throws  -> Bool
+    
+    /**
+     * List all wallet names published to Nostr for this passkey's identity.
+     *
+     * Queries Nostr relays for all wallet names associated with the Nostr identity
+     * derived from this passkey. Requires 1 PRF call.
+     */
+    func listWalletNames() async throws  -> [String]
+    
+    /**
+     * Publish a wallet name to Nostr relays for this passkey's identity.
+     *
+     * Idempotent: if the wallet name already exists, it is not published again.
+     * Requires 1 PRF call.
+     *
+     * # Arguments
+     * * `wallet_name` - A user-chosen wallet name (e.g., "personal", "business")
+     */
+    func storeWalletName(walletName: String) async throws 
     
 }
+
 /**
- * This interface is used to observe outgoing payments before Lightning, Spark and onchain Bitcoin payments.
- * If the implementation returns an error, the payment is cancelled.
+ * Orchestrates passkey-based wallet creation and restore operations.
+ *
+ * This struct coordinates between the platform's passkey PRF provider and
+ * Nostr relays to derive wallet mnemonics and manage wallet names.
+ *
+ * The Nostr identity (derived from the passkey's magic salt) is cached after
+ * the first derivation so that subsequent calls to [`Passkey::list_wallet_names`]
+ * and [`Passkey::store_wallet_name`] do not require additional PRF interactions.
  */
-open class PaymentObserverImpl: PaymentObserver, @unchecked Sendable {
+open class Passkey:
+    PasskeyProtocol {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -4449,9 +4479,566 @@ open class PaymentObserverImpl: PaymentObserver, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_passkey(self.pointer, $0) }
+    }
+    /**
+     * Create a new `Passkey` instance.
+     *
+     * # Arguments
+     * * `prf_provider` - Platform implementation of passkey PRF operations
+     * * `relay_config` - Optional configuration for Nostr relay connections (uses default if None)
+     */
+public convenience init(prfProvider: PasskeyPrfProvider, relayConfig: NostrRelayConfig?) {
+    let pointer =
+        try! rustCall() {
+    uniffi_breez_sdk_spark_fn_constructor_passkey_new(
+        FfiConverterTypePasskeyPrfProvider.lower(prfProvider),
+        FfiConverterOptionTypeNostrRelayConfig.lower(relayConfig),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_breez_sdk_spark_fn_free_passkey(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Derive a wallet for a given wallet name.
+     *
+     * Uses the passkey PRF to derive a 24-word BIP39 mnemonic from the wallet name
+     * and returns it as a [`Wallet`] containing the seed and resolved name.
+     * This works for both creating a new wallet and restoring an existing one.
+     *
+     * # Arguments
+     * * `wallet_name` - A user-chosen wallet name (e.g., "personal", "business").
+     * If `None`, defaults to [`DEFAULT_WALLET_NAME`].
+     */
+open func getWallet(walletName: String?)async throws  -> Wallet {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_passkey_get_wallet(
+                    self.uniffiClonePointer(),
+                    FfiConverterOptionString.lower(walletName)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeWallet.lift,
+            errorHandler: FfiConverterTypePasskeyError.lift
+        )
+}
+    
+    /**
+     * Check if passkey PRF is available on this device.
+     *
+     * Delegates to the platform's `PasskeyPrfProvider` implementation.
+     */
+open func isAvailable()async throws  -> Bool {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_passkey_is_available(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_i8,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_i8,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypePasskeyError.lift
+        )
+}
+    
+    /**
+     * List all wallet names published to Nostr for this passkey's identity.
+     *
+     * Queries Nostr relays for all wallet names associated with the Nostr identity
+     * derived from this passkey. Requires 1 PRF call.
+     */
+open func listWalletNames()async throws  -> [String] {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_passkey_list_wallet_names(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypePasskeyError.lift
+        )
+}
+    
+    /**
+     * Publish a wallet name to Nostr relays for this passkey's identity.
+     *
+     * Idempotent: if the wallet name already exists, it is not published again.
+     * Requires 1 PRF call.
+     *
+     * # Arguments
+     * * `wallet_name` - A user-chosen wallet name (e.g., "personal", "business")
+     */
+open func storeWalletName(walletName: String)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_passkey_store_wallet_name(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(walletName)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypePasskeyError.lift
+        )
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskey: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Passkey
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Passkey {
+        return Passkey(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Passkey) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Passkey {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Passkey, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskey_lift(_ pointer: UnsafeMutableRawPointer) throws -> Passkey {
+    return try FfiConverterTypePasskey.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskey_lower(_ value: Passkey) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePasskey.lower(value)
+}
+
+
+
+
+/**
+ * Trait for passkey PRF (Pseudo-Random Function) operations.
+ *
+ * Platforms must implement this trait to provide passkey PRF functionality.
+ * The implementation is responsible for:
+ * - Authenticating the user via platform-specific passkey APIs (`WebAuthn`, native passkey managers)
+ * - Evaluating the PRF extension with the provided salt
+ * - Returning the 32-byte PRF output
+ */
+public protocol PasskeyPrfProvider : AnyObject {
+    
+    /**
+     * Derive a 32-byte seed from passkey PRF with the given salt.
+     *
+     * The platform authenticates the user via passkey and evaluates the PRF extension.
+     * The salt is used as input to the PRF to derive a deterministic output.
+     *
+     * # Arguments
+     * * `salt` - The salt string to use for PRF evaluation
+     *
+     * # Returns
+     * * `Ok(Vec<u8>)` - The 32-byte PRF output
+     * * `Err(PasskeyPrfError)` - If authentication fails or PRF is not supported
+     */
+    func derivePrfSeed(salt: String) async throws  -> Data
+    
+    /**
+     * Check if a PRF-capable passkey is available on this device.
+     *
+     * This allows applications to gracefully degrade if passkey PRF is not supported.
+     *
+     * # Returns
+     * * `Ok(true)` - PRF-capable passkey is available
+     * * `Ok(false)` - No PRF-capable passkey available
+     * * `Err(PasskeyPrfError)` - If the check fails
+     */
+    func isPrfAvailable() async throws  -> Bool
+    
+}
+
+/**
+ * Trait for passkey PRF (Pseudo-Random Function) operations.
+ *
+ * Platforms must implement this trait to provide passkey PRF functionality.
+ * The implementation is responsible for:
+ * - Authenticating the user via platform-specific passkey APIs (`WebAuthn`, native passkey managers)
+ * - Evaluating the PRF extension with the provided salt
+ * - Returning the 32-byte PRF output
+ */
+open class PasskeyPrfProviderImpl:
+    PasskeyPrfProvider {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_passkeyprfprovider(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_breez_sdk_spark_fn_free_passkeyprfprovider(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Derive a 32-byte seed from passkey PRF with the given salt.
+     *
+     * The platform authenticates the user via passkey and evaluates the PRF extension.
+     * The salt is used as input to the PRF to derive a deterministic output.
+     *
+     * # Arguments
+     * * `salt` - The salt string to use for PRF evaluation
+     *
+     * # Returns
+     * * `Ok(Vec<u8>)` - The 32-byte PRF output
+     * * `Err(PasskeyPrfError)` - If authentication fails or PRF is not supported
+     */
+open func derivePrfSeed(salt: String)async throws  -> Data {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_passkeyprfprovider_derive_prf_seed(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(salt)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterData.lift,
+            errorHandler: FfiConverterTypePasskeyPrfError.lift
+        )
+}
+    
+    /**
+     * Check if a PRF-capable passkey is available on this device.
+     *
+     * This allows applications to gracefully degrade if passkey PRF is not supported.
+     *
+     * # Returns
+     * * `Ok(true)` - PRF-capable passkey is available
+     * * `Ok(false)` - No PRF-capable passkey available
+     * * `Err(PasskeyPrfError)` - If the check fails
+     */
+open func isPrfAvailable()async throws  -> Bool {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_passkeyprfprovider_is_prf_available(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_i8,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_i8,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypePasskeyPrfError.lift
+        )
+}
+    
+
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfacePasskeyPrfProvider {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    static var vtable: UniffiVTableCallbackInterfacePasskeyPrfProvider = UniffiVTableCallbackInterfacePasskeyPrfProvider(
+        derivePrfSeed: { (
+            uniffiHandle: UInt64,
+            salt: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> Data in
+                guard let uniffiObj = try? FfiConverterTypePasskeyPrfProvider.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.derivePrfSeed(
+                     salt: try FfiConverterString.lift(salt)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: Data) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterData.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypePasskeyPrfError.lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        isPrfAvailable: { (
+            uniffiHandle: UInt64,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteI8,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> Bool in
+                guard let uniffiObj = try? FfiConverterTypePasskeyPrfProvider.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.isPrfAvailable(
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: Bool) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructI8(
+                        returnValue: FfiConverterBool.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructI8(
+                        returnValue: 0,
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypePasskeyPrfError.lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterTypePasskeyPrfProvider.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface PasskeyPrfProvider: handle missing in uniffiFree")
+            }
+        }
+    )
+}
+
+private func uniffiCallbackInitPasskeyPrfProvider() {
+    uniffi_breez_sdk_spark_fn_init_callback_vtable_passkeyprfprovider(&UniffiCallbackInterfacePasskeyPrfProvider.vtable)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyPrfProvider: FfiConverter {
+    fileprivate static var handleMap = UniffiHandleMap<PasskeyPrfProvider>()
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PasskeyPrfProvider
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PasskeyPrfProvider {
+        return PasskeyPrfProviderImpl(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PasskeyPrfProvider) -> UnsafeMutableRawPointer {
+        guard let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: handleMap.insert(obj: value))) else {
+            fatalError("Cast to UnsafeMutableRawPointer failed")
+        }
+        return ptr
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyPrfProvider {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PasskeyPrfProvider, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyPrfProvider_lift(_ pointer: UnsafeMutableRawPointer) throws -> PasskeyPrfProvider {
+    return try FfiConverterTypePasskeyPrfProvider.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyPrfProvider_lower(_ value: PasskeyPrfProvider) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePasskeyPrfProvider.lower(value)
+}
+
+
+
+
+/**
+ * This interface is used to observe outgoing payments before Lightning, Spark and onchain Bitcoin payments.
+ * If the implementation returns an error, the payment is cancelled.
+ */
+public protocol PaymentObserver : AnyObject {
+    
+    /**
+     * Called before Lightning, Spark or onchain Bitcoin payments are made
+     */
+    func beforeSend(payments: [ProvisionalPayment]) async throws 
+    
+}
+
+/**
+ * This interface is used to observe outgoing payments before Lightning, Spark and onchain Bitcoin payments.
+ * If the implementation returns an error, the payment is cancelled.
+ */
+open class PaymentObserverImpl:
+    PaymentObserver {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -4490,7 +5077,7 @@ open class PaymentObserverImpl: PaymentObserver, @unchecked Sendable {
     /**
      * Called before Lightning, Spark or onchain Bitcoin payments are made
      */
-open func beforeSend(payments: [ProvisionalPayment])async throws   {
+open func beforeSend(payments: [ProvisionalPayment])async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4503,7 +5090,7 @@ open func beforeSend(payments: [ProvisionalPayment])async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypePaymentObserverError_lift
+            errorHandler: FfiConverterTypePaymentObserverError.lift
         )
 }
     
@@ -4516,10 +5103,7 @@ fileprivate struct UniffiCallbackInterfacePaymentObserver {
 
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
-    //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfacePaymentObserver] = [UniffiVTableCallbackInterfacePaymentObserver(
+    static var vtable: UniffiVTableCallbackInterfacePaymentObserver = UniffiVTableCallbackInterfacePaymentObserver(
         beforeSend: { (
             uniffiHandle: UInt64,
             payments: RustBuffer,
@@ -4557,7 +5141,7 @@ fileprivate struct UniffiCallbackInterfacePaymentObserver {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypePaymentObserverError_lower
+                lowerError: FfiConverterTypePaymentObserverError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -4567,19 +5151,18 @@ fileprivate struct UniffiCallbackInterfacePaymentObserver {
                 print("Uniffi callback interface PaymentObserver: handle missing in uniffiFree")
             }
         }
-    )]
+    )
 }
 
 private func uniffiCallbackInitPaymentObserver() {
-    uniffi_breez_sdk_spark_fn_init_callback_vtable_paymentobserver(UniffiCallbackInterfacePaymentObserver.vtable)
+    uniffi_breez_sdk_spark_fn_init_callback_vtable_paymentobserver(&UniffiCallbackInterfacePaymentObserver.vtable)
 }
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypePaymentObserver: FfiConverter {
-    fileprivate static let handleMap = UniffiHandleMap<PaymentObserver>()
+    fileprivate static var handleMap = UniffiHandleMap<PaymentObserver>()
 
     typealias FfiType = UnsafeMutableRawPointer
     typealias SwiftType = PaymentObserver
@@ -4614,6 +5197,8 @@ public struct FfiConverterTypePaymentObserver: FfiConverter {
 }
 
 
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4631,8 +5216,6 @@ public func FfiConverterTypePaymentObserver_lower(_ value: PaymentObserver) -> U
 
 
 
-
-
 /**
  * REST client trait for making HTTP requests.
  *
@@ -4640,7 +5223,7 @@ public func FfiConverterTypePaymentObserver_lower(_ value: PaymentObserver) -> U
  * for use with the SDK. The SDK will use this client for all HTTP operations including
  * LNURL flows and chain service requests.
  */
-public protocol RestClient: AnyObject, Sendable {
+public protocol RestClient : AnyObject {
     
     /**
      * Makes a GET request and logs on DEBUG.
@@ -4669,6 +5252,7 @@ public protocol RestClient: AnyObject, Sendable {
     func deleteRequest(url: String, headers: [String: String]?, body: String?) async throws  -> RestResponse
     
 }
+
 /**
  * REST client trait for making HTTP requests.
  *
@@ -4676,7 +5260,8 @@ public protocol RestClient: AnyObject, Sendable {
  * for use with the SDK. The SDK will use this client for all HTTP operations including
  * LNURL flows and chain service requests.
  */
-open class RestClientImpl: RestClient, @unchecked Sendable {
+open class RestClientImpl:
+    RestClient {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -4690,9 +5275,6 @@ open class RestClientImpl: RestClient, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -4734,7 +5316,7 @@ open class RestClientImpl: RestClient, @unchecked Sendable {
      * - `url`: the URL on which GET will be called
      * - `headers`: optional headers that will be set on the request
      */
-open func getRequest(url: String, headers: [String: String]?)async throws  -> RestResponse  {
+open func getRequest(url: String, headers: [String: String]?)async throws  -> RestResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4746,8 +5328,8 @@ open func getRequest(url: String, headers: [String: String]?)async throws  -> Re
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRestResponse_lift,
-            errorHandler: FfiConverterTypeServiceConnectivityError_lift
+            liftFunc: FfiConverterTypeRestResponse.lift,
+            errorHandler: FfiConverterTypeServiceConnectivityError.lift
         )
 }
     
@@ -4758,7 +5340,7 @@ open func getRequest(url: String, headers: [String: String]?)async throws  -> Re
      * - `headers`: the optional POST headers
      * - `body`: the optional POST body
      */
-open func postRequest(url: String, headers: [String: String]?, body: String?)async throws  -> RestResponse  {
+open func postRequest(url: String, headers: [String: String]?, body: String?)async throws  -> RestResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4770,8 +5352,8 @@ open func postRequest(url: String, headers: [String: String]?, body: String?)asy
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRestResponse_lift,
-            errorHandler: FfiConverterTypeServiceConnectivityError_lift
+            liftFunc: FfiConverterTypeRestResponse.lift,
+            errorHandler: FfiConverterTypeServiceConnectivityError.lift
         )
 }
     
@@ -4782,7 +5364,7 @@ open func postRequest(url: String, headers: [String: String]?, body: String?)asy
      * - `headers`: the optional DELETE headers
      * - `body`: the optional DELETE body
      */
-open func deleteRequest(url: String, headers: [String: String]?, body: String?)async throws  -> RestResponse  {
+open func deleteRequest(url: String, headers: [String: String]?, body: String?)async throws  -> RestResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4794,8 +5376,8 @@ open func deleteRequest(url: String, headers: [String: String]?, body: String?)a
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRestResponse_lift,
-            errorHandler: FfiConverterTypeServiceConnectivityError_lift
+            liftFunc: FfiConverterTypeRestResponse.lift,
+            errorHandler: FfiConverterTypeServiceConnectivityError.lift
         )
 }
     
@@ -4808,10 +5390,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
 
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
-    //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceRestClient] = [UniffiVTableCallbackInterfaceRestClient(
+    static var vtable: UniffiVTableCallbackInterfaceRestClient = UniffiVTableCallbackInterfaceRestClient(
         getRequest: { (
             uniffiHandle: UInt64,
             url: RustBuffer,
@@ -4835,7 +5414,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeRestResponse_lower(returnValue),
+                        returnValue: FfiConverterTypeRestResponse.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -4853,7 +5432,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeServiceConnectivityError_lower
+                lowerError: FfiConverterTypeServiceConnectivityError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -4882,7 +5461,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeRestResponse_lower(returnValue),
+                        returnValue: FfiConverterTypeRestResponse.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -4900,7 +5479,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeServiceConnectivityError_lower
+                lowerError: FfiConverterTypeServiceConnectivityError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -4929,7 +5508,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeRestResponse_lower(returnValue),
+                        returnValue: FfiConverterTypeRestResponse.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -4947,7 +5526,7 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeServiceConnectivityError_lower
+                lowerError: FfiConverterTypeServiceConnectivityError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -4957,19 +5536,18 @@ fileprivate struct UniffiCallbackInterfaceRestClient {
                 print("Uniffi callback interface RestClient: handle missing in uniffiFree")
             }
         }
-    )]
+    )
 }
 
 private func uniffiCallbackInitRestClient() {
-    uniffi_breez_sdk_spark_fn_init_callback_vtable_restclient(UniffiCallbackInterfaceRestClient.vtable)
+    uniffi_breez_sdk_spark_fn_init_callback_vtable_restclient(&UniffiCallbackInterfaceRestClient.vtable)
 }
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeRestClient: FfiConverter {
-    fileprivate static let handleMap = UniffiHandleMap<RestClient>()
+    fileprivate static var handleMap = UniffiHandleMap<RestClient>()
 
     typealias FfiType = UnsafeMutableRawPointer
     typealias SwiftType = RestClient
@@ -5004,6 +5582,8 @@ public struct FfiConverterTypeRestClient: FfiConverter {
 }
 
 
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -5021,12 +5601,10 @@ public func FfiConverterTypeRestClient_lower(_ value: RestClient) -> UnsafeMutab
 
 
 
-
-
 /**
  * Builder for creating `BreezSdk` instances with customizable components.
  */
-public protocol SdkBuilderProtocol: AnyObject, Sendable {
+public protocol SdkBuilderProtocol : AnyObject {
     
     /**
      * Builds the `BreezSdk` instance with the configured components.
@@ -5108,10 +5686,12 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
     func withStorage(storage: Storage) async 
     
 }
+
 /**
  * Builder for creating `BreezSdk` instances with customizable components.
  */
-open class SdkBuilder: SdkBuilderProtocol, @unchecked Sendable {
+open class SdkBuilder:
+    SdkBuilderProtocol {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -5125,9 +5705,6 @@ open class SdkBuilder: SdkBuilderProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -5160,8 +5737,8 @@ public convenience init(config: Config, seed: Seed) {
     let pointer =
         try! rustCall() {
     uniffi_breez_sdk_spark_fn_constructor_sdkbuilder_new(
-        FfiConverterTypeConfig_lower(config),
-        FfiConverterTypeSeed_lower(seed),$0
+        FfiConverterTypeConfig.lower(config),
+        FfiConverterTypeSeed.lower(seed),$0
     )
 }
     self.init(unsafeFromRawPointer: pointer)
@@ -5181,7 +5758,7 @@ public convenience init(config: Config, seed: Seed) {
     /**
      * Builds the `BreezSdk` instance with the configured components.
      */
-open func build()async throws  -> BreezSdk  {
+open func build()async throws  -> BreezSdk {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5193,8 +5770,8 @@ open func build()async throws  -> BreezSdk  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_pointer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_pointer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_pointer,
-            liftFunc: FfiConverterTypeBreezSdk_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeBreezSdk.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -5203,13 +5780,13 @@ open func build()async throws  -> BreezSdk  {
      * Arguments:
      * - `chain_service`: The chain service to be used.
      */
-open func withChainService(chainService: BitcoinChainService)async   {
+open func withChainService(chainService: BitcoinChainService)async  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_chain_service(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeBitcoinChainService_lower(chainService)
+                    FfiConverterTypeBitcoinChainService.lower(chainService)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -5228,7 +5805,7 @@ open func withChainService(chainService: BitcoinChainService)async   {
      * Arguments:
      * - `storage_dir`: The data directory for storage.
      */
-open func withDefaultStorage(storageDir: String)async   {
+open func withDefaultStorage(storageDir: String)async  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5251,13 +5828,13 @@ open func withDefaultStorage(storageDir: String)async   {
      * Arguments:
      * - `fiat_service`: The fiat service to be used.
      */
-open func withFiatService(fiatService: FiatService)async   {
+open func withFiatService(fiatService: FiatService)async  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_fiat_service(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeFiatService_lower(fiatService)
+                    FfiConverterTypeFiatService.lower(fiatService)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -5274,13 +5851,13 @@ open func withFiatService(fiatService: FiatService)async   {
      * Arguments:
      * - `config`: Key set configuration containing the key set type, address index flag, and optional account number.
      */
-open func withKeySet(config: KeySetConfig)async   {
+open func withKeySet(config: KeySetConfig)async  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_key_set(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeKeySetConfig_lower(config)
+                    FfiConverterTypeKeySetConfig.lower(config)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -5292,13 +5869,13 @@ open func withKeySet(config: KeySetConfig)async   {
         )
 }
     
-open func withLnurlClient(lnurlClient: RestClient)async   {
+open func withLnurlClient(lnurlClient: RestClient)async  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_lnurl_client(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeRestClient_lower(lnurlClient)
+                    FfiConverterTypeRestClient.lower(lnurlClient)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -5315,13 +5892,13 @@ open func withLnurlClient(lnurlClient: RestClient)async   {
      * Arguments:
      * - `payment_observer`: The payment observer to be used.
      */
-open func withPaymentObserver(paymentObserver: PaymentObserver)async   {
+open func withPaymentObserver(paymentObserver: PaymentObserver)async  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_payment_observer(
                     self.uniffiClonePointer(),
-                    FfiConverterTypePaymentObserver_lower(paymentObserver)
+                    FfiConverterTypePaymentObserver.lower(paymentObserver)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -5339,13 +5916,13 @@ open func withPaymentObserver(paymentObserver: PaymentObserver)async   {
      * Arguments:
      * - `config`: The `PostgreSQL` storage configuration.
      */
-open func withPostgresStorage(config: PostgresStorageConfig)async   {
+open func withPostgresStorage(config: PostgresStorageConfig)async  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_postgres_storage(
                     self.uniffiClonePointer(),
-                    FfiConverterTypePostgresStorageConfig_lower(config)
+                    FfiConverterTypePostgresStorageConfig.lower(config)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -5366,13 +5943,13 @@ open func withPostgresStorage(config: PostgresStorageConfig)async   {
      * # Arguments
      * - `config`: Configuration for the `PostgreSQL` connection pool.
      */
-open func withPostgresTreeStore(config: PostgresStorageConfig)async   {
+open func withPostgresTreeStore(config: PostgresStorageConfig)async  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_postgres_tree_store(
                     self.uniffiClonePointer(),
-                    FfiConverterTypePostgresStorageConfig_lower(config)
+                    FfiConverterTypePostgresStorageConfig.lower(config)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -5391,13 +5968,13 @@ open func withPostgresTreeStore(config: PostgresStorageConfig)async   {
      * - `api_type`: The API type to be used.
      * - `credentials`: Optional credentials for basic authentication.
      */
-open func withRestChainService(url: String, apiType: ChainApiType, credentials: Credentials?)async   {
+open func withRestChainService(url: String, apiType: ChainApiType, credentials: Credentials?)async  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_rest_chain_service(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(url),FfiConverterTypeChainApiType_lower(apiType),FfiConverterOptionTypeCredentials.lower(credentials)
+                    FfiConverterString.lower(url),FfiConverterTypeChainApiType.lower(apiType),FfiConverterOptionTypeCredentials.lower(credentials)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -5414,13 +5991,13 @@ open func withRestChainService(url: String, apiType: ChainApiType, credentials: 
      * Arguments:
      * - `storage`: The storage implementation to be used.
      */
-open func withStorage(storage: Storage)async   {
+open func withStorage(storage: Storage)async  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_storage(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeStorage_lower(storage)
+                    FfiConverterTypeStorage.lower(storage)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -5434,7 +6011,6 @@ open func withStorage(storage: Storage)async   {
     
 
 }
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -5471,6 +6047,8 @@ public struct FfiConverterTypeSdkBuilder: FfiConverter {
 }
 
 
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -5488,12 +6066,10 @@ public func FfiConverterTypeSdkBuilder_lower(_ value: SdkBuilder) -> UnsafeMutab
 
 
 
-
-
 /**
  * Trait for persistent storage
  */
-public protocol Storage: AnyObject, Sendable {
+public protocol Storage : AnyObject {
     
     func deleteCachedItem(key: String) async throws 
     
@@ -5692,10 +6268,12 @@ public protocol Storage: AnyObject, Sendable {
     func updateRecordFromIncoming(record: Record) async throws 
     
 }
+
 /**
  * Trait for persistent storage
  */
-open class StorageImpl: Storage, @unchecked Sendable {
+open class StorageImpl:
+    Storage {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -5709,9 +6287,6 @@ open class StorageImpl: Storage, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -5747,7 +6322,7 @@ open class StorageImpl: Storage, @unchecked Sendable {
     
 
     
-open func deleteCachedItem(key: String)async throws   {
+open func deleteCachedItem(key: String)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5760,11 +6335,11 @@ open func deleteCachedItem(key: String)async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
-open func getCachedItem(key: String)async throws  -> String?  {
+open func getCachedItem(key: String)async throws  -> String? {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5777,11 +6352,11 @@ open func getCachedItem(key: String)async throws  -> String?  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionString.lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
-open func setCachedItem(key: String, value: String)async throws   {
+open func setCachedItem(key: String, value: String)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5794,7 +6369,7 @@ open func setCachedItem(key: String, value: String)async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -5809,20 +6384,20 @@ open func setCachedItem(key: String, value: String)async throws   {
      *
      * A vector of payments or a `StorageError`
      */
-open func listPayments(request: StorageListPaymentsRequest)async throws  -> [Payment]  {
+open func listPayments(request: StorageListPaymentsRequest)async throws  -> [Payment] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_storage_list_payments(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeStorageListPaymentsRequest_lower(request)
+                    FfiConverterTypeStorageListPaymentsRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypePayment.lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -5837,20 +6412,20 @@ open func listPayments(request: StorageListPaymentsRequest)async throws  -> [Pay
      *
      * Success or a `StorageError`
      */
-open func insertPayment(payment: Payment)async throws   {
+open func insertPayment(payment: Payment)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_storage_insert_payment(
                     self.uniffiClonePointer(),
-                    FfiConverterTypePayment_lower(payment)
+                    FfiConverterTypePayment.lower(payment)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -5866,20 +6441,20 @@ open func insertPayment(payment: Payment)async throws   {
      *
      * Success or a `StorageError`
      */
-open func insertPaymentMetadata(paymentId: String, metadata: PaymentMetadata)async throws   {
+open func insertPaymentMetadata(paymentId: String, metadata: PaymentMetadata)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_storage_insert_payment_metadata(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(paymentId),FfiConverterTypePaymentMetadata_lower(metadata)
+                    FfiConverterString.lower(paymentId),FfiConverterTypePaymentMetadata.lower(metadata)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -5893,7 +6468,7 @@ open func insertPaymentMetadata(paymentId: String, metadata: PaymentMetadata)asy
      *
      * The payment if found or None if not found
      */
-open func getPaymentById(id: String)async throws  -> Payment  {
+open func getPaymentById(id: String)async throws  -> Payment {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5905,8 +6480,8 @@ open func getPaymentById(id: String)async throws  -> Payment  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePayment_lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            liftFunc: FfiConverterTypePayment.lift,
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -5919,7 +6494,7 @@ open func getPaymentById(id: String)async throws  -> Payment  {
      *
      * The payment if found or None if not found
      */
-open func getPaymentByInvoice(invoice: String)async throws  -> Payment?  {
+open func getPaymentByInvoice(invoice: String)async throws  -> Payment? {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5932,7 +6507,7 @@ open func getPaymentByInvoice(invoice: String)async throws  -> Payment?  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionTypePayment.lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -5948,7 +6523,7 @@ open func getPaymentByInvoice(invoice: String)async throws  -> Payment?  {
      *
      * A map of `parent_payment_id` -> Vec<Payment> or a `StorageError`
      */
-open func getPaymentsByParentIds(parentPaymentIds: [String])async throws  -> [String: [Payment]]  {
+open func getPaymentsByParentIds(parentPaymentIds: [String])async throws  -> [String: [Payment]] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5961,7 +6536,7 @@ open func getPaymentsByParentIds(parentPaymentIds: [String])async throws  -> [St
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterDictionaryStringSequenceTypePayment.lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -5977,7 +6552,7 @@ open func getPaymentsByParentIds(parentPaymentIds: [String])async throws  -> [St
      *
      * Success or a `StorageError`
      */
-open func addDeposit(txid: String, vout: UInt32, amountSats: UInt64)async throws   {
+open func addDeposit(txid: String, vout: UInt32, amountSats: UInt64)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5990,7 +6565,7 @@ open func addDeposit(txid: String, vout: UInt32, amountSats: UInt64)async throws
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -6005,7 +6580,7 @@ open func addDeposit(txid: String, vout: UInt32, amountSats: UInt64)async throws
      *
      * Success or a `StorageError`
      */
-open func deleteDeposit(txid: String, vout: UInt32)async throws   {
+open func deleteDeposit(txid: String, vout: UInt32)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -6018,7 +6593,7 @@ open func deleteDeposit(txid: String, vout: UInt32)async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -6028,7 +6603,7 @@ open func deleteDeposit(txid: String, vout: UInt32)async throws   {
      *
      * A vector of `DepositInfo` or a `StorageError`
      */
-open func listDeposits()async throws  -> [DepositInfo]  {
+open func listDeposits()async throws  -> [DepositInfo] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -6041,7 +6616,7 @@ open func listDeposits()async throws  -> [DepositInfo]  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeDepositInfo.lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -6057,24 +6632,24 @@ open func listDeposits()async throws  -> [DepositInfo]  {
      *
      * Success or a `StorageError`
      */
-open func updateDeposit(txid: String, vout: UInt32, payload: UpdateDepositPayload)async throws   {
+open func updateDeposit(txid: String, vout: UInt32, payload: UpdateDepositPayload)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_storage_update_deposit(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(txid),FfiConverterUInt32.lower(vout),FfiConverterTypeUpdateDepositPayload_lower(payload)
+                    FfiConverterString.lower(txid),FfiConverterUInt32.lower(vout),FfiConverterTypeUpdateDepositPayload.lower(payload)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
-open func setLnurlMetadata(metadata: [SetLnurlMetadataItem])async throws   {
+open func setLnurlMetadata(metadata: [SetLnurlMetadataItem])async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -6087,34 +6662,34 @@ open func setLnurlMetadata(metadata: [SetLnurlMetadataItem])async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
     /**
      * Lists contacts from storage with optional pagination
      */
-open func listContacts(request: ListContactsRequest)async throws  -> [Contact]  {
+open func listContacts(request: ListContactsRequest)async throws  -> [Contact] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_storage_list_contacts(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeListContactsRequest_lower(request)
+                    FfiConverterTypeListContactsRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeContact.lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
     /**
      * Gets a single contact by its ID
      */
-open func getContact(id: String)async throws  -> Contact  {
+open func getContact(id: String)async throws  -> Contact {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -6126,8 +6701,8 @@ open func getContact(id: String)async throws  -> Contact  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeContact_lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            liftFunc: FfiConverterTypeContact.lift,
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -6135,27 +6710,27 @@ open func getContact(id: String)async throws  -> Contact  {
      * Inserts or updates a contact in storage (upsert by id).
      * Preserves `created_at` on update.
      */
-open func insertContact(contact: Contact)async throws   {
+open func insertContact(contact: Contact)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_storage_insert_contact(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeContact_lower(contact)
+                    FfiConverterTypeContact.lower(contact)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
     /**
      * Deletes a contact by its ID
      */
-open func deleteContact(id: String)async throws   {
+open func deleteContact(id: String)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -6168,45 +6743,45 @@ open func deleteContact(id: String)async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
-open func addOutgoingChange(record: UnversionedRecordChange)async throws  -> UInt64  {
+open func addOutgoingChange(record: UnversionedRecordChange)async throws  -> UInt64 {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_storage_add_outgoing_change(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeUnversionedRecordChange_lower(record)
+                    FfiConverterTypeUnversionedRecordChange.lower(record)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_u64,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_u64,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_u64,
             liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
-open func completeOutgoingSync(record: Record, localRevision: UInt64)async throws   {
+open func completeOutgoingSync(record: Record, localRevision: UInt64)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_storage_complete_outgoing_sync(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeRecord_lower(record),FfiConverterUInt64.lower(localRevision)
+                    FfiConverterTypeRecord.lower(record),FfiConverterUInt64.lower(localRevision)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
-open func getPendingOutgoingChanges(limit: UInt32)async throws  -> [OutgoingChange]  {
+open func getPendingOutgoingChanges(limit: UInt32)async throws  -> [OutgoingChange] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -6219,7 +6794,7 @@ open func getPendingOutgoingChanges(limit: UInt32)async throws  -> [OutgoingChan
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeOutgoingChange.lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -6231,7 +6806,7 @@ open func getPendingOutgoingChanges(limit: UInt32)async throws  -> [OutgoingChan
      * pending outgoing queue ids. This value is used by the sync protocol to
      * request changes from the server.
      */
-open func getLastRevision()async throws  -> UInt64  {
+open func getLastRevision()async throws  -> UInt64 {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -6244,14 +6819,14 @@ open func getLastRevision()async throws  -> UInt64  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_u64,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_u64,
             liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
     /**
      * Insert incoming records from remote sync
      */
-open func insertIncomingRecords(records: [Record])async throws   {
+open func insertIncomingRecords(records: [Record])async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -6264,34 +6839,34 @@ open func insertIncomingRecords(records: [Record])async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
     /**
      * Delete an incoming record after it has been processed
      */
-open func deleteIncomingRecord(record: Record)async throws   {
+open func deleteIncomingRecord(record: Record)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_storage_delete_incoming_record(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeRecord_lower(record)
+                    FfiConverterTypeRecord.lower(record)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
     /**
      * Get incoming records that need to be processed, up to the specified limit
      */
-open func getIncomingRecords(limit: UInt32)async throws  -> [IncomingChange]  {
+open func getIncomingRecords(limit: UInt32)async throws  -> [IncomingChange] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -6304,14 +6879,14 @@ open func getIncomingRecords(limit: UInt32)async throws  -> [IncomingChange]  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeIncomingChange.lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
     /**
      * Get the latest outgoing record if any exists
      */
-open func getLatestOutgoingChange()async throws  -> OutgoingChange?  {
+open func getLatestOutgoingChange()async throws  -> OutgoingChange? {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -6324,27 +6899,27 @@ open func getLatestOutgoingChange()async throws  -> OutgoingChange?  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionTypeOutgoingChange.lift,
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
     /**
      * Update the sync state record from an incoming record
      */
-open func updateRecordFromIncoming(record: Record)async throws   {
+open func updateRecordFromIncoming(record: Record)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_storage_update_record_from_incoming(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeRecord_lower(record)
+                    FfiConverterTypeRecord.lower(record)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeStorageError_lift
+            errorHandler: FfiConverterTypeStorageError.lift
         )
 }
     
@@ -6357,10 +6932,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
 
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
-    //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceStorage] = [UniffiVTableCallbackInterfaceStorage(
+    static var vtable: UniffiVTableCallbackInterfaceStorage = UniffiVTableCallbackInterfaceStorage(
         deleteCachedItem: { (
             uniffiHandle: UInt64,
             key: RustBuffer,
@@ -6398,7 +6970,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6441,7 +7013,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6484,7 +7056,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6501,7 +7073,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.listPayments(
-                     request: try FfiConverterTypeStorageListPaymentsRequest_lift(request)
+                     request: try FfiConverterTypeStorageListPaymentsRequest.lift(request)
                 )
             }
 
@@ -6527,7 +7099,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6544,7 +7116,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.insertPayment(
-                     payment: try FfiConverterTypePayment_lift(payment)
+                     payment: try FfiConverterTypePayment.lift(payment)
                 )
             }
 
@@ -6568,7 +7140,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6587,7 +7159,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 }
                 return try await uniffiObj.insertPaymentMetadata(
                      paymentId: try FfiConverterString.lift(paymentId),
-                     metadata: try FfiConverterTypePaymentMetadata_lift(metadata)
+                     metadata: try FfiConverterTypePaymentMetadata.lift(metadata)
                 )
             }
 
@@ -6611,7 +7183,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6636,7 +7208,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypePayment_lower(returnValue),
+                        returnValue: FfiConverterTypePayment.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -6654,7 +7226,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6697,7 +7269,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6740,7 +7312,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6785,7 +7357,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6828,7 +7400,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6869,7 +7441,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6890,7 +7462,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 return try await uniffiObj.updateDeposit(
                      txid: try FfiConverterString.lift(txid),
                      vout: try FfiConverterUInt32.lift(vout),
-                     payload: try FfiConverterTypeUpdateDepositPayload_lift(payload)
+                     payload: try FfiConverterTypeUpdateDepositPayload.lift(payload)
                 )
             }
 
@@ -6914,7 +7486,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6955,7 +7527,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -6972,7 +7544,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.listContacts(
-                     request: try FfiConverterTypeListContactsRequest_lift(request)
+                     request: try FfiConverterTypeListContactsRequest.lift(request)
                 )
             }
 
@@ -6998,7 +7570,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7023,7 +7595,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypeContact_lower(returnValue),
+                        returnValue: FfiConverterTypeContact.lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -7041,7 +7613,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7058,7 +7630,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.insertContact(
-                     contact: try FfiConverterTypeContact_lift(contact)
+                     contact: try FfiConverterTypeContact.lift(contact)
                 )
             }
 
@@ -7082,7 +7654,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7123,7 +7695,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7140,7 +7712,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.addOutgoingChange(
-                     record: try FfiConverterTypeUnversionedRecordChange_lift(record)
+                     record: try FfiConverterTypeUnversionedRecordChange.lift(record)
                 )
             }
 
@@ -7166,7 +7738,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7184,7 +7756,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.completeOutgoingSync(
-                     record: try FfiConverterTypeRecord_lift(record),
+                     record: try FfiConverterTypeRecord.lift(record),
                      localRevision: try FfiConverterUInt64.lift(localRevision)
                 )
             }
@@ -7209,7 +7781,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7252,7 +7824,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7293,7 +7865,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7334,7 +7906,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7351,7 +7923,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.deleteIncomingRecord(
-                     record: try FfiConverterTypeRecord_lift(record)
+                     record: try FfiConverterTypeRecord.lift(record)
                 )
             }
 
@@ -7375,7 +7947,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7418,7 +7990,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7459,7 +8031,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7476,7 +8048,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.updateRecordFromIncoming(
-                     record: try FfiConverterTypeRecord_lift(record)
+                     record: try FfiConverterTypeRecord.lift(record)
                 )
             }
 
@@ -7500,7 +8072,7 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 makeCall: makeCall,
                 handleSuccess: uniffiHandleSuccess,
                 handleError: uniffiHandleError,
-                lowerError: FfiConverterTypeStorageError_lower
+                lowerError: FfiConverterTypeStorageError.lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
         },
@@ -7510,19 +8082,18 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 print("Uniffi callback interface Storage: handle missing in uniffiFree")
             }
         }
-    )]
+    )
 }
 
 private func uniffiCallbackInitStorage() {
-    uniffi_breez_sdk_spark_fn_init_callback_vtable_storage(UniffiCallbackInterfaceStorage.vtable)
+    uniffi_breez_sdk_spark_fn_init_callback_vtable_storage(&UniffiCallbackInterfaceStorage.vtable)
 }
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeStorage: FfiConverter {
-    fileprivate static let handleMap = UniffiHandleMap<Storage>()
+    fileprivate static var handleMap = UniffiHandleMap<Storage>()
 
     typealias FfiType = UnsafeMutableRawPointer
     typealias SwiftType = Storage
@@ -7557,6 +8128,8 @@ public struct FfiConverterTypeStorage: FfiConverter {
 }
 
 
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -7574,9 +8147,7 @@ public func FfiConverterTypeStorage_lower(_ value: Storage) -> UnsafeMutableRawP
 
 
 
-
-
-public protocol TokenIssuerProtocol: AnyObject, Sendable {
+public protocol TokenIssuerProtocol : AnyObject {
     
     /**
      * Burns supply of the issuer token
@@ -7676,7 +8247,9 @@ public protocol TokenIssuerProtocol: AnyObject, Sendable {
     func unfreezeIssuerToken(request: UnfreezeIssuerTokenRequest) async throws  -> UnfreezeIssuerTokenResponse
     
 }
-open class TokenIssuer: TokenIssuerProtocol, @unchecked Sendable {
+
+open class TokenIssuer:
+    TokenIssuerProtocol {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -7690,9 +8263,6 @@ open class TokenIssuer: TokenIssuerProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -7741,20 +8311,20 @@ open class TokenIssuer: TokenIssuerProtocol, @unchecked Sendable {
      * * `Payment` - The payment representing the burn transaction
      * * `SdkError` - If there was an error during the burn process
      */
-open func burnIssuerToken(request: BurnIssuerTokenRequest)async throws  -> Payment  {
+open func burnIssuerToken(request: BurnIssuerTokenRequest)async throws  -> Payment {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_tokenissuer_burn_issuer_token(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeBurnIssuerTokenRequest_lower(request)
+                    FfiConverterTypeBurnIssuerTokenRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePayment_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypePayment.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -7771,20 +8341,20 @@ open func burnIssuerToken(request: BurnIssuerTokenRequest)async throws  -> Payme
      * * `TokenMetadata` - The metadata of the created token
      * * `SdkError` - If there was an error during the token creation
      */
-open func createIssuerToken(request: CreateIssuerTokenRequest)async throws  -> TokenMetadata  {
+open func createIssuerToken(request: CreateIssuerTokenRequest)async throws  -> TokenMetadata {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_tokenissuer_create_issuer_token(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeCreateIssuerTokenRequest_lower(request)
+                    FfiConverterTypeCreateIssuerTokenRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeTokenMetadata_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeTokenMetadata.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -7801,20 +8371,20 @@ open func createIssuerToken(request: CreateIssuerTokenRequest)async throws  -> T
      * * `FreezeIssuerTokenResponse` - The response containing details of the freeze operation
      * * `SdkError` - If there was an error during the freeze process
      */
-open func freezeIssuerToken(request: FreezeIssuerTokenRequest)async throws  -> FreezeIssuerTokenResponse  {
+open func freezeIssuerToken(request: FreezeIssuerTokenRequest)async throws  -> FreezeIssuerTokenResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_tokenissuer_freeze_issuer_token(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeFreezeIssuerTokenRequest_lower(request)
+                    FfiConverterTypeFreezeIssuerTokenRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeFreezeIssuerTokenResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeFreezeIssuerTokenResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -7827,7 +8397,7 @@ open func freezeIssuerToken(request: FreezeIssuerTokenRequest)async throws  -> F
      * * `TokenBalance` - The balance of the issuer token
      * * `SdkError` - If there was an error during the retrieval or no issuer token exists
      */
-open func getIssuerTokenBalance()async throws  -> TokenBalance  {
+open func getIssuerTokenBalance()async throws  -> TokenBalance {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -7839,8 +8409,8 @@ open func getIssuerTokenBalance()async throws  -> TokenBalance  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeTokenBalance_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeTokenBalance.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -7853,7 +8423,7 @@ open func getIssuerTokenBalance()async throws  -> TokenBalance  {
      * * `TokenMetadata` - The metadata of the issuer token
      * * `SdkError` - If there was an error during the retrieval or no issuer token exists
      */
-open func getIssuerTokenMetadata()async throws  -> TokenMetadata  {
+open func getIssuerTokenMetadata()async throws  -> TokenMetadata {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -7865,8 +8435,8 @@ open func getIssuerTokenMetadata()async throws  -> TokenMetadata  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeTokenMetadata_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeTokenMetadata.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -7883,20 +8453,20 @@ open func getIssuerTokenMetadata()async throws  -> TokenMetadata  {
      * * `Payment` - The payment representing the minting transaction
      * * `SdkError` - If there was an error during the minting process
      */
-open func mintIssuerToken(request: MintIssuerTokenRequest)async throws  -> Payment  {
+open func mintIssuerToken(request: MintIssuerTokenRequest)async throws  -> Payment {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_tokenissuer_mint_issuer_token(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeMintIssuerTokenRequest_lower(request)
+                    FfiConverterTypeMintIssuerTokenRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePayment_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypePayment.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
@@ -7913,26 +8483,25 @@ open func mintIssuerToken(request: MintIssuerTokenRequest)async throws  -> Payme
      * * `UnfreezeIssuerTokenResponse` - The response containing details of the unfreeze operation
      * * `SdkError` - If there was an error during the unfreeze process
      */
-open func unfreezeIssuerToken(request: UnfreezeIssuerTokenRequest)async throws  -> UnfreezeIssuerTokenResponse  {
+open func unfreezeIssuerToken(request: UnfreezeIssuerTokenRequest)async throws  -> UnfreezeIssuerTokenResponse {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_tokenissuer_unfreeze_issuer_token(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeUnfreezeIssuerTokenRequest_lower(request)
+                    FfiConverterTypeUnfreezeIssuerTokenRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeUnfreezeIssuerTokenResponse_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeUnfreezeIssuerTokenResponse.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
     
 
 }
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -7969,6 +8538,8 @@ public struct FfiConverterTypeTokenIssuer: FfiConverter {
 }
 
 
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -7982,8 +8553,6 @@ public func FfiConverterTypeTokenIssuer_lift(_ pointer: UnsafeMutableRawPointer)
 public func FfiConverterTypeTokenIssuer_lower(_ value: TokenIssuer) -> UnsafeMutableRawPointer {
     return FfiConverterTypeTokenIssuer.lower(value)
 }
-
-
 
 
 /**
@@ -8007,9 +8576,6 @@ public struct AddContactRequest {
     }
 }
 
-#if compiler(>=6)
-extension AddContactRequest: Sendable {}
-#endif
 
 
 extension AddContactRequest: Equatable, Hashable {
@@ -8028,7 +8594,6 @@ extension AddContactRequest: Equatable, Hashable {
         hasher.combine(paymentIdentifier)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -8102,9 +8667,6 @@ public struct AesSuccessActionData {
     }
 }
 
-#if compiler(>=6)
-extension AesSuccessActionData: Sendable {}
-#endif
 
 
 extension AesSuccessActionData: Equatable, Hashable {
@@ -8127,7 +8689,6 @@ extension AesSuccessActionData: Equatable, Hashable {
         hasher.combine(iv)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -8193,9 +8754,6 @@ public struct AesSuccessActionDataDecrypted {
     }
 }
 
-#if compiler(>=6)
-extension AesSuccessActionDataDecrypted: Sendable {}
-#endif
 
 
 extension AesSuccessActionDataDecrypted: Equatable, Hashable {
@@ -8214,7 +8772,6 @@ extension AesSuccessActionDataDecrypted: Equatable, Hashable {
         hasher.combine(plaintext)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -8273,9 +8830,6 @@ public struct Bip21Details {
     }
 }
 
-#if compiler(>=6)
-extension Bip21Details: Sendable {}
-#endif
 
 
 extension Bip21Details: Equatable, Hashable {
@@ -8314,7 +8868,6 @@ extension Bip21Details: Equatable, Hashable {
         hasher.combine(paymentMethods)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -8373,9 +8926,6 @@ public struct Bip21Extra {
     }
 }
 
-#if compiler(>=6)
-extension Bip21Extra: Sendable {}
-#endif
 
 
 extension Bip21Extra: Equatable, Hashable {
@@ -8394,7 +8944,6 @@ extension Bip21Extra: Equatable, Hashable {
         hasher.combine(value)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -8445,9 +8994,6 @@ public struct BitcoinAddressDetails {
     }
 }
 
-#if compiler(>=6)
-extension BitcoinAddressDetails: Sendable {}
-#endif
 
 
 extension BitcoinAddressDetails: Equatable, Hashable {
@@ -8470,7 +9016,6 @@ extension BitcoinAddressDetails: Equatable, Hashable {
         hasher.combine(source)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -8521,9 +9066,6 @@ public struct Bolt11Invoice {
     }
 }
 
-#if compiler(>=6)
-extension Bolt11Invoice: Sendable {}
-#endif
 
 
 extension Bolt11Invoice: Equatable, Hashable {
@@ -8542,7 +9084,6 @@ extension Bolt11Invoice: Equatable, Hashable {
         hasher.combine(source)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -8611,9 +9152,6 @@ public struct Bolt11InvoiceDetails {
     }
 }
 
-#if compiler(>=6)
-extension Bolt11InvoiceDetails: Sendable {}
-#endif
 
 
 extension Bolt11InvoiceDetails: Equatable, Hashable {
@@ -8672,7 +9210,6 @@ extension Bolt11InvoiceDetails: Equatable, Hashable {
         hasher.combine(timestamp)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -8739,9 +9276,6 @@ public struct Bolt11RouteHint {
     }
 }
 
-#if compiler(>=6)
-extension Bolt11RouteHint: Sendable {}
-#endif
 
 
 extension Bolt11RouteHint: Equatable, Hashable {
@@ -8756,7 +9290,6 @@ extension Bolt11RouteHint: Equatable, Hashable {
         hasher.combine(hops)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -8849,9 +9382,6 @@ public struct Bolt11RouteHintHop {
     }
 }
 
-#if compiler(>=6)
-extension Bolt11RouteHintHop: Sendable {}
-#endif
 
 
 extension Bolt11RouteHintHop: Equatable, Hashable {
@@ -8890,7 +9420,6 @@ extension Bolt11RouteHintHop: Equatable, Hashable {
         hasher.combine(htlcMaximumMsat)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -8949,9 +9478,6 @@ public struct Bolt12Invoice {
     }
 }
 
-#if compiler(>=6)
-extension Bolt12Invoice: Sendable {}
-#endif
 
 
 extension Bolt12Invoice: Equatable, Hashable {
@@ -8970,7 +9496,6 @@ extension Bolt12Invoice: Equatable, Hashable {
         hasher.combine(source)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9019,9 +9544,6 @@ public struct Bolt12InvoiceDetails {
     }
 }
 
-#if compiler(>=6)
-extension Bolt12InvoiceDetails: Sendable {}
-#endif
 
 
 extension Bolt12InvoiceDetails: Equatable, Hashable {
@@ -9040,7 +9562,6 @@ extension Bolt12InvoiceDetails: Equatable, Hashable {
         hasher.combine(invoice)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9085,9 +9606,6 @@ public struct Bolt12InvoiceRequestDetails {
     }
 }
 
-#if compiler(>=6)
-extension Bolt12InvoiceRequestDetails: Sendable {}
-#endif
 
 
 extension Bolt12InvoiceRequestDetails: Equatable, Hashable {
@@ -9098,7 +9616,6 @@ extension Bolt12InvoiceRequestDetails: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9142,9 +9659,6 @@ public struct Bolt12Offer {
     }
 }
 
-#if compiler(>=6)
-extension Bolt12Offer: Sendable {}
-#endif
 
 
 extension Bolt12Offer: Equatable, Hashable {
@@ -9163,7 +9677,6 @@ extension Bolt12Offer: Equatable, Hashable {
         hasher.combine(source)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9210,9 +9723,6 @@ public struct Bolt12OfferBlindedPath {
     }
 }
 
-#if compiler(>=6)
-extension Bolt12OfferBlindedPath: Sendable {}
-#endif
 
 
 extension Bolt12OfferBlindedPath: Equatable, Hashable {
@@ -9227,7 +9737,6 @@ extension Bolt12OfferBlindedPath: Equatable, Hashable {
         hasher.combine(blindedHops)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9286,9 +9795,6 @@ public struct Bolt12OfferDetails {
     }
 }
 
-#if compiler(>=6)
-extension Bolt12OfferDetails: Sendable {}
-#endif
 
 
 extension Bolt12OfferDetails: Equatable, Hashable {
@@ -9331,7 +9837,6 @@ extension Bolt12OfferDetails: Equatable, Hashable {
         hasher.combine(signingPubkey)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9390,9 +9895,6 @@ public struct BurnIssuerTokenRequest {
     }
 }
 
-#if compiler(>=6)
-extension BurnIssuerTokenRequest: Sendable {}
-#endif
 
 
 extension BurnIssuerTokenRequest: Equatable, Hashable {
@@ -9407,7 +9909,6 @@ extension BurnIssuerTokenRequest: Equatable, Hashable {
         hasher.combine(amount)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9471,9 +9972,6 @@ public struct BuyBitcoinRequest {
     }
 }
 
-#if compiler(>=6)
-extension BuyBitcoinRequest: Sendable {}
-#endif
 
 
 extension BuyBitcoinRequest: Equatable, Hashable {
@@ -9492,7 +9990,6 @@ extension BuyBitcoinRequest: Equatable, Hashable {
         hasher.combine(redirectUrl)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9548,9 +10045,6 @@ public struct BuyBitcoinResponse {
     }
 }
 
-#if compiler(>=6)
-extension BuyBitcoinResponse: Sendable {}
-#endif
 
 
 extension BuyBitcoinResponse: Equatable, Hashable {
@@ -9565,7 +10059,6 @@ extension BuyBitcoinResponse: Equatable, Hashable {
         hasher.combine(url)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9610,9 +10103,6 @@ public struct CheckLightningAddressRequest {
     }
 }
 
-#if compiler(>=6)
-extension CheckLightningAddressRequest: Sendable {}
-#endif
 
 
 extension CheckLightningAddressRequest: Equatable, Hashable {
@@ -9627,7 +10117,6 @@ extension CheckLightningAddressRequest: Equatable, Hashable {
         hasher.combine(username)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9694,9 +10183,6 @@ public struct CheckMessageRequest {
     }
 }
 
-#if compiler(>=6)
-extension CheckMessageRequest: Sendable {}
-#endif
 
 
 extension CheckMessageRequest: Equatable, Hashable {
@@ -9719,7 +10205,6 @@ extension CheckMessageRequest: Equatable, Hashable {
         hasher.combine(signature)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9768,9 +10253,6 @@ public struct CheckMessageResponse {
     }
 }
 
-#if compiler(>=6)
-extension CheckMessageResponse: Sendable {}
-#endif
 
 
 extension CheckMessageResponse: Equatable, Hashable {
@@ -9785,7 +10267,6 @@ extension CheckMessageResponse: Equatable, Hashable {
         hasher.combine(isValid)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9834,9 +10315,6 @@ public struct ClaimDepositRequest {
     }
 }
 
-#if compiler(>=6)
-extension ClaimDepositRequest: Sendable {}
-#endif
 
 
 extension ClaimDepositRequest: Equatable, Hashable {
@@ -9859,7 +10337,6 @@ extension ClaimDepositRequest: Equatable, Hashable {
         hasher.combine(maxFee)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9908,9 +10385,6 @@ public struct ClaimDepositResponse {
     }
 }
 
-#if compiler(>=6)
-extension ClaimDepositResponse: Sendable {}
-#endif
 
 
 extension ClaimDepositResponse: Equatable, Hashable {
@@ -9925,7 +10399,6 @@ extension ClaimDepositResponse: Equatable, Hashable {
         hasher.combine(payment)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -9970,9 +10443,6 @@ public struct ClaimHtlcPaymentRequest {
     }
 }
 
-#if compiler(>=6)
-extension ClaimHtlcPaymentRequest: Sendable {}
-#endif
 
 
 extension ClaimHtlcPaymentRequest: Equatable, Hashable {
@@ -9987,7 +10457,6 @@ extension ClaimHtlcPaymentRequest: Equatable, Hashable {
         hasher.combine(preimage)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -10032,9 +10501,6 @@ public struct ClaimHtlcPaymentResponse {
     }
 }
 
-#if compiler(>=6)
-extension ClaimHtlcPaymentResponse: Sendable {}
-#endif
 
 
 extension ClaimHtlcPaymentResponse: Equatable, Hashable {
@@ -10049,7 +10515,6 @@ extension ClaimHtlcPaymentResponse: Equatable, Hashable {
         hasher.combine(payment)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -10218,9 +10683,6 @@ public struct Config {
     }
 }
 
-#if compiler(>=6)
-extension Config: Sendable {}
-#endif
 
 
 extension Config: Equatable, Hashable {
@@ -10287,7 +10749,6 @@ extension Config: Equatable, Hashable {
         hasher.combine(supportLnurlVerify)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -10362,9 +10823,6 @@ public struct ConnectRequest {
     }
 }
 
-#if compiler(>=6)
-extension ConnectRequest: Sendable {}
-#endif
 
 
 extension ConnectRequest: Equatable, Hashable {
@@ -10387,7 +10845,6 @@ extension ConnectRequest: Equatable, Hashable {
         hasher.combine(storageDir)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -10444,10 +10901,6 @@ public struct ConnectWithSignerRequest {
         self.storageDir = storageDir
     }
 }
-
-#if compiler(>=6)
-extension ConnectWithSignerRequest: Sendable {}
-#endif
 
 
 
@@ -10514,9 +10967,6 @@ public struct Contact {
     }
 }
 
-#if compiler(>=6)
-extension Contact: Sendable {}
-#endif
 
 
 extension Contact: Equatable, Hashable {
@@ -10547,7 +10997,6 @@ extension Contact: Equatable, Hashable {
         hasher.combine(updatedAt)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -10617,9 +11066,6 @@ public struct ConversionDetails {
     }
 }
 
-#if compiler(>=6)
-extension ConversionDetails: Sendable {}
-#endif
 
 
 extension ConversionDetails: Equatable, Hashable {
@@ -10638,7 +11084,6 @@ extension ConversionDetails: Equatable, Hashable {
         hasher.combine(to)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -10714,9 +11159,6 @@ public struct ConversionEstimate {
     }
 }
 
-#if compiler(>=6)
-extension ConversionEstimate: Sendable {}
-#endif
 
 
 extension ConversionEstimate: Equatable, Hashable {
@@ -10739,7 +11181,6 @@ extension ConversionEstimate: Equatable, Hashable {
         hasher.combine(fee)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -10828,9 +11269,6 @@ public struct ConversionInfo {
     }
 }
 
-#if compiler(>=6)
-extension ConversionInfo: Sendable {}
-#endif
 
 
 extension ConversionInfo: Equatable, Hashable {
@@ -10861,7 +11299,6 @@ extension ConversionInfo: Equatable, Hashable {
         hasher.combine(purpose)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -10953,9 +11390,6 @@ public struct ConversionOptions {
     }
 }
 
-#if compiler(>=6)
-extension ConversionOptions: Sendable {}
-#endif
 
 
 extension ConversionOptions: Equatable, Hashable {
@@ -10978,7 +11412,6 @@ extension ConversionOptions: Equatable, Hashable {
         hasher.combine(completionTimeoutSecs)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -11070,9 +11503,6 @@ public struct ConversionStep {
     }
 }
 
-#if compiler(>=6)
-extension ConversionStep: Sendable {}
-#endif
 
 
 extension ConversionStep: Equatable, Hashable {
@@ -11103,7 +11533,6 @@ extension ConversionStep: Equatable, Hashable {
         hasher.combine(tokenMetadata)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -11164,9 +11593,6 @@ public struct CreateIssuerTokenRequest {
     }
 }
 
-#if compiler(>=6)
-extension CreateIssuerTokenRequest: Sendable {}
-#endif
 
 
 extension CreateIssuerTokenRequest: Equatable, Hashable {
@@ -11197,7 +11623,6 @@ extension CreateIssuerTokenRequest: Equatable, Hashable {
         hasher.combine(maxSupply)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -11252,9 +11677,6 @@ public struct Credentials {
     }
 }
 
-#if compiler(>=6)
-extension Credentials: Sendable {}
-#endif
 
 
 extension Credentials: Equatable, Hashable {
@@ -11273,7 +11695,6 @@ extension Credentials: Equatable, Hashable {
         hasher.combine(password)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -11335,9 +11756,6 @@ public struct CurrencyInfo {
     }
 }
 
-#if compiler(>=6)
-extension CurrencyInfo: Sendable {}
-#endif
 
 
 extension CurrencyInfo: Equatable, Hashable {
@@ -11376,7 +11794,6 @@ extension CurrencyInfo: Equatable, Hashable {
         hasher.combine(localeOverrides)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -11443,9 +11860,6 @@ public struct DepositInfo {
     }
 }
 
-#if compiler(>=6)
-extension DepositInfo: Sendable {}
-#endif
 
 
 extension DepositInfo: Equatable, Hashable {
@@ -11480,7 +11894,6 @@ extension DepositInfo: Equatable, Hashable {
         hasher.combine(claimError)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -11538,9 +11951,6 @@ public struct EcdsaSignatureBytes {
     }
 }
 
-#if compiler(>=6)
-extension EcdsaSignatureBytes: Sendable {}
-#endif
 
 
 extension EcdsaSignatureBytes: Equatable, Hashable {
@@ -11555,7 +11965,6 @@ extension EcdsaSignatureBytes: Equatable, Hashable {
         hasher.combine(bytes)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -11673,9 +12082,6 @@ public struct ExternalAggregateFrostRequest {
     }
 }
 
-#if compiler(>=6)
-extension ExternalAggregateFrostRequest: Sendable {}
-#endif
 
 
 extension ExternalAggregateFrostRequest: Equatable, Hashable {
@@ -11722,7 +12128,6 @@ extension ExternalAggregateFrostRequest: Equatable, Hashable {
         hasher.combine(adaptorPublicKey)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -11792,9 +12197,6 @@ public struct ExternalEncryptedSecret {
     }
 }
 
-#if compiler(>=6)
-extension ExternalEncryptedSecret: Sendable {}
-#endif
 
 
 extension ExternalEncryptedSecret: Equatable, Hashable {
@@ -11809,7 +12211,6 @@ extension ExternalEncryptedSecret: Equatable, Hashable {
         hasher.combine(ciphertext)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -11879,9 +12280,6 @@ public struct ExternalFrostCommitments {
     }
 }
 
-#if compiler(>=6)
-extension ExternalFrostCommitments: Sendable {}
-#endif
 
 
 extension ExternalFrostCommitments: Equatable, Hashable {
@@ -11904,7 +12302,6 @@ extension ExternalFrostCommitments: Equatable, Hashable {
         hasher.combine(noncesCiphertext)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -11962,9 +12359,6 @@ public struct ExternalFrostSignature {
     }
 }
 
-#if compiler(>=6)
-extension ExternalFrostSignature: Sendable {}
-#endif
 
 
 extension ExternalFrostSignature: Equatable, Hashable {
@@ -11979,7 +12373,6 @@ extension ExternalFrostSignature: Equatable, Hashable {
         hasher.combine(bytes)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -12033,9 +12426,6 @@ public struct ExternalFrostSignatureShare {
     }
 }
 
-#if compiler(>=6)
-extension ExternalFrostSignatureShare: Sendable {}
-#endif
 
 
 extension ExternalFrostSignatureShare: Equatable, Hashable {
@@ -12050,7 +12440,6 @@ extension ExternalFrostSignatureShare: Equatable, Hashable {
         hasher.combine(bytes)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -12104,9 +12493,6 @@ public struct ExternalIdentifier {
     }
 }
 
-#if compiler(>=6)
-extension ExternalIdentifier: Sendable {}
-#endif
 
 
 extension ExternalIdentifier: Equatable, Hashable {
@@ -12121,7 +12507,6 @@ extension ExternalIdentifier: Equatable, Hashable {
         hasher.combine(bytes)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -12193,9 +12578,6 @@ public struct ExternalInputParser {
     }
 }
 
-#if compiler(>=6)
-extension ExternalInputParser: Sendable {}
-#endif
 
 
 extension ExternalInputParser: Equatable, Hashable {
@@ -12218,7 +12600,6 @@ extension ExternalInputParser: Equatable, Hashable {
         hasher.combine(parserUrl)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -12276,9 +12657,6 @@ public struct ExternalScalar {
     }
 }
 
-#if compiler(>=6)
-extension ExternalScalar: Sendable {}
-#endif
 
 
 extension ExternalScalar: Equatable, Hashable {
@@ -12293,7 +12671,6 @@ extension ExternalScalar: Equatable, Hashable {
         hasher.combine(bytes)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -12363,9 +12740,6 @@ public struct ExternalSecretShare {
     }
 }
 
-#if compiler(>=6)
-extension ExternalSecretShare: Sendable {}
-#endif
 
 
 extension ExternalSecretShare: Equatable, Hashable {
@@ -12388,7 +12762,6 @@ extension ExternalSecretShare: Equatable, Hashable {
         hasher.combine(share)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -12494,9 +12867,6 @@ public struct ExternalSignFrostRequest {
     }
 }
 
-#if compiler(>=6)
-extension ExternalSignFrostRequest: Sendable {}
-#endif
 
 
 extension ExternalSignFrostRequest: Equatable, Hashable {
@@ -12535,7 +12905,6 @@ extension ExternalSignFrostRequest: Equatable, Hashable {
         hasher.combine(adaptorPublicKey)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -12609,9 +12978,6 @@ public struct ExternalSigningCommitments {
     }
 }
 
-#if compiler(>=6)
-extension ExternalSigningCommitments: Sendable {}
-#endif
 
 
 extension ExternalSigningCommitments: Equatable, Hashable {
@@ -12630,7 +12996,6 @@ extension ExternalSigningCommitments: Equatable, Hashable {
         hasher.combine(binding)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -12686,9 +13051,6 @@ public struct ExternalTreeNodeId {
     }
 }
 
-#if compiler(>=6)
-extension ExternalTreeNodeId: Sendable {}
-#endif
 
 
 extension ExternalTreeNodeId: Equatable, Hashable {
@@ -12703,7 +13065,6 @@ extension ExternalTreeNodeId: Equatable, Hashable {
         hasher.combine(id)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -12765,9 +13126,6 @@ public struct ExternalVerifiableSecretShare {
     }
 }
 
-#if compiler(>=6)
-extension ExternalVerifiableSecretShare: Sendable {}
-#endif
 
 
 extension ExternalVerifiableSecretShare: Equatable, Hashable {
@@ -12786,7 +13144,6 @@ extension ExternalVerifiableSecretShare: Equatable, Hashable {
         hasher.combine(proofs)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -12847,9 +13204,6 @@ public struct FetchConversionLimitsRequest {
     }
 }
 
-#if compiler(>=6)
-extension FetchConversionLimitsRequest: Sendable {}
-#endif
 
 
 extension FetchConversionLimitsRequest: Equatable, Hashable {
@@ -12868,7 +13222,6 @@ extension FetchConversionLimitsRequest: Equatable, Hashable {
         hasher.combine(tokenIdentifier)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -12933,9 +13286,6 @@ public struct FetchConversionLimitsResponse {
     }
 }
 
-#if compiler(>=6)
-extension FetchConversionLimitsResponse: Sendable {}
-#endif
 
 
 extension FetchConversionLimitsResponse: Equatable, Hashable {
@@ -12954,7 +13304,6 @@ extension FetchConversionLimitsResponse: Equatable, Hashable {
         hasher.combine(minToAmount)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13006,9 +13355,6 @@ public struct FiatCurrency {
     }
 }
 
-#if compiler(>=6)
-extension FiatCurrency: Sendable {}
-#endif
 
 
 extension FiatCurrency: Equatable, Hashable {
@@ -13027,7 +13373,6 @@ extension FiatCurrency: Equatable, Hashable {
         hasher.combine(info)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13074,9 +13419,6 @@ public struct FreezeIssuerTokenRequest {
     }
 }
 
-#if compiler(>=6)
-extension FreezeIssuerTokenRequest: Sendable {}
-#endif
 
 
 extension FreezeIssuerTokenRequest: Equatable, Hashable {
@@ -13091,7 +13433,6 @@ extension FreezeIssuerTokenRequest: Equatable, Hashable {
         hasher.combine(address)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13138,9 +13479,6 @@ public struct FreezeIssuerTokenResponse {
     }
 }
 
-#if compiler(>=6)
-extension FreezeIssuerTokenResponse: Sendable {}
-#endif
 
 
 extension FreezeIssuerTokenResponse: Equatable, Hashable {
@@ -13159,7 +13497,6 @@ extension FreezeIssuerTokenResponse: Equatable, Hashable {
         hasher.combine(impactedTokenAmount)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13209,9 +13546,6 @@ public struct GetInfoRequest {
     }
 }
 
-#if compiler(>=6)
-extension GetInfoRequest: Sendable {}
-#endif
 
 
 extension GetInfoRequest: Equatable, Hashable {
@@ -13226,7 +13560,6 @@ extension GetInfoRequest: Equatable, Hashable {
         hasher.combine(ensureSynced)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13296,9 +13629,6 @@ public struct GetInfoResponse {
     }
 }
 
-#if compiler(>=6)
-extension GetInfoResponse: Sendable {}
-#endif
 
 
 extension GetInfoResponse: Equatable, Hashable {
@@ -13321,7 +13651,6 @@ extension GetInfoResponse: Equatable, Hashable {
         hasher.combine(tokenBalances)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13370,9 +13699,6 @@ public struct GetPaymentRequest {
     }
 }
 
-#if compiler(>=6)
-extension GetPaymentRequest: Sendable {}
-#endif
 
 
 extension GetPaymentRequest: Equatable, Hashable {
@@ -13387,7 +13713,6 @@ extension GetPaymentRequest: Equatable, Hashable {
         hasher.combine(paymentId)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13432,9 +13757,6 @@ public struct GetPaymentResponse {
     }
 }
 
-#if compiler(>=6)
-extension GetPaymentResponse: Sendable {}
-#endif
 
 
 extension GetPaymentResponse: Equatable, Hashable {
@@ -13449,7 +13771,6 @@ extension GetPaymentResponse: Equatable, Hashable {
         hasher.combine(payment)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13494,9 +13815,6 @@ public struct GetTokensMetadataRequest {
     }
 }
 
-#if compiler(>=6)
-extension GetTokensMetadataRequest: Sendable {}
-#endif
 
 
 extension GetTokensMetadataRequest: Equatable, Hashable {
@@ -13511,7 +13829,6 @@ extension GetTokensMetadataRequest: Equatable, Hashable {
         hasher.combine(tokenIdentifiers)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13556,9 +13873,6 @@ public struct GetTokensMetadataResponse {
     }
 }
 
-#if compiler(>=6)
-extension GetTokensMetadataResponse: Sendable {}
-#endif
 
 
 extension GetTokensMetadataResponse: Equatable, Hashable {
@@ -13573,7 +13887,6 @@ extension GetTokensMetadataResponse: Equatable, Hashable {
         hasher.combine(tokensMetadata)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13618,9 +13931,6 @@ public struct HashedMessageBytes {
     }
 }
 
-#if compiler(>=6)
-extension HashedMessageBytes: Sendable {}
-#endif
 
 
 extension HashedMessageBytes: Equatable, Hashable {
@@ -13635,7 +13945,6 @@ extension HashedMessageBytes: Equatable, Hashable {
         hasher.combine(bytes)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13685,9 +13994,6 @@ public struct IdentifierCommitmentPair {
     }
 }
 
-#if compiler(>=6)
-extension IdentifierCommitmentPair: Sendable {}
-#endif
 
 
 extension IdentifierCommitmentPair: Equatable, Hashable {
@@ -13706,7 +14012,6 @@ extension IdentifierCommitmentPair: Equatable, Hashable {
         hasher.combine(commitment)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13758,9 +14063,6 @@ public struct IdentifierPublicKeyPair {
     }
 }
 
-#if compiler(>=6)
-extension IdentifierPublicKeyPair: Sendable {}
-#endif
 
 
 extension IdentifierPublicKeyPair: Equatable, Hashable {
@@ -13779,7 +14081,6 @@ extension IdentifierPublicKeyPair: Equatable, Hashable {
         hasher.combine(publicKey)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13831,9 +14132,6 @@ public struct IdentifierSignaturePair {
     }
 }
 
-#if compiler(>=6)
-extension IdentifierSignaturePair: Sendable {}
-#endif
 
 
 extension IdentifierSignaturePair: Equatable, Hashable {
@@ -13852,7 +14150,6 @@ extension IdentifierSignaturePair: Equatable, Hashable {
         hasher.combine(signature)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13901,9 +14198,6 @@ public struct IncomingChange {
     }
 }
 
-#if compiler(>=6)
-extension IncomingChange: Sendable {}
-#endif
 
 
 extension IncomingChange: Equatable, Hashable {
@@ -13922,7 +14216,6 @@ extension IncomingChange: Equatable, Hashable {
         hasher.combine(oldState)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -13996,9 +14289,6 @@ public struct KeySetConfig {
     }
 }
 
-#if compiler(>=6)
-extension KeySetConfig: Sendable {}
-#endif
 
 
 extension KeySetConfig: Equatable, Hashable {
@@ -14021,7 +14311,6 @@ extension KeySetConfig: Equatable, Hashable {
         hasher.combine(accountNumber)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -14072,9 +14361,6 @@ public struct LightningAddressDetails {
     }
 }
 
-#if compiler(>=6)
-extension LightningAddressDetails: Sendable {}
-#endif
 
 
 extension LightningAddressDetails: Equatable, Hashable {
@@ -14093,7 +14379,6 @@ extension LightningAddressDetails: Equatable, Hashable {
         hasher.combine(payRequest)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -14146,9 +14431,6 @@ public struct LightningAddressInfo {
     }
 }
 
-#if compiler(>=6)
-extension LightningAddressInfo: Sendable {}
-#endif
 
 
 extension LightningAddressInfo: Equatable, Hashable {
@@ -14175,7 +14457,6 @@ extension LightningAddressInfo: Equatable, Hashable {
         hasher.combine(username)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -14231,9 +14512,6 @@ public struct ListContactsRequest {
     }
 }
 
-#if compiler(>=6)
-extension ListContactsRequest: Sendable {}
-#endif
 
 
 extension ListContactsRequest: Equatable, Hashable {
@@ -14252,7 +14530,6 @@ extension ListContactsRequest: Equatable, Hashable {
         hasher.combine(limit)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -14308,9 +14585,6 @@ public struct ListFiatCurrenciesResponse {
     }
 }
 
-#if compiler(>=6)
-extension ListFiatCurrenciesResponse: Sendable {}
-#endif
 
 
 extension ListFiatCurrenciesResponse: Equatable, Hashable {
@@ -14325,7 +14599,6 @@ extension ListFiatCurrenciesResponse: Equatable, Hashable {
         hasher.combine(currencies)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -14379,9 +14652,6 @@ public struct ListFiatRatesResponse {
     }
 }
 
-#if compiler(>=6)
-extension ListFiatRatesResponse: Sendable {}
-#endif
 
 
 extension ListFiatRatesResponse: Equatable, Hashable {
@@ -14396,7 +14666,6 @@ extension ListFiatRatesResponse: Equatable, Hashable {
         hasher.combine(rates)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -14490,9 +14759,6 @@ public struct ListPaymentsRequest {
     }
 }
 
-#if compiler(>=6)
-extension ListPaymentsRequest: Sendable {}
-#endif
 
 
 extension ListPaymentsRequest: Equatable, Hashable {
@@ -14539,7 +14805,6 @@ extension ListPaymentsRequest: Equatable, Hashable {
         hasher.combine(sortAscending)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -14609,9 +14874,6 @@ public struct ListPaymentsResponse {
     }
 }
 
-#if compiler(>=6)
-extension ListPaymentsResponse: Sendable {}
-#endif
 
 
 extension ListPaymentsResponse: Equatable, Hashable {
@@ -14626,7 +14888,6 @@ extension ListPaymentsResponse: Equatable, Hashable {
         hasher.combine(payments)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -14669,9 +14930,6 @@ public struct ListUnclaimedDepositsRequest {
     }
 }
 
-#if compiler(>=6)
-extension ListUnclaimedDepositsRequest: Sendable {}
-#endif
 
 
 extension ListUnclaimedDepositsRequest: Equatable, Hashable {
@@ -14682,7 +14940,6 @@ extension ListUnclaimedDepositsRequest: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -14724,9 +14981,6 @@ public struct ListUnclaimedDepositsResponse {
     }
 }
 
-#if compiler(>=6)
-extension ListUnclaimedDepositsResponse: Sendable {}
-#endif
 
 
 extension ListUnclaimedDepositsResponse: Equatable, Hashable {
@@ -14741,7 +14995,6 @@ extension ListUnclaimedDepositsResponse: Equatable, Hashable {
         hasher.combine(deposits)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -14827,9 +15080,6 @@ public struct LnurlAuthRequestDetails {
     }
 }
 
-#if compiler(>=6)
-extension LnurlAuthRequestDetails: Sendable {}
-#endif
 
 
 extension LnurlAuthRequestDetails: Equatable, Hashable {
@@ -14856,7 +15106,6 @@ extension LnurlAuthRequestDetails: Equatable, Hashable {
         hasher.combine(url)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -14910,9 +15159,6 @@ public struct LnurlErrorDetails {
     }
 }
 
-#if compiler(>=6)
-extension LnurlErrorDetails: Sendable {}
-#endif
 
 
 extension LnurlErrorDetails: Equatable, Hashable {
@@ -14927,7 +15173,6 @@ extension LnurlErrorDetails: Equatable, Hashable {
         hasher.combine(reason)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -14974,9 +15219,6 @@ public struct LnurlInfo {
     }
 }
 
-#if compiler(>=6)
-extension LnurlInfo: Sendable {}
-#endif
 
 
 extension LnurlInfo: Equatable, Hashable {
@@ -14995,7 +15237,6 @@ extension LnurlInfo: Equatable, Hashable {
         hasher.combine(bech32)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -15055,9 +15296,6 @@ public struct LnurlPayInfo {
     }
 }
 
-#if compiler(>=6)
-extension LnurlPayInfo: Sendable {}
-#endif
 
 
 extension LnurlPayInfo: Equatable, Hashable {
@@ -15092,7 +15330,6 @@ extension LnurlPayInfo: Equatable, Hashable {
         hasher.combine(rawSuccessAction)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -15159,9 +15396,6 @@ public struct LnurlPayRequest {
     }
 }
 
-#if compiler(>=6)
-extension LnurlPayRequest: Sendable {}
-#endif
 
 
 extension LnurlPayRequest: Equatable, Hashable {
@@ -15180,7 +15414,6 @@ extension LnurlPayRequest: Equatable, Hashable {
         hasher.combine(idempotencyKey)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -15317,9 +15550,6 @@ public struct LnurlPayRequestDetails {
     }
 }
 
-#if compiler(>=6)
-extension LnurlPayRequestDetails: Sendable {}
-#endif
 
 
 extension LnurlPayRequestDetails: Equatable, Hashable {
@@ -15370,7 +15600,6 @@ extension LnurlPayRequestDetails: Equatable, Hashable {
         hasher.combine(nostrPubkey)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -15435,9 +15664,6 @@ public struct LnurlPayResponse {
     }
 }
 
-#if compiler(>=6)
-extension LnurlPayResponse: Sendable {}
-#endif
 
 
 extension LnurlPayResponse: Equatable, Hashable {
@@ -15456,7 +15682,6 @@ extension LnurlPayResponse: Equatable, Hashable {
         hasher.combine(successAction)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -15507,9 +15732,6 @@ public struct LnurlReceiveMetadata {
     }
 }
 
-#if compiler(>=6)
-extension LnurlReceiveMetadata: Sendable {}
-#endif
 
 
 extension LnurlReceiveMetadata: Equatable, Hashable {
@@ -15532,7 +15754,6 @@ extension LnurlReceiveMetadata: Equatable, Hashable {
         hasher.combine(senderComment)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -15584,9 +15805,6 @@ public struct LnurlWithdrawInfo {
     }
 }
 
-#if compiler(>=6)
-extension LnurlWithdrawInfo: Sendable {}
-#endif
 
 
 extension LnurlWithdrawInfo: Equatable, Hashable {
@@ -15601,7 +15819,6 @@ extension LnurlWithdrawInfo: Equatable, Hashable {
         hasher.combine(withdrawUrl)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -15668,9 +15885,6 @@ public struct LnurlWithdrawRequest {
     }
 }
 
-#if compiler(>=6)
-extension LnurlWithdrawRequest: Sendable {}
-#endif
 
 
 extension LnurlWithdrawRequest: Equatable, Hashable {
@@ -15693,7 +15907,6 @@ extension LnurlWithdrawRequest: Equatable, Hashable {
         hasher.combine(completionTimeoutSecs)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -15762,9 +15975,6 @@ public struct LnurlWithdrawRequestDetails {
     }
 }
 
-#if compiler(>=6)
-extension LnurlWithdrawRequestDetails: Sendable {}
-#endif
 
 
 extension LnurlWithdrawRequestDetails: Equatable, Hashable {
@@ -15795,7 +16005,6 @@ extension LnurlWithdrawRequestDetails: Equatable, Hashable {
         hasher.combine(maxWithdrawable)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -15856,9 +16065,6 @@ public struct LnurlWithdrawResponse {
     }
 }
 
-#if compiler(>=6)
-extension LnurlWithdrawResponse: Sendable {}
-#endif
 
 
 extension LnurlWithdrawResponse: Equatable, Hashable {
@@ -15877,7 +16083,6 @@ extension LnurlWithdrawResponse: Equatable, Hashable {
         hasher.combine(payment)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -15931,9 +16136,6 @@ public struct LocaleOverrides {
     }
 }
 
-#if compiler(>=6)
-extension LocaleOverrides: Sendable {}
-#endif
 
 
 extension LocaleOverrides: Equatable, Hashable {
@@ -15956,7 +16158,6 @@ extension LocaleOverrides: Equatable, Hashable {
         hasher.combine(symbol)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -16010,9 +16211,6 @@ public struct LocalizedName {
     }
 }
 
-#if compiler(>=6)
-extension LocalizedName: Sendable {}
-#endif
 
 
 extension LocalizedName: Equatable, Hashable {
@@ -16031,7 +16229,6 @@ extension LocalizedName: Equatable, Hashable {
         hasher.combine(name)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -16080,9 +16277,6 @@ public struct LogEntry {
     }
 }
 
-#if compiler(>=6)
-extension LogEntry: Sendable {}
-#endif
 
 
 extension LogEntry: Equatable, Hashable {
@@ -16101,7 +16295,6 @@ extension LogEntry: Equatable, Hashable {
         hasher.combine(level)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -16151,9 +16344,6 @@ public struct MessageBytes {
     }
 }
 
-#if compiler(>=6)
-extension MessageBytes: Sendable {}
-#endif
 
 
 extension MessageBytes: Equatable, Hashable {
@@ -16168,7 +16358,6 @@ extension MessageBytes: Equatable, Hashable {
         hasher.combine(bytes)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -16213,9 +16402,6 @@ public struct MessageSuccessActionData {
     }
 }
 
-#if compiler(>=6)
-extension MessageSuccessActionData: Sendable {}
-#endif
 
 
 extension MessageSuccessActionData: Equatable, Hashable {
@@ -16230,7 +16416,6 @@ extension MessageSuccessActionData: Equatable, Hashable {
         hasher.combine(message)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -16275,9 +16460,6 @@ public struct MintIssuerTokenRequest {
     }
 }
 
-#if compiler(>=6)
-extension MintIssuerTokenRequest: Sendable {}
-#endif
 
 
 extension MintIssuerTokenRequest: Equatable, Hashable {
@@ -16292,7 +16474,6 @@ extension MintIssuerTokenRequest: Equatable, Hashable {
         hasher.combine(amount)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -16324,6 +16505,93 @@ public func FfiConverterTypeMintIssuerTokenRequest_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeMintIssuerTokenRequest_lower(_ value: MintIssuerTokenRequest) -> RustBuffer {
     return FfiConverterTypeMintIssuerTokenRequest.lower(value)
+}
+
+
+/**
+ * Configuration for Nostr relay connections used in `Passkey`.
+ *
+ * Relay URLs are managed internally by the client:
+ * - Public relays are always included
+ * - Breez relay is added when `breez_api_key` is provided (enables NIP-42 auth)
+ */
+public struct NostrRelayConfig {
+    /**
+     * Optional Breez API key for authenticated access to the Breez relay.
+     * When provided, the Breez relay is added and NIP-42 authentication is enabled.
+     */
+    public var breezApiKey: String?
+    /**
+     * Connection timeout in seconds. Defaults to 30 when `None`.
+     */
+    public var timeoutSecs: UInt32?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Optional Breez API key for authenticated access to the Breez relay.
+         * When provided, the Breez relay is added and NIP-42 authentication is enabled.
+         */breezApiKey: String? = nil, 
+        /**
+         * Connection timeout in seconds. Defaults to 30 when `None`.
+         */timeoutSecs: UInt32? = nil) {
+        self.breezApiKey = breezApiKey
+        self.timeoutSecs = timeoutSecs
+    }
+}
+
+
+
+extension NostrRelayConfig: Equatable, Hashable {
+    public static func ==(lhs: NostrRelayConfig, rhs: NostrRelayConfig) -> Bool {
+        if lhs.breezApiKey != rhs.breezApiKey {
+            return false
+        }
+        if lhs.timeoutSecs != rhs.timeoutSecs {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(breezApiKey)
+        hasher.combine(timeoutSecs)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNostrRelayConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrRelayConfig {
+        return
+            try NostrRelayConfig(
+                breezApiKey: FfiConverterOptionString.read(from: &buf), 
+                timeoutSecs: FfiConverterOptionUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NostrRelayConfig, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.breezApiKey, into: &buf)
+        FfiConverterOptionUInt32.write(value.timeoutSecs, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrRelayConfig_lift(_ buf: RustBuffer) throws -> NostrRelayConfig {
+    return try FfiConverterTypeNostrRelayConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrRelayConfig_lower(_ value: NostrRelayConfig) -> RustBuffer {
+    return FfiConverterTypeNostrRelayConfig.lower(value)
 }
 
 
@@ -16381,9 +16649,6 @@ public struct OptimizationConfig {
     }
 }
 
-#if compiler(>=6)
-extension OptimizationConfig: Sendable {}
-#endif
 
 
 extension OptimizationConfig: Equatable, Hashable {
@@ -16402,7 +16667,6 @@ extension OptimizationConfig: Equatable, Hashable {
         hasher.combine(multiplicity)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -16453,9 +16717,6 @@ public struct OptimizationProgress {
     }
 }
 
-#if compiler(>=6)
-extension OptimizationProgress: Sendable {}
-#endif
 
 
 extension OptimizationProgress: Equatable, Hashable {
@@ -16478,7 +16739,6 @@ extension OptimizationProgress: Equatable, Hashable {
         hasher.combine(totalRounds)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -16529,9 +16789,6 @@ public struct OutgoingChange {
     }
 }
 
-#if compiler(>=6)
-extension OutgoingChange: Sendable {}
-#endif
 
 
 extension OutgoingChange: Equatable, Hashable {
@@ -16550,7 +16807,6 @@ extension OutgoingChange: Equatable, Hashable {
         hasher.combine(parent)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -16672,9 +16928,6 @@ public struct Payment {
     }
 }
 
-#if compiler(>=6)
-extension Payment: Sendable {}
-#endif
 
 
 extension Payment: Equatable, Hashable {
@@ -16721,7 +16974,6 @@ extension Payment: Equatable, Hashable {
         hasher.combine(conversionDetails)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -16793,9 +17045,6 @@ public struct PaymentMetadata {
     }
 }
 
-#if compiler(>=6)
-extension PaymentMetadata: Sendable {}
-#endif
 
 
 extension PaymentMetadata: Equatable, Hashable {
@@ -16826,7 +17075,6 @@ extension PaymentMetadata: Equatable, Hashable {
         hasher.combine(conversionInfo)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -16881,9 +17129,6 @@ public struct PaymentRequestSource {
     }
 }
 
-#if compiler(>=6)
-extension PaymentRequestSource: Sendable {}
-#endif
 
 
 extension PaymentRequestSource: Equatable, Hashable {
@@ -16902,7 +17147,6 @@ extension PaymentRequestSource: Equatable, Hashable {
         hasher.combine(bip353Address)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -17028,9 +17272,6 @@ public struct PostgresStorageConfig {
     }
 }
 
-#if compiler(>=6)
-extension PostgresStorageConfig: Sendable {}
-#endif
 
 
 extension PostgresStorageConfig: Equatable, Hashable {
@@ -17069,7 +17310,6 @@ extension PostgresStorageConfig: Equatable, Hashable {
         hasher.combine(rootCaPem)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -17154,9 +17394,6 @@ public struct PrepareLnurlPayRequest {
     }
 }
 
-#if compiler(>=6)
-extension PrepareLnurlPayRequest: Sendable {}
-#endif
 
 
 extension PrepareLnurlPayRequest: Equatable, Hashable {
@@ -17191,7 +17428,6 @@ extension PrepareLnurlPayRequest: Equatable, Hashable {
         hasher.combine(feePolicy)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -17286,9 +17522,6 @@ public struct PrepareLnurlPayResponse {
     }
 }
 
-#if compiler(>=6)
-extension PrepareLnurlPayResponse: Sendable {}
-#endif
 
 
 extension PrepareLnurlPayResponse: Equatable, Hashable {
@@ -17331,7 +17564,6 @@ extension PrepareLnurlPayResponse: Equatable, Hashable {
         hasher.combine(feePolicy)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -17430,9 +17662,6 @@ public struct PrepareSendPaymentRequest {
     }
 }
 
-#if compiler(>=6)
-extension PrepareSendPaymentRequest: Sendable {}
-#endif
 
 
 extension PrepareSendPaymentRequest: Equatable, Hashable {
@@ -17463,7 +17692,6 @@ extension PrepareSendPaymentRequest: Equatable, Hashable {
         hasher.combine(feePolicy)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -17552,9 +17780,6 @@ public struct PrepareSendPaymentResponse {
     }
 }
 
-#if compiler(>=6)
-extension PrepareSendPaymentResponse: Sendable {}
-#endif
 
 
 extension PrepareSendPaymentResponse: Equatable, Hashable {
@@ -17585,7 +17810,6 @@ extension PrepareSendPaymentResponse: Equatable, Hashable {
         hasher.combine(feePolicy)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -17660,9 +17884,6 @@ public struct ProvisionalPayment {
     }
 }
 
-#if compiler(>=6)
-extension ProvisionalPayment: Sendable {}
-#endif
 
 
 extension ProvisionalPayment: Equatable, Hashable {
@@ -17685,7 +17906,6 @@ extension ProvisionalPayment: Equatable, Hashable {
         hasher.combine(details)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -17737,9 +17957,6 @@ public struct PublicKeyBytes {
     }
 }
 
-#if compiler(>=6)
-extension PublicKeyBytes: Sendable {}
-#endif
 
 
 extension PublicKeyBytes: Equatable, Hashable {
@@ -17754,7 +17971,6 @@ extension PublicKeyBytes: Equatable, Hashable {
         hasher.combine(bytes)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -17804,9 +18020,6 @@ public struct Rate {
     }
 }
 
-#if compiler(>=6)
-extension Rate: Sendable {}
-#endif
 
 
 extension Rate: Equatable, Hashable {
@@ -17825,7 +18038,6 @@ extension Rate: Equatable, Hashable {
         hasher.combine(value)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -17872,9 +18084,6 @@ public struct ReceivePaymentRequest {
     }
 }
 
-#if compiler(>=6)
-extension ReceivePaymentRequest: Sendable {}
-#endif
 
 
 extension ReceivePaymentRequest: Equatable, Hashable {
@@ -17889,7 +18098,6 @@ extension ReceivePaymentRequest: Equatable, Hashable {
         hasher.combine(paymentMethod)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -17944,9 +18152,6 @@ public struct ReceivePaymentResponse {
     }
 }
 
-#if compiler(>=6)
-extension ReceivePaymentResponse: Sendable {}
-#endif
 
 
 extension ReceivePaymentResponse: Equatable, Hashable {
@@ -17965,7 +18170,6 @@ extension ReceivePaymentResponse: Equatable, Hashable {
         hasher.combine(fee)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18020,9 +18224,6 @@ public struct RecommendedFees {
     }
 }
 
-#if compiler(>=6)
-extension RecommendedFees: Sendable {}
-#endif
 
 
 extension RecommendedFees: Equatable, Hashable {
@@ -18053,7 +18254,6 @@ extension RecommendedFees: Equatable, Hashable {
         hasher.combine(minimumFee)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18112,9 +18312,6 @@ public struct Record {
     }
 }
 
-#if compiler(>=6)
-extension Record: Sendable {}
-#endif
 
 
 extension Record: Equatable, Hashable {
@@ -18141,7 +18338,6 @@ extension Record: Equatable, Hashable {
         hasher.combine(data)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18198,9 +18394,6 @@ public struct RecordChange {
     }
 }
 
-#if compiler(>=6)
-extension RecordChange: Sendable {}
-#endif
 
 
 extension RecordChange: Equatable, Hashable {
@@ -18227,7 +18420,6 @@ extension RecordChange: Equatable, Hashable {
         hasher.combine(localRevision)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18280,9 +18472,6 @@ public struct RecordId {
     }
 }
 
-#if compiler(>=6)
-extension RecordId: Sendable {}
-#endif
 
 
 extension RecordId: Equatable, Hashable {
@@ -18301,7 +18490,6 @@ extension RecordId: Equatable, Hashable {
         hasher.combine(dataId)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18351,9 +18539,6 @@ public struct RecoverableEcdsaSignatureBytes {
     }
 }
 
-#if compiler(>=6)
-extension RecoverableEcdsaSignatureBytes: Sendable {}
-#endif
 
 
 extension RecoverableEcdsaSignatureBytes: Equatable, Hashable {
@@ -18368,7 +18553,6 @@ extension RecoverableEcdsaSignatureBytes: Equatable, Hashable {
         hasher.combine(bytes)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18419,9 +18603,6 @@ public struct RefundDepositRequest {
     }
 }
 
-#if compiler(>=6)
-extension RefundDepositRequest: Sendable {}
-#endif
 
 
 extension RefundDepositRequest: Equatable, Hashable {
@@ -18448,7 +18629,6 @@ extension RefundDepositRequest: Equatable, Hashable {
         hasher.combine(fee)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18501,9 +18681,6 @@ public struct RefundDepositResponse {
     }
 }
 
-#if compiler(>=6)
-extension RefundDepositResponse: Sendable {}
-#endif
 
 
 extension RefundDepositResponse: Equatable, Hashable {
@@ -18522,7 +18699,6 @@ extension RefundDepositResponse: Equatable, Hashable {
         hasher.combine(txHex)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18571,9 +18747,6 @@ public struct RegisterLightningAddressRequest {
     }
 }
 
-#if compiler(>=6)
-extension RegisterLightningAddressRequest: Sendable {}
-#endif
 
 
 extension RegisterLightningAddressRequest: Equatable, Hashable {
@@ -18592,7 +18765,6 @@ extension RegisterLightningAddressRequest: Equatable, Hashable {
         hasher.combine(description)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18641,9 +18813,6 @@ public struct RestResponse {
     }
 }
 
-#if compiler(>=6)
-extension RestResponse: Sendable {}
-#endif
 
 
 extension RestResponse: Equatable, Hashable {
@@ -18662,7 +18831,6 @@ extension RestResponse: Equatable, Hashable {
         hasher.combine(body)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18712,9 +18880,6 @@ public struct SchnorrSignatureBytes {
     }
 }
 
-#if compiler(>=6)
-extension SchnorrSignatureBytes: Sendable {}
-#endif
 
 
 extension SchnorrSignatureBytes: Equatable, Hashable {
@@ -18729,7 +18894,6 @@ extension SchnorrSignatureBytes: Equatable, Hashable {
         hasher.combine(bytes)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18777,9 +18941,6 @@ public struct SecretBytes {
     }
 }
 
-#if compiler(>=6)
-extension SecretBytes: Sendable {}
-#endif
 
 
 extension SecretBytes: Equatable, Hashable {
@@ -18794,7 +18955,6 @@ extension SecretBytes: Equatable, Hashable {
         hasher.combine(bytes)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18847,9 +19007,6 @@ public struct SendOnchainFeeQuote {
     }
 }
 
-#if compiler(>=6)
-extension SendOnchainFeeQuote: Sendable {}
-#endif
 
 
 extension SendOnchainFeeQuote: Equatable, Hashable {
@@ -18880,7 +19037,6 @@ extension SendOnchainFeeQuote: Equatable, Hashable {
         hasher.combine(speedSlow)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -18935,9 +19091,6 @@ public struct SendOnchainSpeedFeeQuote {
     }
 }
 
-#if compiler(>=6)
-extension SendOnchainSpeedFeeQuote: Sendable {}
-#endif
 
 
 extension SendOnchainSpeedFeeQuote: Equatable, Hashable {
@@ -18956,7 +19109,6 @@ extension SendOnchainSpeedFeeQuote: Equatable, Hashable {
         hasher.combine(l1BroadcastFeeSat)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -19019,9 +19171,6 @@ public struct SendPaymentRequest {
     }
 }
 
-#if compiler(>=6)
-extension SendPaymentRequest: Sendable {}
-#endif
 
 
 extension SendPaymentRequest: Equatable, Hashable {
@@ -19044,7 +19193,6 @@ extension SendPaymentRequest: Equatable, Hashable {
         hasher.combine(idempotencyKey)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -19093,9 +19241,6 @@ public struct SendPaymentResponse {
     }
 }
 
-#if compiler(>=6)
-extension SendPaymentResponse: Sendable {}
-#endif
 
 
 extension SendPaymentResponse: Equatable, Hashable {
@@ -19110,7 +19255,6 @@ extension SendPaymentResponse: Equatable, Hashable {
         hasher.combine(payment)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -19163,9 +19307,6 @@ public struct SetLnurlMetadataItem {
     }
 }
 
-#if compiler(>=6)
-extension SetLnurlMetadataItem: Sendable {}
-#endif
 
 
 extension SetLnurlMetadataItem: Equatable, Hashable {
@@ -19196,7 +19337,6 @@ extension SetLnurlMetadataItem: Equatable, Hashable {
         hasher.combine(preimage)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -19257,9 +19397,6 @@ public struct SignMessageRequest {
     }
 }
 
-#if compiler(>=6)
-extension SignMessageRequest: Sendable {}
-#endif
 
 
 extension SignMessageRequest: Equatable, Hashable {
@@ -19278,7 +19415,6 @@ extension SignMessageRequest: Equatable, Hashable {
         hasher.combine(compact)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -19333,9 +19469,6 @@ public struct SignMessageResponse {
     }
 }
 
-#if compiler(>=6)
-extension SignMessageResponse: Sendable {}
-#endif
 
 
 extension SignMessageResponse: Equatable, Hashable {
@@ -19354,7 +19487,6 @@ extension SignMessageResponse: Equatable, Hashable {
         hasher.combine(signature)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -19405,9 +19537,6 @@ public struct SilentPaymentAddressDetails {
     }
 }
 
-#if compiler(>=6)
-extension SilentPaymentAddressDetails: Sendable {}
-#endif
 
 
 extension SilentPaymentAddressDetails: Equatable, Hashable {
@@ -19430,7 +19559,6 @@ extension SilentPaymentAddressDetails: Equatable, Hashable {
         hasher.combine(source)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -19497,9 +19625,6 @@ public struct SparkAddressDetails {
     }
 }
 
-#if compiler(>=6)
-extension SparkAddressDetails: Sendable {}
-#endif
 
 
 extension SparkAddressDetails: Equatable, Hashable {
@@ -19526,7 +19651,6 @@ extension SparkAddressDetails: Equatable, Hashable {
         hasher.combine(source)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -19607,9 +19731,6 @@ public struct SparkHtlcDetails {
     }
 }
 
-#if compiler(>=6)
-extension SparkHtlcDetails: Sendable {}
-#endif
 
 
 extension SparkHtlcDetails: Equatable, Hashable {
@@ -19636,7 +19757,6 @@ extension SparkHtlcDetails: Equatable, Hashable {
         hasher.combine(status)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -19703,9 +19823,6 @@ public struct SparkHtlcOptions {
     }
 }
 
-#if compiler(>=6)
-extension SparkHtlcOptions: Sendable {}
-#endif
 
 
 extension SparkHtlcOptions: Equatable, Hashable {
@@ -19724,7 +19841,6 @@ extension SparkHtlcOptions: Equatable, Hashable {
         hasher.combine(expiryDurationSecs)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -19827,9 +19943,6 @@ public struct SparkInvoiceDetails {
     }
 }
 
-#if compiler(>=6)
-extension SparkInvoiceDetails: Sendable {}
-#endif
 
 
 extension SparkInvoiceDetails: Equatable, Hashable {
@@ -19872,7 +19985,6 @@ extension SparkInvoiceDetails: Equatable, Hashable {
         hasher.combine(senderPublicKey)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -19945,9 +20057,6 @@ public struct SparkInvoicePaymentDetails {
     }
 }
 
-#if compiler(>=6)
-extension SparkInvoicePaymentDetails: Sendable {}
-#endif
 
 
 extension SparkInvoicePaymentDetails: Equatable, Hashable {
@@ -19966,7 +20075,6 @@ extension SparkInvoicePaymentDetails: Equatable, Hashable {
         hasher.combine(invoice)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -20030,9 +20138,6 @@ public struct SparkStatus {
     }
 }
 
-#if compiler(>=6)
-extension SparkStatus: Sendable {}
-#endif
 
 
 extension SparkStatus: Equatable, Hashable {
@@ -20051,7 +20156,6 @@ extension SparkStatus: Equatable, Hashable {
         hasher.combine(lastUpdated)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -20157,9 +20261,6 @@ public struct StableBalanceConfig {
     }
 }
 
-#if compiler(>=6)
-extension StableBalanceConfig: Sendable {}
-#endif
 
 
 extension StableBalanceConfig: Equatable, Hashable {
@@ -20186,7 +20287,6 @@ extension StableBalanceConfig: Equatable, Hashable {
         hasher.combine(reservedSats)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -20257,9 +20357,6 @@ public struct StorageListPaymentsRequest {
     }
 }
 
-#if compiler(>=6)
-extension StorageListPaymentsRequest: Sendable {}
-#endif
 
 
 extension StorageListPaymentsRequest: Equatable, Hashable {
@@ -20306,7 +20403,6 @@ extension StorageListPaymentsRequest: Equatable, Hashable {
         hasher.combine(sortAscending)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -20376,9 +20472,6 @@ public struct Symbol {
     }
 }
 
-#if compiler(>=6)
-extension Symbol: Sendable {}
-#endif
 
 
 extension Symbol: Equatable, Hashable {
@@ -20405,7 +20498,6 @@ extension Symbol: Equatable, Hashable {
         hasher.combine(position)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -20457,9 +20549,6 @@ public struct SyncWalletRequest {
     }
 }
 
-#if compiler(>=6)
-extension SyncWalletRequest: Sendable {}
-#endif
 
 
 extension SyncWalletRequest: Equatable, Hashable {
@@ -20470,7 +20559,6 @@ extension SyncWalletRequest: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -20513,9 +20601,6 @@ public struct SyncWalletResponse {
     }
 }
 
-#if compiler(>=6)
-extension SyncWalletResponse: Sendable {}
-#endif
 
 
 extension SyncWalletResponse: Equatable, Hashable {
@@ -20526,7 +20611,6 @@ extension SyncWalletResponse: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -20570,9 +20654,6 @@ public struct TokenBalance {
     }
 }
 
-#if compiler(>=6)
-extension TokenBalance: Sendable {}
-#endif
 
 
 extension TokenBalance: Equatable, Hashable {
@@ -20591,7 +20672,6 @@ extension TokenBalance: Equatable, Hashable {
         hasher.combine(tokenMetadata)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -20662,9 +20742,6 @@ public struct TokenMetadata {
     }
 }
 
-#if compiler(>=6)
-extension TokenMetadata: Sendable {}
-#endif
 
 
 extension TokenMetadata: Equatable, Hashable {
@@ -20703,7 +20780,6 @@ extension TokenMetadata: Equatable, Hashable {
         hasher.combine(isFreezable)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -20764,9 +20840,6 @@ public struct TxStatus {
     }
 }
 
-#if compiler(>=6)
-extension TxStatus: Sendable {}
-#endif
 
 
 extension TxStatus: Equatable, Hashable {
@@ -20789,7 +20862,6 @@ extension TxStatus: Equatable, Hashable {
         hasher.combine(blockTime)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -20838,9 +20910,6 @@ public struct UnfreezeIssuerTokenRequest {
     }
 }
 
-#if compiler(>=6)
-extension UnfreezeIssuerTokenRequest: Sendable {}
-#endif
 
 
 extension UnfreezeIssuerTokenRequest: Equatable, Hashable {
@@ -20855,7 +20924,6 @@ extension UnfreezeIssuerTokenRequest: Equatable, Hashable {
         hasher.combine(address)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -20902,9 +20970,6 @@ public struct UnfreezeIssuerTokenResponse {
     }
 }
 
-#if compiler(>=6)
-extension UnfreezeIssuerTokenResponse: Sendable {}
-#endif
 
 
 extension UnfreezeIssuerTokenResponse: Equatable, Hashable {
@@ -20923,7 +20988,6 @@ extension UnfreezeIssuerTokenResponse: Equatable, Hashable {
         hasher.combine(impactedTokenAmount)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -20974,9 +21038,6 @@ public struct UnversionedRecordChange {
     }
 }
 
-#if compiler(>=6)
-extension UnversionedRecordChange: Sendable {}
-#endif
 
 
 extension UnversionedRecordChange: Equatable, Hashable {
@@ -20999,7 +21060,6 @@ extension UnversionedRecordChange: Equatable, Hashable {
         hasher.combine(updatedFields)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -21061,9 +21121,6 @@ public struct UpdateContactRequest {
     }
 }
 
-#if compiler(>=6)
-extension UpdateContactRequest: Sendable {}
-#endif
 
 
 extension UpdateContactRequest: Equatable, Hashable {
@@ -21086,7 +21143,6 @@ extension UpdateContactRequest: Equatable, Hashable {
         hasher.combine(paymentIdentifier)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -21135,9 +21191,6 @@ public struct UpdateUserSettingsRequest {
     }
 }
 
-#if compiler(>=6)
-extension UpdateUserSettingsRequest: Sendable {}
-#endif
 
 
 extension UpdateUserSettingsRequest: Equatable, Hashable {
@@ -21152,7 +21205,6 @@ extension UpdateUserSettingsRequest: Equatable, Hashable {
         hasher.combine(sparkPrivateModeEnabled)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -21223,9 +21275,6 @@ public struct UrlSuccessActionData {
     }
 }
 
-#if compiler(>=6)
-extension UrlSuccessActionData: Sendable {}
-#endif
 
 
 extension UrlSuccessActionData: Equatable, Hashable {
@@ -21248,7 +21297,6 @@ extension UrlSuccessActionData: Equatable, Hashable {
         hasher.combine(matchesCallbackDomain)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -21297,9 +21345,6 @@ public struct UserSettings {
     }
 }
 
-#if compiler(>=6)
-extension UserSettings: Sendable {}
-#endif
 
 
 extension UserSettings: Equatable, Hashable {
@@ -21314,7 +21359,6 @@ extension UserSettings: Equatable, Hashable {
         hasher.combine(sparkPrivateModeEnabled)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -21365,9 +21409,6 @@ public struct Utxo {
     }
 }
 
-#if compiler(>=6)
-extension Utxo: Sendable {}
-#endif
 
 
 extension Utxo: Equatable, Hashable {
@@ -21394,7 +21435,6 @@ extension Utxo: Equatable, Hashable {
         hasher.combine(status)
     }
 }
-
 
 
 #if swift(>=5.8)
@@ -21434,6 +21474,89 @@ public func FfiConverterTypeUtxo_lower(_ value: Utxo) -> RustBuffer {
     return FfiConverterTypeUtxo.lower(value)
 }
 
+
+/**
+ * A wallet derived from a passkey.
+ *
+ * Contains the derived seed and the wallet name used during derivation.
+ */
+public struct Wallet {
+    /**
+     * The derived seed.
+     */
+    public var seed: Seed
+    /**
+     * The wallet name used for derivation (either user-provided or the default).
+     */
+    public var name: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The derived seed.
+         */seed: Seed, 
+        /**
+         * The wallet name used for derivation (either user-provided or the default).
+         */name: String) {
+        self.seed = seed
+        self.name = name
+    }
+}
+
+
+
+extension Wallet: Equatable, Hashable {
+    public static func ==(lhs: Wallet, rhs: Wallet) -> Bool {
+        if lhs.seed != rhs.seed {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(seed)
+        hasher.combine(name)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWallet: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Wallet {
+        return
+            try Wallet(
+                seed: FfiConverterTypeSeed.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Wallet, into buf: inout [UInt8]) {
+        FfiConverterTypeSeed.write(value.seed, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWallet_lift(_ buf: RustBuffer) throws -> Wallet {
+    return try FfiConverterTypeWallet.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWallet_lower(_ value: Wallet) -> RustBuffer {
+    return FfiConverterTypeWallet.lower(value)
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
@@ -21448,10 +21571,6 @@ public enum AesSuccessActionDataResult {
     )
 }
 
-
-#if compiler(>=6)
-extension AesSuccessActionDataResult: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -21506,10 +21625,8 @@ public func FfiConverterTypeAesSuccessActionDataResult_lower(_ value: AesSuccess
 }
 
 
+
 extension AesSuccessActionDataResult: Equatable, Hashable {}
-
-
-
 
 
 
@@ -21533,10 +21650,6 @@ public enum Amount {
     )
 }
 
-
-#if compiler(>=6)
-extension Amount: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -21592,10 +21705,8 @@ public func FfiConverterTypeAmount_lower(_ value: Amount) -> RustBuffer {
 }
 
 
+
 extension Amount: Equatable, Hashable {}
-
-
-
 
 
 
@@ -21615,10 +21726,6 @@ public enum AssetFilter {
     )
 }
 
-
-#if compiler(>=6)
-extension AssetFilter: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -21671,10 +21778,8 @@ public func FfiConverterTypeAssetFilter_lower(_ value: AssetFilter) -> RustBuffe
 }
 
 
+
 extension AssetFilter: Equatable, Hashable {}
-
-
-
 
 
 
@@ -21693,10 +21798,6 @@ public enum BitcoinNetwork {
     case regtest
 }
 
-
-#if compiler(>=6)
-extension BitcoinNetwork: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -21765,10 +21866,8 @@ public func FfiConverterTypeBitcoinNetwork_lower(_ value: BitcoinNetwork) -> Rus
 }
 
 
+
 extension BitcoinNetwork: Equatable, Hashable {}
-
-
-
 
 
 
@@ -21781,10 +21880,6 @@ public enum ChainApiType {
     case mempoolSpace
 }
 
-
-#if compiler(>=6)
-extension ChainApiType: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -21835,15 +21930,13 @@ public func FfiConverterTypeChainApiType_lower(_ value: ChainApiType) -> RustBuf
 }
 
 
+
 extension ChainApiType: Equatable, Hashable {}
 
 
 
 
-
-
-
-public enum ChainServiceError: Swift.Error {
+public enum ChainServiceError {
 
     
     
@@ -21909,34 +22002,13 @@ public struct FfiConverterTypeChainServiceError: FfiConverterRustBuffer {
 }
 
 
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeChainServiceError_lift(_ buf: RustBuffer) throws -> ChainServiceError {
-    return try FfiConverterTypeChainServiceError.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeChainServiceError_lower(_ value: ChainServiceError) -> RustBuffer {
-    return FfiConverterTypeChainServiceError.lower(value)
-}
-
-
 extension ChainServiceError: Equatable, Hashable {}
-
-
-
 
 extension ChainServiceError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
 }
-
-
-
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -21965,10 +22037,6 @@ public enum ConversionPurpose {
     case autoConversion
 }
 
-
-#if compiler(>=6)
-extension ConversionPurpose: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22027,10 +22095,8 @@ public func FfiConverterTypeConversionPurpose_lower(_ value: ConversionPurpose) 
 }
 
 
+
 extension ConversionPurpose: Equatable, Hashable {}
-
-
-
 
 
 
@@ -22057,10 +22123,6 @@ public enum ConversionStatus {
     case refunded
 }
 
-
-#if compiler(>=6)
-extension ConversionStatus: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22117,10 +22179,8 @@ public func FfiConverterTypeConversionStatus_lower(_ value: ConversionStatus) ->
 }
 
 
+
 extension ConversionStatus: Equatable, Hashable {}
-
-
-
 
 
 
@@ -22140,10 +22200,6 @@ public enum ConversionType {
     )
 }
 
-
-#if compiler(>=6)
-extension ConversionType: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22196,10 +22252,8 @@ public func FfiConverterTypeConversionType_lower(_ value: ConversionType) -> Rus
 }
 
 
+
 extension ConversionType: Equatable, Hashable {}
-
-
-
 
 
 
@@ -22216,10 +22270,6 @@ public enum DepositClaimError {
     )
 }
 
-
-#if compiler(>=6)
-extension DepositClaimError: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22287,10 +22337,8 @@ public func FfiConverterTypeDepositClaimError_lower(_ value: DepositClaimError) 
 }
 
 
+
 extension DepositClaimError: Equatable, Hashable {}
-
-
-
 
 
 
@@ -22314,10 +22362,6 @@ public enum ExternalSecretSource {
     )
 }
 
-
-#if compiler(>=6)
-extension ExternalSecretSource: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22372,10 +22416,8 @@ public func FfiConverterTypeExternalSecretSource_lower(_ value: ExternalSecretSo
 }
 
 
+
 extension ExternalSecretSource: Equatable, Hashable {}
-
-
-
 
 
 
@@ -22399,10 +22441,6 @@ public enum ExternalSecretToSplit {
     )
 }
 
-
-#if compiler(>=6)
-extension ExternalSecretToSplit: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22457,10 +22495,8 @@ public func FfiConverterTypeExternalSecretToSplit_lower(_ value: ExternalSecretT
 }
 
 
+
 extension ExternalSecretToSplit: Equatable, Hashable {}
-
-
-
 
 
 
@@ -22475,10 +22511,6 @@ public enum Fee {
     )
 }
 
-
-#if compiler(>=6)
-extension Fee: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22533,10 +22565,8 @@ public func FfiConverterTypeFee_lower(_ value: Fee) -> RustBuffer {
 }
 
 
+
 extension Fee: Equatable, Hashable {}
-
-
-
 
 
 
@@ -22560,10 +22590,6 @@ public enum FeePolicy {
     case feesIncluded
 }
 
-
-#if compiler(>=6)
-extension FeePolicy: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22614,10 +22640,8 @@ public func FfiConverterTypeFeePolicy_lower(_ value: FeePolicy) -> RustBuffer {
 }
 
 
+
 extension FeePolicy: Equatable, Hashable {}
-
-
-
 
 
 
@@ -22656,10 +22680,6 @@ public enum InputType {
     )
 }
 
-
-#if compiler(>=6)
-extension InputType: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22810,10 +22830,8 @@ public func FfiConverterTypeInputType_lower(_ value: InputType) -> RustBuffer {
 }
 
 
+
 extension InputType: Equatable, Hashable {}
-
-
-
 
 
 
@@ -22829,10 +22847,6 @@ public enum KeySetType {
     case legacy
 }
 
-
-#if compiler(>=6)
-extension KeySetType: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22901,10 +22915,8 @@ public func FfiConverterTypeKeySetType_lower(_ value: KeySetType) -> RustBuffer 
 }
 
 
+
 extension KeySetType: Equatable, Hashable {}
-
-
-
 
 
 
@@ -22927,10 +22939,6 @@ public enum LnurlCallbackStatus {
     )
 }
 
-
-#if compiler(>=6)
-extension LnurlCallbackStatus: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -22983,10 +22991,8 @@ public func FfiConverterTypeLnurlCallbackStatus_lower(_ value: LnurlCallbackStat
 }
 
 
+
 extension LnurlCallbackStatus: Equatable, Hashable {}
-
-
-
 
 
 
@@ -23003,10 +23009,6 @@ public enum MaxFee {
     )
 }
 
-
-#if compiler(>=6)
-extension MaxFee: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -23069,10 +23071,8 @@ public func FfiConverterTypeMaxFee_lower(_ value: MaxFee) -> RustBuffer {
 }
 
 
+
 extension MaxFee: Equatable, Hashable {}
-
-
-
 
 
 
@@ -23085,10 +23085,6 @@ public enum Network {
     case regtest
 }
 
-
-#if compiler(>=6)
-extension Network: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -23139,10 +23135,8 @@ public func FfiConverterTypeNetwork_lower(_ value: Network) -> RustBuffer {
 }
 
 
+
 extension Network: Equatable, Hashable {}
-
-
-
 
 
 
@@ -23156,10 +23150,6 @@ public enum OnchainConfirmationSpeed {
     case slow
 }
 
-
-#if compiler(>=6)
-extension OnchainConfirmationSpeed: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -23216,10 +23206,8 @@ public func FfiConverterTypeOnchainConfirmationSpeed_lower(_ value: OnchainConfi
 }
 
 
+
 extension OnchainConfirmationSpeed: Equatable, Hashable {}
-
-
-
 
 
 
@@ -23257,10 +23245,6 @@ public enum OptimizationEvent {
     case skipped
 }
 
-
-#if compiler(>=6)
-extension OptimizationEvent: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -23342,12 +23326,290 @@ public func FfiConverterTypeOptimizationEvent_lower(_ value: OptimizationEvent) 
 }
 
 
+
 extension OptimizationEvent: Equatable, Hashable {}
 
 
 
 
+/**
+ * Error type for passkey operations.
+ */
+public enum PasskeyError {
 
+    
+    
+    /**
+     * Passkey PRF provider error
+     */
+    case PrfError(PasskeyPrfError
+    )
+    /**
+     * Nostr relay connection failed
+     */
+    case RelayConnectionFailed(String
+    )
+    /**
+     * Failed to publish to Nostr
+     */
+    case NostrWriteFailed(String
+    )
+    /**
+     * Failed to query from Nostr
+     */
+    case NostrReadFailed(String
+    )
+    /**
+     * Key derivation error
+     */
+    case KeyDerivationError(String
+    )
+    /**
+     * Invalid PRF output (wrong size, etc.)
+     */
+    case InvalidPrfOutput(String
+    )
+    /**
+     * BIP39 mnemonic generation error
+     */
+    case MnemonicError(String
+    )
+    /**
+     * Invalid salt input
+     */
+    case InvalidSalt(String
+    )
+    /**
+     * Generic error
+     */
+    case Generic(String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
+    typealias SwiftType = PasskeyError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .PrfError(
+            try FfiConverterTypePasskeyPrfError.read(from: &buf)
+            )
+        case 2: return .RelayConnectionFailed(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 3: return .NostrWriteFailed(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 4: return .NostrReadFailed(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 5: return .KeyDerivationError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 6: return .InvalidPrfOutput(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 7: return .MnemonicError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 8: return .InvalidSalt(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 9: return .Generic(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PasskeyError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .PrfError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypePasskeyPrfError.write(v1, into: &buf)
+            
+        
+        case let .RelayConnectionFailed(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .NostrWriteFailed(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .NostrReadFailed(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .KeyDerivationError(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .InvalidPrfOutput(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .MnemonicError(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .InvalidSalt(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .Generic(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+extension PasskeyError: Equatable, Hashable {}
+
+extension PasskeyError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+/**
+ * Error type for passkey PRF operations.
+ * Platforms implement `PasskeyPrfProvider` and return this error type.
+ */
+public enum PasskeyPrfError {
+
+    
+    
+    /**
+     * PRF extension is not supported by the authenticator
+     */
+    case PrfNotSupported
+    /**
+     * User cancelled the authentication
+     */
+    case UserCancelled
+    /**
+     * No credential found
+     */
+    case CredentialNotFound
+    /**
+     * Authentication failed
+     */
+    case AuthenticationFailed(String
+    )
+    /**
+     * PRF evaluation failed
+     */
+    case PrfEvaluationFailed(String
+    )
+    /**
+     * Generic error
+     */
+    case Generic(String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyPrfError: FfiConverterRustBuffer {
+    typealias SwiftType = PasskeyPrfError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyPrfError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .PrfNotSupported
+        case 2: return .UserCancelled
+        case 3: return .CredentialNotFound
+        case 4: return .AuthenticationFailed(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 5: return .PrfEvaluationFailed(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 6: return .Generic(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PasskeyPrfError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case .PrfNotSupported:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .UserCancelled:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .CredentialNotFound:
+            writeInt(&buf, Int32(3))
+        
+        
+        case let .AuthenticationFailed(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .PrfEvaluationFailed(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .Generic(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+extension PasskeyPrfError: Equatable, Hashable {}
+
+extension PasskeyPrfError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -23404,10 +23666,6 @@ public enum PaymentDetails {
     )
 }
 
-
-#if compiler(>=6)
-extension PaymentDetails: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -23498,10 +23756,8 @@ public func FfiConverterTypePaymentDetails_lower(_ value: PaymentDetails) -> Rus
 }
 
 
+
 extension PaymentDetails: Equatable, Hashable {}
-
-
-
 
 
 
@@ -23536,10 +23792,6 @@ public enum PaymentDetailsFilter {
     )
 }
 
-
-#if compiler(>=6)
-extension PaymentDetailsFilter: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -23605,10 +23857,8 @@ public func FfiConverterTypePaymentDetailsFilter_lower(_ value: PaymentDetailsFi
 }
 
 
+
 extension PaymentDetailsFilter: Equatable, Hashable {}
-
-
-
 
 
 
@@ -23625,10 +23875,6 @@ public enum PaymentMethod {
     case unknown
 }
 
-
-#if compiler(>=6)
-extension PaymentMethod: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -23703,15 +23949,13 @@ public func FfiConverterTypePaymentMethod_lower(_ value: PaymentMethod) -> RustB
 }
 
 
+
 extension PaymentMethod: Equatable, Hashable {}
 
 
 
 
-
-
-
-public enum PaymentObserverError: Swift.Error {
+public enum PaymentObserverError {
 
     
     
@@ -23767,34 +24011,13 @@ public struct FfiConverterTypePaymentObserverError: FfiConverterRustBuffer {
 }
 
 
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePaymentObserverError_lift(_ buf: RustBuffer) throws -> PaymentObserverError {
-    return try FfiConverterTypePaymentObserverError.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePaymentObserverError_lower(_ value: PaymentObserverError) -> RustBuffer {
-    return FfiConverterTypePaymentObserverError.lower(value)
-}
-
-
 extension PaymentObserverError: Equatable, Hashable {}
-
-
-
 
 extension PaymentObserverError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
 }
-
-
-
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -23818,10 +24041,6 @@ public enum PaymentStatus {
     case failed
 }
 
-
-#if compiler(>=6)
-extension PaymentStatus: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -23878,10 +24097,8 @@ public func FfiConverterTypePaymentStatus_lower(_ value: PaymentStatus) -> RustB
 }
 
 
+
 extension PaymentStatus: Equatable, Hashable {}
-
-
-
 
 
 
@@ -23903,10 +24120,6 @@ public enum PaymentType {
     case receive
 }
 
-
-#if compiler(>=6)
-extension PaymentType: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -23957,10 +24170,8 @@ public func FfiConverterTypePaymentType_lower(_ value: PaymentType) -> RustBuffe
 }
 
 
+
 extension PaymentType: Equatable, Hashable {}
-
-
-
 
 
 
@@ -23988,10 +24199,6 @@ public enum PoolQueueMode {
     case lifo
 }
 
-
-#if compiler(>=6)
-extension PoolQueueMode: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -24042,10 +24249,8 @@ public func FfiConverterTypePoolQueueMode_lower(_ value: PoolQueueMode) -> RustB
 }
 
 
+
 extension PoolQueueMode: Equatable, Hashable {}
-
-
-
 
 
 
@@ -24079,10 +24284,6 @@ public enum ProvisionalPaymentDetails {
     )
 }
 
-
-#if compiler(>=6)
-extension ProvisionalPaymentDetails: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -24154,10 +24355,8 @@ public func FfiConverterTypeProvisionalPaymentDetails_lower(_ value: Provisional
 }
 
 
+
 extension ProvisionalPaymentDetails: Equatable, Hashable {}
-
-
-
 
 
 
@@ -24198,10 +24397,6 @@ public enum ReceivePaymentMethod {
     )
 }
 
-
-#if compiler(>=6)
-extension ReceivePaymentMethod: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -24275,10 +24470,8 @@ public func FfiConverterTypeReceivePaymentMethod_lower(_ value: ReceivePaymentMe
 }
 
 
+
 extension ReceivePaymentMethod: Equatable, Hashable {}
-
-
-
 
 
 
@@ -24286,7 +24479,7 @@ extension ReceivePaymentMethod: Equatable, Hashable {}
 /**
  * Error type for the `BreezSdk`
  */
-public enum SdkError: Swift.Error {
+public enum SdkError {
 
     
     
@@ -24457,34 +24650,13 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
 }
 
 
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSdkError_lift(_ buf: RustBuffer) throws -> SdkError {
-    return try FfiConverterTypeSdkError.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSdkError_lower(_ value: SdkError) -> RustBuffer {
-    return FfiConverterTypeSdkError.lower(value)
-}
-
-
 extension SdkError: Equatable, Hashable {}
-
-
-
 
 extension SdkError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
 }
-
-
-
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -24513,12 +24685,10 @@ public enum SdkEvent {
     )
     case optimization(optimizationEvent: OptimizationEvent
     )
+    case lightningAddressChanged(lightningAddress: LightningAddressInfo?
+    )
 }
 
-
-#if compiler(>=6)
-extension SdkEvent: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -24548,6 +24718,9 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
         )
         
         case 7: return .optimization(optimizationEvent: try FfiConverterTypeOptimizationEvent.read(from: &buf)
+        )
+        
+        case 8: return .lightningAddressChanged(lightningAddress: try FfiConverterOptionTypeLightningAddressInfo.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -24591,6 +24764,11 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
             writeInt(&buf, Int32(7))
             FfiConverterTypeOptimizationEvent.write(optimizationEvent, into: &buf)
             
+        
+        case let .lightningAddressChanged(lightningAddress):
+            writeInt(&buf, Int32(8))
+            FfiConverterOptionTypeLightningAddressInfo.write(lightningAddress, into: &buf)
+            
         }
     }
 }
@@ -24611,10 +24789,8 @@ public func FfiConverterTypeSdkEvent_lower(_ value: SdkEvent) -> RustBuffer {
 }
 
 
+
 extension SdkEvent: Equatable, Hashable {}
-
-
-
 
 
 
@@ -24645,10 +24821,6 @@ public enum Seed {
     )
 }
 
-
-#if compiler(>=6)
-extension Seed: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -24704,10 +24876,8 @@ public func FfiConverterTypeSeed_lower(_ value: Seed) -> RustBuffer {
 }
 
 
+
 extension Seed: Equatable, Hashable {}
-
-
-
 
 
 
@@ -24742,10 +24912,6 @@ public enum SendPaymentMethod {
     )
 }
 
-
-#if compiler(>=6)
-extension SendPaymentMethod: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -24823,10 +24989,8 @@ public func FfiConverterTypeSendPaymentMethod_lower(_ value: SendPaymentMethod) 
 }
 
 
+
 extension SendPaymentMethod: Equatable, Hashable {}
-
-
-
 
 
 
@@ -24854,10 +25018,6 @@ public enum SendPaymentOptions {
     )
 }
 
-
-#if compiler(>=6)
-extension SendPaymentOptions: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -24921,15 +25081,13 @@ public func FfiConverterTypeSendPaymentOptions_lower(_ value: SendPaymentOptions
 }
 
 
+
 extension SendPaymentOptions: Equatable, Hashable {}
 
 
 
 
-
-
-
-public enum ServiceConnectivityError: Swift.Error {
+public enum ServiceConnectivityError {
 
     
     
@@ -25067,34 +25225,13 @@ public struct FfiConverterTypeServiceConnectivityError: FfiConverterRustBuffer {
 }
 
 
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeServiceConnectivityError_lift(_ buf: RustBuffer) throws -> ServiceConnectivityError {
-    return try FfiConverterTypeServiceConnectivityError.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeServiceConnectivityError_lower(_ value: ServiceConnectivityError) -> RustBuffer {
-    return FfiConverterTypeServiceConnectivityError.lower(value)
-}
-
-
 extension ServiceConnectivityError: Equatable, Hashable {}
-
-
-
 
 extension ServiceConnectivityError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
 }
-
-
-
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -25126,10 +25263,6 @@ public enum ServiceStatus {
     case major
 }
 
-
-#if compiler(>=6)
-extension ServiceStatus: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -25198,10 +25331,8 @@ public func FfiConverterTypeServiceStatus_lower(_ value: ServiceStatus) -> RustB
 }
 
 
+
 extension ServiceStatus: Equatable, Hashable {}
-
-
-
 
 
 
@@ -25209,7 +25340,7 @@ extension ServiceStatus: Equatable, Hashable {}
 /**
  * Error type for signer operations
  */
-public enum SignerError: Swift.Error {
+public enum SignerError {
 
     
     
@@ -25315,34 +25446,13 @@ public struct FfiConverterTypeSignerError: FfiConverterRustBuffer {
 }
 
 
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSignerError_lift(_ buf: RustBuffer) throws -> SignerError {
-    return try FfiConverterTypeSignerError.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSignerError_lower(_ value: SignerError) -> RustBuffer {
-    return FfiConverterTypeSignerError.lower(value)
-}
-
-
 extension SignerError: Equatable, Hashable {}
-
-
-
 
 extension SignerError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
 }
-
-
-
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -25363,10 +25473,6 @@ public enum SparkHtlcStatus {
     case returned
 }
 
-
-#if compiler(>=6)
-extension SparkHtlcStatus: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -25423,10 +25529,8 @@ public func FfiConverterTypeSparkHtlcStatus_lower(_ value: SparkHtlcStatus) -> R
 }
 
 
+
 extension SparkHtlcStatus: Equatable, Hashable {}
-
-
-
 
 
 
@@ -25434,7 +25538,7 @@ extension SparkHtlcStatus: Equatable, Hashable {}
 /**
  * Errors that can occur during storage operations
  */
-public enum StorageError: Swift.Error {
+public enum StorageError {
 
     
     
@@ -25523,34 +25627,13 @@ public struct FfiConverterTypeStorageError: FfiConverterRustBuffer {
 }
 
 
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeStorageError_lift(_ buf: RustBuffer) throws -> StorageError {
-    return try FfiConverterTypeStorageError.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeStorageError_lower(_ value: StorageError) -> RustBuffer {
-    return FfiConverterTypeStorageError.lower(value)
-}
-
-
 extension StorageError: Equatable, Hashable {}
-
-
-
 
 extension StorageError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
 }
-
-
-
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -25570,10 +25653,6 @@ public enum StoragePaymentDetailsFilter {
     )
 }
 
-
-#if compiler(>=6)
-extension StoragePaymentDetailsFilter: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -25640,10 +25719,8 @@ public func FfiConverterTypeStoragePaymentDetailsFilter_lower(_ value: StoragePa
 }
 
 
+
 extension StoragePaymentDetailsFilter: Equatable, Hashable {}
-
-
-
 
 
 
@@ -25675,10 +25752,6 @@ public enum SuccessAction {
     )
 }
 
-
-#if compiler(>=6)
-extension SuccessAction: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -25741,10 +25814,8 @@ public func FfiConverterTypeSuccessAction_lower(_ value: SuccessAction) -> RustB
 }
 
 
+
 extension SuccessAction: Equatable, Hashable {}
-
-
-
 
 
 
@@ -25777,10 +25848,6 @@ public enum SuccessActionProcessed {
     )
 }
 
-
-#if compiler(>=6)
-extension SuccessActionProcessed: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -25843,10 +25910,8 @@ public func FfiConverterTypeSuccessActionProcessed_lower(_ value: SuccessActionP
 }
 
 
+
 extension SuccessActionProcessed: Equatable, Hashable {}
-
-
-
 
 
 
@@ -25860,10 +25925,6 @@ public enum TokenTransactionType {
     case burn
 }
 
-
-#if compiler(>=6)
-extension TokenTransactionType: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -25920,10 +25981,8 @@ public func FfiConverterTypeTokenTransactionType_lower(_ value: TokenTransaction
 }
 
 
+
 extension TokenTransactionType: Equatable, Hashable {}
-
-
-
 
 
 
@@ -25938,10 +25997,6 @@ public enum UpdateDepositPayload {
     )
 }
 
-
-#if compiler(>=6)
-extension UpdateDepositPayload: Sendable {}
-#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -25997,10 +26052,8 @@ public func FfiConverterTypeUpdateDepositPayload_lower(_ value: UpdateDepositPay
 }
 
 
+
 extension UpdateDepositPayload: Equatable, Hashable {}
-
-
-
 
 
 
@@ -26010,7 +26063,7 @@ extension UpdateDepositPayload: Equatable, Hashable {}
 /**
  * Trait for event listeners
  */
-public protocol EventListener: AnyObject, Sendable {
+public protocol EventListener : AnyObject {
     
     /**
      * Called when an event occurs
@@ -26020,15 +26073,13 @@ public protocol EventListener: AnyObject, Sendable {
 }
 
 
+
 // Put the implementation in a struct so we don't pollute the top-level namespace
 fileprivate struct UniffiCallbackInterfaceEventListener {
 
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
-    //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceEventListener] = [UniffiVTableCallbackInterfaceEventListener(
+    static var vtable: UniffiVTableCallbackInterfaceEventListener = UniffiVTableCallbackInterfaceEventListener(
         onEvent: { (
             uniffiHandle: UInt64,
             event: RustBuffer,
@@ -26042,7 +26093,7 @@ fileprivate struct UniffiCallbackInterfaceEventListener {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return await uniffiObj.onEvent(
-                     event: try FfiConverterTypeSdkEvent_lift(event)
+                     event: try FfiConverterTypeSdkEvent.lift(event)
                 )
             }
 
@@ -26075,11 +26126,11 @@ fileprivate struct UniffiCallbackInterfaceEventListener {
                 print("Uniffi callback interface EventListener: handle missing in uniffiFree")
             }
         }
-    )]
+    )
 }
 
 private func uniffiCallbackInitEventListener() {
-    uniffi_breez_sdk_spark_fn_init_callback_vtable_eventlistener(UniffiCallbackInterfaceEventListener.vtable)
+    uniffi_breez_sdk_spark_fn_init_callback_vtable_eventlistener(&UniffiCallbackInterfaceEventListener.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -26087,7 +26138,7 @@ private func uniffiCallbackInitEventListener() {
 @_documentation(visibility: private)
 #endif
 fileprivate struct FfiConverterCallbackInterfaceEventListener {
-    fileprivate static let handleMap = UniffiHandleMap<EventListener>()
+    fileprivate static var handleMap = UniffiHandleMap<EventListener>()
 }
 
 #if swift(>=5.8)
@@ -26128,28 +26179,14 @@ extension FfiConverterCallbackInterfaceEventListener : FfiConverter {
 }
 
 
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterCallbackInterfaceEventListener_lift(_ handle: UInt64) throws -> EventListener {
-    return try FfiConverterCallbackInterfaceEventListener.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterCallbackInterfaceEventListener_lower(_ v: EventListener) -> UInt64 {
-    return FfiConverterCallbackInterfaceEventListener.lower(v)
-}
 
 
-
-
-public protocol Logger: AnyObject, Sendable {
+public protocol Logger : AnyObject {
     
     func log(l: LogEntry) 
     
 }
+
 
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
@@ -26157,10 +26194,7 @@ fileprivate struct UniffiCallbackInterfaceLogger {
 
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
-    //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceLogger] = [UniffiVTableCallbackInterfaceLogger(
+    static var vtable: UniffiVTableCallbackInterfaceLogger = UniffiVTableCallbackInterfaceLogger(
         log: { (
             uniffiHandle: UInt64,
             l: RustBuffer,
@@ -26173,7 +26207,7 @@ fileprivate struct UniffiCallbackInterfaceLogger {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return uniffiObj.log(
-                     l: try FfiConverterTypeLogEntry_lift(l)
+                     l: try FfiConverterTypeLogEntry.lift(l)
                 )
             }
 
@@ -26191,11 +26225,11 @@ fileprivate struct UniffiCallbackInterfaceLogger {
                 print("Uniffi callback interface Logger: handle missing in uniffiFree")
             }
         }
-    )]
+    )
 }
 
 private func uniffiCallbackInitLogger() {
-    uniffi_breez_sdk_spark_fn_init_callback_vtable_logger(UniffiCallbackInterfaceLogger.vtable)
+    uniffi_breez_sdk_spark_fn_init_callback_vtable_logger(&UniffiCallbackInterfaceLogger.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -26203,7 +26237,7 @@ private func uniffiCallbackInitLogger() {
 @_documentation(visibility: private)
 #endif
 fileprivate struct FfiConverterCallbackInterfaceLogger {
-    fileprivate static let handleMap = UniffiHandleMap<Logger>()
+    fileprivate static var handleMap = UniffiHandleMap<Logger>()
 }
 
 #if swift(>=5.8)
@@ -26241,21 +26275,6 @@ extension FfiConverterCallbackInterfaceLogger : FfiConverter {
     public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
         writeInt(&buf, lower(v))
     }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterCallbackInterfaceLogger_lift(_ handle: UInt64) throws -> Logger {
-    return try FfiConverterCallbackInterfaceLogger.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterCallbackInterfaceLogger_lower(_ v: Logger) -> UInt64 {
-    return FfiConverterCallbackInterfaceLogger.lower(v)
 }
 
 #if swift(>=5.8)
@@ -26613,6 +26632,30 @@ fileprivate struct FfiConverterOptionTypeLnurlWithdrawInfo: FfiConverterRustBuff
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeLnurlWithdrawInfo.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeNostrRelayConfig: FfiConverterRustBuffer {
+    typealias SwiftType = NostrRelayConfig?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeNostrRelayConfig.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeNostrRelayConfig.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -28255,9 +28298,9 @@ fileprivate func uniffiRustCallAsync<F, T>(
     liftFunc: (F) throws -> T,
     errorHandler: ((RustBuffer) throws -> Swift.Error)?
 ) async throws -> T {
-    // Make sure to call the ensure init function since future creation doesn't have a
+    // Make sure to call uniffiEnsureInitialized() since future creation doesn't have a
     // RustCallStatus param, so doesn't use makeRustCall()
-    uniffiEnsureBreezSdkSparkInitialized()
+    uniffiEnsureInitialized()
     let rustFuture = rustFutureFunc()
     defer {
         freeFunc(rustFuture)
@@ -28294,22 +28337,11 @@ private func uniffiTraitInterfaceCallAsync<T>(
     handleError: @escaping (Int8, RustBuffer) -> ()
 ) -> UniffiForeignFuture {
     let task = Task {
-        // Note: it's important we call either `handleSuccess` or `handleError` exactly once.  Each
-        // call consumes an Arc reference, which means there should be no possibility of a double
-        // call.  The following code is structured so that will will never call both `handleSuccess`
-        // and `handleError`, even in the face of weird errors.
-        //
-        // On platforms that need extra machinery to make C-ABI calls, like JNA or ctypes, it's
-        // possible that we fail to make either call.  However, it doesn't seem like this is
-        // possible on Swift since swift can just make the C call directly.
-        var callResult: T
         do {
-            callResult = try await makeCall()
+            handleSuccess(try await makeCall())
         } catch {
             handleError(CALL_UNEXPECTED_ERROR, FfiConverterString.lower(String(describing: error)))
-            return
         }
-        handleSuccess(callResult)
     }
     let handle = UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert(obj: task)
     return UniffiForeignFuture(handle: handle, free: uniffiForeignFutureFree)
@@ -28323,19 +28355,13 @@ private func uniffiTraitInterfaceCallAsyncWithError<T, E>(
     lowerError: @escaping (E) -> RustBuffer
 ) -> UniffiForeignFuture {
     let task = Task {
-        // See the note in uniffiTraitInterfaceCallAsync for details on `handleSuccess` and
-        // `handleError`.
-        var callResult: T
         do {
-            callResult = try await makeCall()
+            handleSuccess(try await makeCall())
         } catch let error as E {
             handleError(CALL_ERROR, lowerError(error))
-            return
         } catch {
             handleError(CALL_UNEXPECTED_ERROR, FfiConverterString.lower(String(describing: error)))
-            return
         }
-        handleSuccess(callResult)
     }
     let handle = UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert(obj: task)
     return UniffiForeignFuture(handle: handle, free: uniffiForeignFutureFree)
@@ -28343,7 +28369,7 @@ private func uniffiTraitInterfaceCallAsyncWithError<T, E>(
 
 // Borrow the callback handle map implementation to store foreign future handles
 // TODO: consolidate the handle-map code (https://github.com/mozilla/uniffi-rs/pull/1823)
-fileprivate let UNIFFI_FOREIGN_FUTURE_HANDLE_MAP = UniffiHandleMap<UniffiForeignFutureTask>()
+fileprivate var UNIFFI_FOREIGN_FUTURE_HANDLE_MAP = UniffiHandleMap<UniffiForeignFutureTask>()
 
 // Protocol for tasks that handle foreign futures.
 //
@@ -28382,18 +28408,18 @@ public func uniffiForeignFutureHandleCountBreezSdkSpark() -> Int {
  *
  * Result containing either the initialized `BreezSdk` or an `SdkError`
  */
-public func connect(request: ConnectRequest)async throws  -> BreezSdk  {
+public func connect(request: ConnectRequest)async throws  -> BreezSdk {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_func_connect(FfiConverterTypeConnectRequest_lower(request)
+                uniffi_breez_sdk_spark_fn_func_connect(FfiConverterTypeConnectRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_pointer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_pointer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_pointer,
-            liftFunc: FfiConverterTypeBreezSdk_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeBreezSdk.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
 /**
@@ -28410,24 +28436,24 @@ public func connect(request: ConnectRequest)async throws  -> BreezSdk  {
  *
  * Result containing either the initialized `BreezSdk` or an `SdkError`
  */
-public func connectWithSigner(request: ConnectWithSignerRequest)async throws  -> BreezSdk  {
+public func connectWithSigner(request: ConnectWithSignerRequest)async throws  -> BreezSdk {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_func_connect_with_signer(FfiConverterTypeConnectWithSignerRequest_lower(request)
+                uniffi_breez_sdk_spark_fn_func_connect_with_signer(FfiConverterTypeConnectWithSignerRequest.lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_pointer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_pointer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_pointer,
-            liftFunc: FfiConverterTypeBreezSdk_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeBreezSdk.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
-public func defaultConfig(network: Network) -> Config  {
-    return try!  FfiConverterTypeConfig_lift(try! rustCall() {
+public func defaultConfig(network: Network) -> Config {
+    return try!  FfiConverterTypeConfig.lift(try! rustCall() {
     uniffi_breez_sdk_spark_fn_func_default_config(
-        FfiConverterTypeNetwork_lower(network),$0
+        FfiConverterTypeNetwork.lower(network),$0
     )
 })
 }
@@ -28448,12 +28474,12 @@ public func defaultConfig(network: Network) -> Config  {
  *
  * Result containing the signer as `Arc<dyn ExternalSigner>`
  */
-public func defaultExternalSigner(mnemonic: String, passphrase: String?, network: Network, keySetConfig: KeySetConfig?)throws  -> ExternalSigner  {
-    return try  FfiConverterTypeExternalSigner_lift(try rustCallWithError(FfiConverterTypeSdkError_lift) {
+public func defaultExternalSigner(mnemonic: String, passphrase: String?, network: Network, keySetConfig: KeySetConfig?)throws  -> ExternalSigner {
+    return try  FfiConverterTypeExternalSigner.lift(try rustCallWithError(FfiConverterTypeSdkError.lift) {
     uniffi_breez_sdk_spark_fn_func_default_external_signer(
         FfiConverterString.lower(mnemonic),
         FfiConverterOptionString.lower(passphrase),
-        FfiConverterTypeNetwork_lower(network),
+        FfiConverterTypeNetwork.lower(network),
         FfiConverterOptionTypeKeySetConfig.lower(keySetConfig),$0
     )
 })
@@ -28472,8 +28498,8 @@ public func defaultExternalSigner(mnemonic: String, passphrase: String?, network
  * - `queue_mode`: FIFO
  * - `root_ca_pem`: `None` (uses Mozilla's root certificate store)
  */
-public func defaultPostgresStorageConfig(connectionString: String) -> PostgresStorageConfig  {
-    return try!  FfiConverterTypePostgresStorageConfig_lift(try! rustCall() {
+public func defaultPostgresStorageConfig(connectionString: String) -> PostgresStorageConfig {
+    return try!  FfiConverterTypePostgresStorageConfig.lift(try! rustCall() {
     uniffi_breez_sdk_spark_fn_func_default_postgres_storage_config(
         FfiConverterString.lower(connectionString),$0
     )
@@ -28485,7 +28511,7 @@ public func defaultPostgresStorageConfig(connectionString: String) -> PostgresSt
  * This function queries the Spark status API and returns the worst status
  * across the Spark Operators and SSP services.
  */
-public func getSparkStatus()async throws  -> SparkStatus  {
+public func getSparkStatus()async throws  -> SparkStatus {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -28495,11 +28521,11 @@ public func getSparkStatus()async throws  -> SparkStatus  {
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSparkStatus_lift,
-            errorHandler: FfiConverterTypeSdkError_lift
+            liftFunc: FfiConverterTypeSparkStatus.lift,
+            errorHandler: FfiConverterTypeSdkError.lift
         )
 }
-public func initLogging(logDir: String?, appLogger: Logger?, logFilter: String?)throws   {try rustCallWithError(FfiConverterTypeSdkError_lift) {
+public func initLogging(logDir: String?, appLogger: Logger?, logFilter: String?)throws  {try rustCallWithError(FfiConverterTypeSdkError.lift) {
     uniffi_breez_sdk_spark_fn_func_init_logging(
         FfiConverterOptionString.lower(logDir),
         FfiConverterOptionCallbackInterfaceLogger.lower(appLogger),
@@ -28515,9 +28541,9 @@ private enum InitializationResult {
 }
 // Use a global variable to perform the versioning checks. Swift ensures that
 // the code inside is only computed once.
-private let initializationResult: InitializationResult = {
+private var initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
-    let bindings_contract_version = 29
+    let bindings_contract_version = 26
     // Get the scaffolding contract version by calling the into the dylib
     let scaffolding_contract_version = ffi_breez_sdk_spark_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
@@ -28748,6 +28774,24 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_fiatservice_fetch_fiat_rates() != 11512) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_passkey_get_wallet() != 499) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_passkey_is_available() != 31283) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_passkey_list_wallet_names() != 37080) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_passkey_store_wallet_name() != 2664) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_passkeyprfprovider_derive_prf_seed() != 44905) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_passkeyprfprovider_is_prf_available() != 33931) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_paymentobserver_before_send() != 30686) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -28895,6 +28939,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_tokenissuer_unfreeze_issuer_token() != 65025) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_constructor_passkey_new() != 25404) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_constructor_sdkbuilder_new() != 65435) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -28908,6 +28955,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitBitcoinChainService()
     uniffiCallbackInitExternalSigner()
     uniffiCallbackInitFiatService()
+    uniffiCallbackInitPasskeyPrfProvider()
     uniffiCallbackInitPaymentObserver()
     uniffiCallbackInitRestClient()
     uniffiCallbackInitStorage()
@@ -28916,9 +28964,7 @@ private let initializationResult: InitializationResult = {
     return InitializationResult.ok
 }()
 
-// Make the ensure init function public so that other modules which have external type references to
-// our types can call it.
-public func uniffiEnsureBreezSdkSparkInitialized() {
+private func uniffiEnsureInitialized() {
     switch initializationResult {
     case .ok:
         break
