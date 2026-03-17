@@ -4405,26 +4405,26 @@ public func FfiConverterTypeFiatService_lower(_ value: FiatService) -> UnsafeMut
  * Orchestrates passkey-based wallet creation and restore operations.
  *
  * This struct coordinates between the platform's passkey PRF provider and
- * Nostr relays to derive wallet mnemonics and manage wallet names.
+ * Nostr relays to derive wallet mnemonics and manage labels.
  *
  * The Nostr identity (derived from the passkey's magic salt) is cached after
- * the first derivation so that subsequent calls to [`Passkey::list_wallet_names`]
- * and [`Passkey::store_wallet_name`] do not require additional PRF interactions.
+ * the first derivation so that subsequent calls to [`Passkey::list_labels`]
+ * and [`Passkey::store_label`] do not require additional PRF interactions.
  */
 public protocol PasskeyProtocol : AnyObject {
     
     /**
-     * Derive a wallet for a given wallet name.
+     * Derive a wallet for a given label.
      *
-     * Uses the passkey PRF to derive a 24-word BIP39 mnemonic from the wallet name
-     * and returns it as a [`Wallet`] containing the seed and resolved name.
+     * Uses the passkey PRF to derive a 12-word BIP39 mnemonic from the label
+     * and returns it as a [`Wallet`] containing the seed and resolved label.
      * This works for both creating a new wallet and restoring an existing one.
      *
      * # Arguments
-     * * `wallet_name` - A user-chosen wallet name (e.g., "personal", "business").
-     * If `None`, defaults to [`DEFAULT_WALLET_NAME`].
+     * * `label` - A user-chosen label (e.g., "personal", "business").
+     * If `None`, defaults to [`DEFAULT_LABEL`].
      */
-    func getWallet(walletName: String?) async throws  -> Wallet
+    func getWallet(label: String?) async throws  -> Wallet
     
     /**
      * Check if passkey PRF is available on this device.
@@ -4434,23 +4434,23 @@ public protocol PasskeyProtocol : AnyObject {
     func isAvailable() async throws  -> Bool
     
     /**
-     * List all wallet names published to Nostr for this passkey's identity.
+     * List all labels published to Nostr for this passkey's identity.
      *
-     * Queries Nostr relays for all wallet names associated with the Nostr identity
+     * Queries Nostr relays for all labels associated with the Nostr identity
      * derived from this passkey. Requires 1 PRF call.
      */
-    func listWalletNames() async throws  -> [String]
+    func listLabels() async throws  -> [String]
     
     /**
-     * Publish a wallet name to Nostr relays for this passkey's identity.
+     * Publish a label to Nostr relays for this passkey's identity.
      *
-     * Idempotent: if the wallet name already exists, it is not published again.
+     * Idempotent: if the label already exists, it is not published again.
      * Requires 1 PRF call.
      *
      * # Arguments
-     * * `wallet_name` - A user-chosen wallet name (e.g., "personal", "business")
+     * * `label` - A user-chosen label (e.g., "personal", "business")
      */
-    func storeWalletName(walletName: String) async throws 
+    func storeLabel(label: String) async throws 
     
 }
 
@@ -4458,11 +4458,11 @@ public protocol PasskeyProtocol : AnyObject {
  * Orchestrates passkey-based wallet creation and restore operations.
  *
  * This struct coordinates between the platform's passkey PRF provider and
- * Nostr relays to derive wallet mnemonics and manage wallet names.
+ * Nostr relays to derive wallet mnemonics and manage labels.
  *
  * The Nostr identity (derived from the passkey's magic salt) is cached after
- * the first derivation so that subsequent calls to [`Passkey::list_wallet_names`]
- * and [`Passkey::store_wallet_name`] do not require additional PRF interactions.
+ * the first derivation so that subsequent calls to [`Passkey::list_labels`]
+ * and [`Passkey::store_label`] do not require additional PRF interactions.
  */
 open class Passkey:
     PasskeyProtocol {
@@ -4531,23 +4531,23 @@ public convenience init(prfProvider: PasskeyPrfProvider, relayConfig: NostrRelay
 
     
     /**
-     * Derive a wallet for a given wallet name.
+     * Derive a wallet for a given label.
      *
-     * Uses the passkey PRF to derive a 24-word BIP39 mnemonic from the wallet name
-     * and returns it as a [`Wallet`] containing the seed and resolved name.
+     * Uses the passkey PRF to derive a 12-word BIP39 mnemonic from the label
+     * and returns it as a [`Wallet`] containing the seed and resolved label.
      * This works for both creating a new wallet and restoring an existing one.
      *
      * # Arguments
-     * * `wallet_name` - A user-chosen wallet name (e.g., "personal", "business").
-     * If `None`, defaults to [`DEFAULT_WALLET_NAME`].
+     * * `label` - A user-chosen label (e.g., "personal", "business").
+     * If `None`, defaults to [`DEFAULT_LABEL`].
      */
-open func getWallet(walletName: String?)async throws  -> Wallet {
+open func getWallet(label: String?)async throws  -> Wallet {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_passkey_get_wallet(
                     self.uniffiClonePointer(),
-                    FfiConverterOptionString.lower(walletName)
+                    FfiConverterOptionString.lower(label)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
@@ -4581,16 +4581,16 @@ open func isAvailable()async throws  -> Bool {
 }
     
     /**
-     * List all wallet names published to Nostr for this passkey's identity.
+     * List all labels published to Nostr for this passkey's identity.
      *
-     * Queries Nostr relays for all wallet names associated with the Nostr identity
+     * Queries Nostr relays for all labels associated with the Nostr identity
      * derived from this passkey. Requires 1 PRF call.
      */
-open func listWalletNames()async throws  -> [String] {
+open func listLabels()async throws  -> [String] {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_passkey_list_wallet_names(
+                uniffi_breez_sdk_spark_fn_method_passkey_list_labels(
                     self.uniffiClonePointer()
                     
                 )
@@ -4604,21 +4604,21 @@ open func listWalletNames()async throws  -> [String] {
 }
     
     /**
-     * Publish a wallet name to Nostr relays for this passkey's identity.
+     * Publish a label to Nostr relays for this passkey's identity.
      *
-     * Idempotent: if the wallet name already exists, it is not published again.
+     * Idempotent: if the label already exists, it is not published again.
      * Requires 1 PRF call.
      *
      * # Arguments
-     * * `wallet_name` - A user-chosen wallet name (e.g., "personal", "business")
+     * * `label` - A user-chosen label (e.g., "personal", "business")
      */
-open func storeWalletName(walletName: String)async throws  {
+open func storeLabel(label: String)async throws  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_passkey_store_wallet_name(
+                uniffi_breez_sdk_spark_fn_method_passkey_store_label(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(walletName)
+                    FfiConverterString.lower(label)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -21478,7 +21478,7 @@ public func FfiConverterTypeUtxo_lower(_ value: Utxo) -> RustBuffer {
 /**
  * A wallet derived from a passkey.
  *
- * Contains the derived seed and the wallet name used during derivation.
+ * Contains the derived seed and the label used during derivation.
  */
 public struct Wallet {
     /**
@@ -21486,9 +21486,9 @@ public struct Wallet {
      */
     public var seed: Seed
     /**
-     * The wallet name used for derivation (either user-provided or the default).
+     * The label used for derivation (either user-provided or the default).
      */
-    public var name: String
+    public var label: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -21497,10 +21497,10 @@ public struct Wallet {
          * The derived seed.
          */seed: Seed, 
         /**
-         * The wallet name used for derivation (either user-provided or the default).
-         */name: String) {
+         * The label used for derivation (either user-provided or the default).
+         */label: String) {
         self.seed = seed
-        self.name = name
+        self.label = label
     }
 }
 
@@ -21511,7 +21511,7 @@ extension Wallet: Equatable, Hashable {
         if lhs.seed != rhs.seed {
             return false
         }
-        if lhs.name != rhs.name {
+        if lhs.label != rhs.label {
             return false
         }
         return true
@@ -21519,7 +21519,7 @@ extension Wallet: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(seed)
-        hasher.combine(name)
+        hasher.combine(label)
     }
 }
 
@@ -21532,13 +21532,13 @@ public struct FfiConverterTypeWallet: FfiConverterRustBuffer {
         return
             try Wallet(
                 seed: FfiConverterTypeSeed.read(from: &buf), 
-                name: FfiConverterString.read(from: &buf)
+                label: FfiConverterString.read(from: &buf)
         )
     }
 
     public static func write(_ value: Wallet, into buf: inout [UInt8]) {
         FfiConverterTypeSeed.write(value.seed, into: &buf)
-        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.label, into: &buf)
     }
 }
 
@@ -28375,7 +28375,7 @@ fileprivate var UNIFFI_FOREIGN_FUTURE_HANDLE_MAP = UniffiHandleMap<UniffiForeign
 //
 // Defining a protocol allows all tasks to be stored in the same handle map.  This can't be done
 // with the task object itself, since has generic parameters.
-fileprivate protocol UniffiForeignFutureTask {
+protocol UniffiForeignFutureTask {
     func cancel()
 }
 
@@ -28774,16 +28774,16 @@ private var initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_fiatservice_fetch_fiat_rates() != 11512) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_passkey_get_wallet() != 499) {
+    if (uniffi_breez_sdk_spark_checksum_method_passkey_get_wallet() != 28830) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_passkey_is_available() != 31283) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_passkey_list_wallet_names() != 37080) {
+    if (uniffi_breez_sdk_spark_checksum_method_passkey_list_labels() != 5351) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_passkey_store_wallet_name() != 2664) {
+    if (uniffi_breez_sdk_spark_checksum_method_passkey_store_label() != 42949) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_passkeyprfprovider_derive_prf_seed() != 44905) {
