@@ -16,7 +16,7 @@ let package = Package(
         .package(url: "https://github.com/mkrd/Swift-BigInt.git", from: "2.0.0")
     ],
     targets: [
-        .binaryTarget(name: "breez_sdk_sparkFFI", url: "https://github.com/breez/breez-sdk-spark-swift/releases/download/0.13.2-dev4/breez_sdk_sparkFFI.xcframework.zip", checksum: "815ac873ab547e4a381d6b7a12ec7cf4994bf5f98a5fbe562c6d6a632c9bb3fb"),
+        .binaryTarget(name: "breez_sdk_sparkFFI", url: "https://github.com/breez/breez-sdk-spark-swift/releases/download/0.13.2-dev5/breez_sdk_sparkFFI.xcframework.zip", checksum: "91102f16fc2929b1fec3f381da21aadb626e5f2b774c6e3abd1437cc991110de"),
         .target(
             name: "BreezSdkSpark",
             dependencies: [
