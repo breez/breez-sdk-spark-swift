@@ -23611,13 +23611,18 @@ public enum BuyBitcoinRequest {
     )
     /**
      * `CashApp`: Pay via the Lightning Network.
-     * Generates a bolt11 invoice and returns a `cash.app` deep link.
-     * Only available on mainnet.
+     * Generates a bolt11 invoice for the given amount and returns a
+     * `cash.app` deep link. Only available on mainnet.
+     *
+     * The amount is required. With an amountless invoice, Cash App only
+     * lets the payer fund from their existing Cash App BTC balance. With
+     * a fixed-amount invoice, Cash App opens up funding via fiat balance
+     * and debit card.
      */
     case cashApp(
         /**
-         * Amount in satoshis for the Lightning invoice.
-         */amountSats: UInt64?
+         * Amount in satoshis for the Lightning invoice. Must be non-zero.
+         */amountSats: UInt64
     )
 }
 
@@ -23639,7 +23644,7 @@ public struct FfiConverterTypeBuyBitcoinRequest: FfiConverterRustBuffer {
         case 1: return .moonpay(lockedAmountSat: try FfiConverterOptionUInt64.read(from: &buf), redirectUrl: try FfiConverterOptionString.read(from: &buf)
         )
         
-        case 2: return .cashApp(amountSats: try FfiConverterOptionUInt64.read(from: &buf)
+        case 2: return .cashApp(amountSats: try FfiConverterUInt64.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -23658,7 +23663,7 @@ public struct FfiConverterTypeBuyBitcoinRequest: FfiConverterRustBuffer {
         
         case let .cashApp(amountSats):
             writeInt(&buf, Int32(2))
-            FfiConverterOptionUInt64.write(amountSats, into: &buf)
+            FfiConverterUInt64.write(amountSats, into: &buf)
             
         }
     }
