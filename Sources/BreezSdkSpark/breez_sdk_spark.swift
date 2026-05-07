@@ -5800,6 +5800,14 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
     func withLnurlClient(lnurlClient: RestClient) async 
     
     /**
+     * Sets `MySQL` as the backend for all stores (storage, tree store, and token store).
+     * The store instances will be created during `build()`.
+     * Arguments:
+     * - `config`: The `MySQL` storage configuration.
+     */
+    func withMysqlBackend(config: MysqlStorageConfig) async 
+    
+    /**
      * Sets the payment observer to be used by the SDK.
      * Arguments:
      * - `payment_observer`: The payment observer to be used.
@@ -6022,6 +6030,30 @@ open func withLnurlClient(lnurlClient: RestClient)async   {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_lnurl_client(
                     self.uniffiClonePointer(),
                     FfiConverterTypeRestClient_lower(lnurlClient)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
+}
+    
+    /**
+     * Sets `MySQL` as the backend for all stores (storage, tree store, and token store).
+     * The store instances will be created during `build()`.
+     * Arguments:
+     * - `config`: The `MySQL` storage configuration.
+     */
+open func withMysqlBackend(config: MysqlStorageConfig)async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_mysql_backend(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeMysqlStorageConfig_lower(config)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -17030,6 +17062,131 @@ public func FfiConverterTypeMintIssuerTokenRequest_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeMintIssuerTokenRequest_lower(_ value: MintIssuerTokenRequest) -> RustBuffer {
     return FfiConverterTypeMintIssuerTokenRequest.lower(value)
+}
+
+
+/**
+ * Configuration for `MySQL` storage connection pool.
+ */
+public struct MysqlStorageConfig {
+    /**
+     * `MySQL` connection string (URL form).
+     *
+     * Supported format:
+     * - URL: `mysql://user:password@host:3306/dbname?ssl-mode=required`
+     */
+    public var connectionString: String
+    /**
+     * Maximum number of connections in the pool.
+     */
+    public var maxPoolSize: UInt32
+    /**
+     * Timeout in seconds before recycling an idle connection.
+     * `None` means connections are not recycled based on idle time.
+     */
+    public var recycleTimeoutSecs: UInt64?
+    /**
+     * Custom CA certificate(s) in PEM format for server verification.
+     * Only used when the connection string requests TLS
+     * (`ssl-mode=verify_ca` or `ssl-mode=verify_identity`).
+     */
+    public var rootCaPem: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `MySQL` connection string (URL form).
+         *
+         * Supported format:
+         * - URL: `mysql://user:password@host:3306/dbname?ssl-mode=required`
+         */connectionString: String, 
+        /**
+         * Maximum number of connections in the pool.
+         */maxPoolSize: UInt32, 
+        /**
+         * Timeout in seconds before recycling an idle connection.
+         * `None` means connections are not recycled based on idle time.
+         */recycleTimeoutSecs: UInt64?, 
+        /**
+         * Custom CA certificate(s) in PEM format for server verification.
+         * Only used when the connection string requests TLS
+         * (`ssl-mode=verify_ca` or `ssl-mode=verify_identity`).
+         */rootCaPem: String?) {
+        self.connectionString = connectionString
+        self.maxPoolSize = maxPoolSize
+        self.recycleTimeoutSecs = recycleTimeoutSecs
+        self.rootCaPem = rootCaPem
+    }
+}
+
+#if compiler(>=6)
+extension MysqlStorageConfig: Sendable {}
+#endif
+
+
+extension MysqlStorageConfig: Equatable, Hashable {
+    public static func ==(lhs: MysqlStorageConfig, rhs: MysqlStorageConfig) -> Bool {
+        if lhs.connectionString != rhs.connectionString {
+            return false
+        }
+        if lhs.maxPoolSize != rhs.maxPoolSize {
+            return false
+        }
+        if lhs.recycleTimeoutSecs != rhs.recycleTimeoutSecs {
+            return false
+        }
+        if lhs.rootCaPem != rhs.rootCaPem {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(connectionString)
+        hasher.combine(maxPoolSize)
+        hasher.combine(recycleTimeoutSecs)
+        hasher.combine(rootCaPem)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMysqlStorageConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MysqlStorageConfig {
+        return
+            try MysqlStorageConfig(
+                connectionString: FfiConverterString.read(from: &buf), 
+                maxPoolSize: FfiConverterUInt32.read(from: &buf), 
+                recycleTimeoutSecs: FfiConverterOptionUInt64.read(from: &buf), 
+                rootCaPem: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MysqlStorageConfig, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.connectionString, into: &buf)
+        FfiConverterUInt32.write(value.maxPoolSize, into: &buf)
+        FfiConverterOptionUInt64.write(value.recycleTimeoutSecs, into: &buf)
+        FfiConverterOptionString.write(value.rootCaPem, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMysqlStorageConfig_lift(_ buf: RustBuffer) throws -> MysqlStorageConfig {
+    return try FfiConverterTypeMysqlStorageConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMysqlStorageConfig_lower(_ value: MysqlStorageConfig) -> RustBuffer {
+    return FfiConverterTypeMysqlStorageConfig.lower(value)
 }
 
 
@@ -31184,6 +31341,16 @@ public func defaultExternalSigner(mnemonic: String, passphrase: String?, network
 })
 }
 /**
+ * Creates a `MysqlStorageConfig` with the given connection string and default pool settings.
+ */
+public func defaultMysqlStorageConfig(connectionString: String) -> MysqlStorageConfig  {
+    return try!  FfiConverterTypeMysqlStorageConfig_lift(try! rustCall() {
+    uniffi_breez_sdk_spark_fn_func_default_mysql_storage_config(
+        FfiConverterString.lower(connectionString),$0
+    )
+})
+}
+/**
  * Creates a `PostgresStorageConfig` with the given connection string and default pool settings.
  */
 public func defaultPostgresStorageConfig(connectionString: String) -> PostgresStorageConfig  {
@@ -31247,6 +31414,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_default_external_signer() != 40694) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_func_default_mysql_storage_config() != 14529) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_default_postgres_storage_config() != 3515) {
@@ -31517,6 +31687,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_lnurl_client() != 51060) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_mysql_backend() != 49953) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_payment_observer() != 21617) {
