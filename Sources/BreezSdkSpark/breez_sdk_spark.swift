@@ -2423,6 +2423,145 @@ public func FfiConverterTypeBreezSdk_lower(_ value: BreezSdk) -> UnsafeMutableRa
 
 
 /**
+ * A shareable manager for gRPC connections to the Spark operators.
+ *
+ * Construct one via [`new_connection_manager`] and pass the same `Arc` to
+ * multiple [`SdkBuilder`](crate::SdkBuilder)s via
+ * [`SdkBuilder::with_connection_manager`](crate::SdkBuilder::with_connection_manager).
+ * Connections close when the last `Arc<ConnectionManager>` is dropped;
+ * [`BreezSdk::disconnect`](crate::BreezSdk::disconnect) does not affect them.
+ *
+ * All SDK instances sharing a `ConnectionManager` must be configured for the
+ * same network and operator pool. The TLS settings and user agent of the
+ * first SDK to connect to a given operator are reused for everyone afterwards.
+ */
+public protocol ConnectionManagerProtocol: AnyObject, Sendable {
+    
+}
+/**
+ * A shareable manager for gRPC connections to the Spark operators.
+ *
+ * Construct one via [`new_connection_manager`] and pass the same `Arc` to
+ * multiple [`SdkBuilder`](crate::SdkBuilder)s via
+ * [`SdkBuilder::with_connection_manager`](crate::SdkBuilder::with_connection_manager).
+ * Connections close when the last `Arc<ConnectionManager>` is dropped;
+ * [`BreezSdk::disconnect`](crate::BreezSdk::disconnect) does not affect them.
+ *
+ * All SDK instances sharing a `ConnectionManager` must be configured for the
+ * same network and operator pool. The TLS settings and user agent of the
+ * first SDK to connect to a given operator are reused for everyone afterwards.
+ */
+open class ConnectionManager: ConnectionManagerProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_connectionmanager(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_breez_sdk_spark_fn_free_connectionmanager(pointer, $0) }
+    }
+
+    
+
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConnectionManager: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = ConnectionManager
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> ConnectionManager {
+        return ConnectionManager(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: ConnectionManager) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConnectionManager {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: ConnectionManager, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConnectionManager_lift(_ pointer: UnsafeMutableRawPointer) throws -> ConnectionManager {
+    return try FfiConverterTypeConnectionManager.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConnectionManager_lower(_ value: ConnectionManager) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeConnectionManager.lower(value)
+}
+
+
+
+
+
+
+/**
  * External signer trait that can be implemented by users and passed to the SDK.
  *
  * This trait mirrors the `BreezSigner` trait but uses FFI-compatible types (bytes, strings)
@@ -4541,6 +4680,129 @@ public func FfiConverterTypeFiatService_lower(_ value: FiatService) -> UnsafeMut
 
 
 /**
+ * A shareable `MySQL` connection pool. See
+ * [`PostgresConnectionPool`](crate::PostgresConnectionPool) for sharing semantics and lifecycle.
+
+ */
+public protocol MysqlConnectionPoolProtocol: AnyObject, Sendable {
+    
+}
+/**
+ * A shareable `MySQL` connection pool. See
+ * [`PostgresConnectionPool`](crate::PostgresConnectionPool) for sharing semantics and lifecycle.
+
+ */
+open class MysqlConnectionPool: MysqlConnectionPoolProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_mysqlconnectionpool(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_breez_sdk_spark_fn_free_mysqlconnectionpool(pointer, $0) }
+    }
+
+    
+
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMysqlConnectionPool: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = MysqlConnectionPool
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> MysqlConnectionPool {
+        return MysqlConnectionPool(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: MysqlConnectionPool) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MysqlConnectionPool {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: MysqlConnectionPool, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMysqlConnectionPool_lift(_ pointer: UnsafeMutableRawPointer) throws -> MysqlConnectionPool {
+    return try FfiConverterTypeMysqlConnectionPool.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMysqlConnectionPool_lower(_ value: MysqlConnectionPool) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeMysqlConnectionPool.lower(value)
+}
+
+
+
+
+
+
+/**
  * Orchestrates passkey-based wallet creation and restore operations.
  *
  * This struct coordinates between the platform's passkey PRF provider and
@@ -5368,6 +5630,145 @@ public func FfiConverterTypePaymentObserver_lower(_ value: PaymentObserver) -> U
 
 
 /**
+ * A shareable Postgres connection pool.
+ *
+ * Construct via [`create_postgres_connection_pool`] and pass the same `Arc` to multiple
+ * [`SdkBuilder`](crate::SdkBuilder)s via
+ * [`SdkBuilder::with_postgres_connection_pool`](crate::SdkBuilder::with_postgres_connection_pool).
+ * All SDKs sharing a pool target the same database; per-tenant isolation is
+ * derived from each SDK's seed (the identity public key scopes every row).
+ *
+ * The pool's lifecycle is owned by the integrator: it stays alive as long
+ * as any `Arc<PostgresConnectionPool>` is held. [`BreezSdk::disconnect`](crate::BreezSdk::disconnect)
+ * does **not** close the pool.
+ */
+public protocol PostgresConnectionPoolProtocol: AnyObject, Sendable {
+    
+}
+/**
+ * A shareable Postgres connection pool.
+ *
+ * Construct via [`create_postgres_connection_pool`] and pass the same `Arc` to multiple
+ * [`SdkBuilder`](crate::SdkBuilder)s via
+ * [`SdkBuilder::with_postgres_connection_pool`](crate::SdkBuilder::with_postgres_connection_pool).
+ * All SDKs sharing a pool target the same database; per-tenant isolation is
+ * derived from each SDK's seed (the identity public key scopes every row).
+ *
+ * The pool's lifecycle is owned by the integrator: it stays alive as long
+ * as any `Arc<PostgresConnectionPool>` is held. [`BreezSdk::disconnect`](crate::BreezSdk::disconnect)
+ * does **not** close the pool.
+ */
+open class PostgresConnectionPool: PostgresConnectionPoolProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_postgresconnectionpool(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_breez_sdk_spark_fn_free_postgresconnectionpool(pointer, $0) }
+    }
+
+    
+
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePostgresConnectionPool: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PostgresConnectionPool
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PostgresConnectionPool {
+        return PostgresConnectionPool(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PostgresConnectionPool) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PostgresConnectionPool {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PostgresConnectionPool, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePostgresConnectionPool_lift(_ pointer: UnsafeMutableRawPointer) throws -> PostgresConnectionPool {
+    return try FfiConverterTypePostgresConnectionPool.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePostgresConnectionPool_lower(_ value: PostgresConnectionPool) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePostgresConnectionPool.lower(value)
+}
+
+
+
+
+
+
+/**
  * REST client trait for making HTTP requests.
  *
  * This trait provides a way for users to supply their own HTTP client implementation
@@ -5775,6 +6176,13 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
     func withChainService(chainService: BitcoinChainService) async 
     
     /**
+     * Sets a shared connection manager to be reused across SDK instances.
+     * Arguments:
+     * - `connection_manager`: The shared connection manager.
+     */
+    func withConnectionManager(connectionManager: ConnectionManager) async 
+    
+    /**
      * Sets the root storage directory to initialize the default storage with.
      * This initializes both storage and real-time sync storage with the
      * default implementations.
@@ -5800,12 +6208,22 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
     func withLnurlClient(lnurlClient: RestClient) async 
     
     /**
+     * **Deprecated.** Call `with_mysql_connection_pool(&config)` and `with_mysql_connection_pool(pool) instead`.
+     *
      * Sets `MySQL` as the backend for all stores (storage, tree store, and token store).
      * The store instances will be created during `build()`.
      * Arguments:
      * - `config`: The `MySQL` storage configuration.
      */
-    func withMysqlBackend(config: MysqlStorageConfig) async 
+    func withMysqlBackend(config: MysqlStorageConfig) async throws 
+    
+    /**
+     * Sets a shared `MySQL` connection pool as the backend for all stores
+     * (storage, tree store, and token store). Construct the pool via
+     * [`create_mysql_connection_pool`](crate::create_mysql_connection_pool) and pass the same `Arc`
+     * to multiple builders to share connections across SDKs.
+     */
+    func withMysqlConnectionPool(pool: MysqlConnectionPool) async 
     
     /**
      * Sets the payment observer to be used by the SDK.
@@ -5815,12 +6233,22 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
     func withPaymentObserver(paymentObserver: PaymentObserver) async 
     
     /**
+     * **Deprecated.** Call `with_postgres_connection_pool(&config)` and `with_postgres_connection_pool(pool) instead`.
+     *
      * Sets `PostgreSQL` as the backend for all stores (storage, tree store, and token store).
      * The store instances will be created during `build()`.
      * Arguments:
      * - `config`: The `PostgreSQL` storage configuration.
      */
-    func withPostgresBackend(config: PostgresStorageConfig) async 
+    func withPostgresBackend(config: PostgresStorageConfig) async throws 
+    
+    /**
+     * Sets a shared `PostgreSQL` connection pool as the backend for all
+     * stores (storage, tree store, and token store). Construct the pool
+     * via [`create_postgres_connection_pool`](crate::create_postgres_connection_pool) and pass the
+     * same `Arc` to multiple builders to share connections across SDKs.
+     */
+    func withPostgresConnectionPool(pool: PostgresConnectionPool) async 
     
     /**
      * Sets the REST chain service to be used by the SDK.
@@ -5830,6 +6258,22 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
      * - `credentials`: Optional credentials for basic authentication.
      */
     func withRestChainService(url: String, apiType: ChainApiType, credentials: Credentials?) async 
+    
+    /**
+     * Sets a custom session manager used to persist authentication sessions.
+     *
+     * Provide a shared, persistent implementation (e.g. backed by `PostgreSQL`
+     * or Redis) to let multiple SDK instances share authentication state and
+     * bootstrap quickly. If not set, an in-memory session manager is used.
+     */
+    func withSessionManager(sessionManager: SessionManager) async 
+    
+    /**
+     * Sets a shared SSP connection manager to be reused across SDK instances.
+     * Arguments:
+     * - `manager`: The shared SSP connection manager.
+     */
+    func withSspConnectionManager(manager: SspConnectionManager) async 
     
     /**
      * Sets the storage implementation to be used by the SDK.
@@ -5953,6 +6397,29 @@ open func withChainService(chainService: BitcoinChainService)async   {
 }
     
     /**
+     * Sets a shared connection manager to be reused across SDK instances.
+     * Arguments:
+     * - `connection_manager`: The shared connection manager.
+     */
+open func withConnectionManager(connectionManager: ConnectionManager)async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_connection_manager(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeConnectionManager_lower(connectionManager)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
+}
+    
+    /**
      * Sets the root storage directory to initialize the default storage with.
      * This initializes both storage and real-time sync storage with the
      * default implementations.
@@ -6042,18 +6509,43 @@ open func withLnurlClient(lnurlClient: RestClient)async   {
 }
     
     /**
+     * **Deprecated.** Call `with_mysql_connection_pool(&config)` and `with_mysql_connection_pool(pool) instead`.
+     *
      * Sets `MySQL` as the backend for all stores (storage, tree store, and token store).
      * The store instances will be created during `build()`.
      * Arguments:
      * - `config`: The `MySQL` storage configuration.
      */
-open func withMysqlBackend(config: MysqlStorageConfig)async   {
+open func withMysqlBackend(config: MysqlStorageConfig)async throws   {
     return
-        try!  await uniffiRustCallAsync(
+        try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_mysql_backend(
                     self.uniffiClonePointer(),
                     FfiConverterTypeMysqlStorageConfig_lower(config)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
+     * Sets a shared `MySQL` connection pool as the backend for all stores
+     * (storage, tree store, and token store). Construct the pool via
+     * [`create_mysql_connection_pool`](crate::create_mysql_connection_pool) and pass the same `Arc`
+     * to multiple builders to share connections across SDKs.
+     */
+open func withMysqlConnectionPool(pool: MysqlConnectionPool)async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_mysql_connection_pool(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeMysqlConnectionPool_lower(pool)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -6089,18 +6581,43 @@ open func withPaymentObserver(paymentObserver: PaymentObserver)async   {
 }
     
     /**
+     * **Deprecated.** Call `with_postgres_connection_pool(&config)` and `with_postgres_connection_pool(pool) instead`.
+     *
      * Sets `PostgreSQL` as the backend for all stores (storage, tree store, and token store).
      * The store instances will be created during `build()`.
      * Arguments:
      * - `config`: The `PostgreSQL` storage configuration.
      */
-open func withPostgresBackend(config: PostgresStorageConfig)async   {
+open func withPostgresBackend(config: PostgresStorageConfig)async throws   {
     return
-        try!  await uniffiRustCallAsync(
+        try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_postgres_backend(
                     self.uniffiClonePointer(),
                     FfiConverterTypePostgresStorageConfig_lower(config)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
+     * Sets a shared `PostgreSQL` connection pool as the backend for all
+     * stores (storage, tree store, and token store). Construct the pool
+     * via [`create_postgres_connection_pool`](crate::create_postgres_connection_pool) and pass the
+     * same `Arc` to multiple builders to share connections across SDKs.
+     */
+open func withPostgresConnectionPool(pool: PostgresConnectionPool)async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_postgres_connection_pool(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePostgresConnectionPool_lower(pool)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -6126,6 +6643,54 @@ open func withRestChainService(url: String, apiType: ChainApiType, credentials: 
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_rest_chain_service(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(url),FfiConverterTypeChainApiType_lower(apiType),FfiConverterOptionTypeCredentials.lower(credentials)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
+}
+    
+    /**
+     * Sets a custom session manager used to persist authentication sessions.
+     *
+     * Provide a shared, persistent implementation (e.g. backed by `PostgreSQL`
+     * or Redis) to let multiple SDK instances share authentication state and
+     * bootstrap quickly. If not set, an in-memory session manager is used.
+     */
+open func withSessionManager(sessionManager: SessionManager)async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_session_manager(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSessionManager_lower(sessionManager)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
+}
+    
+    /**
+     * Sets a shared SSP connection manager to be reused across SDK instances.
+     * Arguments:
+     * - `manager`: The shared SSP connection manager.
+     */
+open func withSspConnectionManager(manager: SspConnectionManager)async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_ssp_connection_manager(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSspConnectionManager_lower(manager)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -6211,6 +6776,429 @@ public func FfiConverterTypeSdkBuilder_lift(_ pointer: UnsafeMutableRawPointer) 
 #endif
 public func FfiConverterTypeSdkBuilder_lower(_ value: SdkBuilder) -> UnsafeMutableRawPointer {
     return FfiConverterTypeSdkBuilder.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Persistent storage for authentication sessions, keyed by the service's
+ * identity public key. Implementations should be thread-safe and may be
+ * backed by an in-memory map (default) or a shared database for cross-pod
+ * auth sharing.
+ */
+public protocol SessionManager: AnyObject, Sendable {
+    
+    func getSession(serviceIdentityKey: PublicKey) async throws  -> Session
+    
+    func setSession(serviceIdentityKey: PublicKey, session: Session) async throws 
+    
+}
+/**
+ * Persistent storage for authentication sessions, keyed by the service's
+ * identity public key. Implementations should be thread-safe and may be
+ * backed by an in-memory map (default) or a shared database for cross-pod
+ * auth sharing.
+ */
+open class SessionManagerImpl: SessionManager, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_sessionmanager(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_breez_sdk_spark_fn_free_sessionmanager(pointer, $0) }
+    }
+
+    
+
+    
+open func getSession(serviceIdentityKey: PublicKey)async throws  -> Session  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sessionmanager_get_session(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePublicKey_lower(serviceIdentityKey)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSession_lift,
+            errorHandler: FfiConverterTypeSessionManagerError_lift
+        )
+}
+    
+open func setSession(serviceIdentityKey: PublicKey, session: Session)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sessionmanager_set_session(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePublicKey_lower(serviceIdentityKey),FfiConverterTypeSession_lower(session)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionManagerError_lift
+        )
+}
+    
+
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceSessionManager {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceSessionManager] = [UniffiVTableCallbackInterfaceSessionManager(
+        getSession: { (
+            uniffiHandle: UInt64,
+            serviceIdentityKey: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> Session in
+                guard let uniffiObj = try? FfiConverterTypeSessionManager.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.getSession(
+                     serviceIdentityKey: try FfiConverterTypePublicKey_lift(serviceIdentityKey)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: Session) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterTypeSession_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeSessionManagerError_lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        setSession: { (
+            uniffiHandle: UInt64,
+            serviceIdentityKey: RustBuffer,
+            session: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeSessionManager.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.setSession(
+                     serviceIdentityKey: try FfiConverterTypePublicKey_lift(serviceIdentityKey),
+                     session: try FfiConverterTypeSession_lift(session)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeSessionManagerError_lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterTypeSessionManager.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface SessionManager: handle missing in uniffiFree")
+            }
+        }
+    )]
+}
+
+private func uniffiCallbackInitSessionManager() {
+    uniffi_breez_sdk_spark_fn_init_callback_vtable_sessionmanager(UniffiCallbackInterfaceSessionManager.vtable)
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSessionManager: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<SessionManager>()
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = SessionManager
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> SessionManager {
+        return SessionManagerImpl(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: SessionManager) -> UnsafeMutableRawPointer {
+        guard let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: handleMap.insert(obj: value))) else {
+            fatalError("Cast to UnsafeMutableRawPointer failed")
+        }
+        return ptr
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SessionManager {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: SessionManager, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSessionManager_lift(_ pointer: UnsafeMutableRawPointer) throws -> SessionManager {
+    return try FfiConverterTypeSessionManager.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSessionManager_lower(_ value: SessionManager) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeSessionManager.lower(value)
+}
+
+
+
+
+
+
+/**
+ * A shared HTTP transport for SSP GraphQL traffic.
+ *
+ * All SDK instances that are built with the same `SspConnectionManager` send
+ * SSP requests over the same pooled `reqwest::Client`. This means each
+ * process opens at most one TCP+TLS+HTTP/2 connection to the SSP regardless
+ * of how many wallets are loaded — useful for multi-tenant servers running
+ * many SDK instances.
+ *
+ * # Caveats
+ *
+ * - The user-agent of the first SDK to construct this manager is reused for
+ * all subsequent instances. This is rarely a problem since SDK instances
+ * in one process typically share a build version.
+ * - Connections close when the last `Arc<SspConnectionManager>` is dropped.
+ * `BreezSdk::disconnect` does not close them.
+ */
+public protocol SspConnectionManagerProtocol: AnyObject, Sendable {
+    
+}
+/**
+ * A shared HTTP transport for SSP GraphQL traffic.
+ *
+ * All SDK instances that are built with the same `SspConnectionManager` send
+ * SSP requests over the same pooled `reqwest::Client`. This means each
+ * process opens at most one TCP+TLS+HTTP/2 connection to the SSP regardless
+ * of how many wallets are loaded — useful for multi-tenant servers running
+ * many SDK instances.
+ *
+ * # Caveats
+ *
+ * - The user-agent of the first SDK to construct this manager is reused for
+ * all subsequent instances. This is rarely a problem since SDK instances
+ * in one process typically share a build version.
+ * - Connections close when the last `Arc<SspConnectionManager>` is dropped.
+ * `BreezSdk::disconnect` does not close them.
+ */
+open class SspConnectionManager: SspConnectionManagerProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_sspconnectionmanager(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_breez_sdk_spark_fn_free_sspconnectionmanager(pointer, $0) }
+    }
+
+    
+
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSspConnectionManager: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = SspConnectionManager
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> SspConnectionManager {
+        return SspConnectionManager(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: SspConnectionManager) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SspConnectionManager {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: SspConnectionManager, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSspConnectionManager_lift(_ pointer: UnsafeMutableRawPointer) throws -> SspConnectionManager {
+    return try FfiConverterTypeSspConnectionManager.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSspConnectionManager_lower(_ value: SspConnectionManager) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeSspConnectionManager.lower(value)
 }
 
 
@@ -20303,6 +21291,79 @@ public func FfiConverterTypeSendPaymentResponse_lower(_ value: SendPaymentRespon
 }
 
 
+/**
+ * Cached authentication session for a single backend service identity.
+ */
+public struct Session {
+    public var token: String
+    public var expiration: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(token: String, expiration: UInt64) {
+        self.token = token
+        self.expiration = expiration
+    }
+}
+
+#if compiler(>=6)
+extension Session: Sendable {}
+#endif
+
+
+extension Session: Equatable, Hashable {
+    public static func ==(lhs: Session, rhs: Session) -> Bool {
+        if lhs.token != rhs.token {
+            return false
+        }
+        if lhs.expiration != rhs.expiration {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(token)
+        hasher.combine(expiration)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSession: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Session {
+        return
+            try Session(
+                token: FfiConverterString.read(from: &buf), 
+                expiration: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Session, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.token, into: &buf)
+        FfiConverterUInt64.write(value.expiration, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSession_lift(_ buf: RustBuffer) throws -> Session {
+    return try FfiConverterTypeSession.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSession_lower(_ value: Session) -> RustBuffer {
+    return FfiConverterTypeSession.lower(value)
+}
+
+
 public struct SetLnurlMetadataItem {
     public var paymentHash: String
     public var senderComment: String?
@@ -27653,6 +28714,88 @@ extension ServiceStatus: Equatable, Hashable {}
 
 
 
+public enum SessionManagerError: Swift.Error {
+
+    
+    
+    case NotFound
+    case Generic(String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSessionManagerError: FfiConverterRustBuffer {
+    typealias SwiftType = SessionManagerError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SessionManagerError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .NotFound
+        case 2: return .Generic(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SessionManagerError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case .NotFound:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .Generic(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSessionManagerError_lift(_ buf: RustBuffer) throws -> SessionManagerError {
+    return try FfiConverterTypeSessionManagerError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSessionManagerError_lower(_ value: SessionManagerError) -> RustBuffer {
+    return FfiConverterTypeSessionManagerError.lower(value)
+}
+
+
+extension SessionManagerError: Equatable, Hashable {}
+
+
+
+
+extension SessionManagerError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+
+
+
 /**
  * Error type for signer operations
  */
@@ -31074,6 +32217,50 @@ fileprivate struct FfiConverterDictionaryStringSequenceTypePayment: FfiConverter
 }
 
 
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
+public typealias PublicKey = String
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublicKey: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublicKey {
+        return try FfiConverterString.read(from: &buf)
+    }
+
+    public static func write(_ value: PublicKey, into buf: inout [UInt8]) {
+        return FfiConverterString.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: RustBuffer) throws -> PublicKey {
+        return try FfiConverterString.lift(value)
+    }
+
+    public static func lower(_ value: PublicKey) -> RustBuffer {
+        return FfiConverterString.lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicKey_lift(_ value: RustBuffer) throws -> PublicKey {
+    return try FfiConverterTypePublicKey.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicKey_lower(_ value: PublicKey) -> RustBuffer {
+    return FfiConverterTypePublicKey.lower(value)
+}
+
+
+
 
 
 /**
@@ -31306,6 +32493,34 @@ public func connectWithSigner(request: ConnectWithSignerRequest)async throws  ->
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
+/**
+ * Creates a shareable `MySQL` connection pool from the given configuration.
+ *
+ * Hand the returned `Arc` to one or more
+ * [`SdkBuilder::with_mysql_connection_pool`](crate::SdkBuilder::with_mysql_connection_pool)
+ * calls to share a single pool across multiple SDK instances.
+ */
+public func createMysqlConnectionPool(config: MysqlStorageConfig)throws  -> MysqlConnectionPool  {
+    return try  FfiConverterTypeMysqlConnectionPool_lift(try rustCallWithError(FfiConverterTypeSdkError_lift) {
+    uniffi_breez_sdk_spark_fn_func_create_mysql_connection_pool(
+        FfiConverterTypeMysqlStorageConfig_lower(config),$0
+    )
+})
+}
+/**
+ * Creates a shareable Postgres connection pool from the given configuration.
+ *
+ * Hand the returned `Arc` to one or more
+ * [`SdkBuilder::with_postgres_connection_pool`](crate::SdkBuilder::with_postgres_connection_pool)
+ * calls to share a single pool across multiple SDK instances.
+ */
+public func createPostgresConnectionPool(config: PostgresStorageConfig)throws  -> PostgresConnectionPool  {
+    return try  FfiConverterTypePostgresConnectionPool_lift(try rustCallWithError(FfiConverterTypeSdkError_lift) {
+    uniffi_breez_sdk_spark_fn_func_create_postgres_connection_pool(
+        FfiConverterTypePostgresStorageConfig_lower(config),$0
+    )
+})
+}
 public func defaultConfig(network: Network) -> Config  {
     return try!  FfiConverterTypeConfig_lift(try! rustCall() {
     uniffi_breez_sdk_spark_fn_func_default_config(
@@ -31388,6 +32603,57 @@ public func initLogging(logDir: String?, appLogger: Logger?, logFilter: String?)
     )
 }
 }
+/**
+ * Creates a new shareable [`ConnectionManager`].
+ *
+ * `connections_per_operator` controls per-operator connection pooling:
+ * `None` keeps a single connection per operator (suitable for almost every
+ * deployment); `Some(n)` opens `n` connections per operator and balances
+ * requests across them.
+ */
+public func newConnectionManager(connectionsPerOperator: UInt32?) -> ConnectionManager  {
+    return try!  FfiConverterTypeConnectionManager_lift(try! rustCall() {
+    uniffi_breez_sdk_spark_fn_func_new_connection_manager(
+        FfiConverterOptionUInt32.lower(connectionsPerOperator),$0
+    )
+})
+}
+/**
+ * Constructs a shareable REST-based [`BitcoinChainService`].
+ *
+ * Pass the returned `Arc` to multiple [`SdkBuilder`](crate::SdkBuilder)s via
+ * [`SdkBuilder::with_chain_service`](crate::SdkBuilder::with_chain_service)
+ * to reuse a single underlying HTTP client (and its connection pool) across
+ * SDK instances. All SDKs sharing the service must use the same `network`.
+ *
+ * For one-off, non-shared use, prefer
+ * [`SdkBuilder::with_rest_chain_service`](crate::SdkBuilder::with_rest_chain_service).
+ */
+public func newRestChainService(url: String, network: Network, apiType: ChainApiType, credentials: Credentials?) -> BitcoinChainService  {
+    return try!  FfiConverterTypeBitcoinChainService_lift(try! rustCall() {
+    uniffi_breez_sdk_spark_fn_func_new_rest_chain_service(
+        FfiConverterString.lower(url),
+        FfiConverterTypeNetwork_lower(network),
+        FfiConverterTypeChainApiType_lower(apiType),
+        FfiConverterOptionTypeCredentials.lower(credentials),$0
+    )
+})
+}
+/**
+ * Construct a new shared SSP connection manager.
+ *
+ * Pass the returned `Arc<SspConnectionManager>` to
+ * [`SdkBuilder::with_ssp_connection_manager`](crate::SdkBuilder::with_ssp_connection_manager)
+ * when building each SDK instance that should share the underlying HTTP
+ * connection pool.
+ */
+public func newSspConnectionManager(userAgent: String?) -> SspConnectionManager  {
+    return try!  FfiConverterTypeSspConnectionManager_lift(try! rustCall() {
+    uniffi_breez_sdk_spark_fn_func_new_ssp_connection_manager(
+        FfiConverterOptionString.lower(userAgent),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -31410,6 +32676,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_connect_with_signer() != 1399) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_func_create_mysql_connection_pool() != 44890) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_func_create_postgres_connection_pool() != 41178) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_func_default_config() != 62194) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -31426,6 +32698,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_init_logging() != 8518) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_func_new_connection_manager() != 25164) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_func_new_rest_chain_service() != 62980) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_func_new_ssp_connection_manager() != 15222) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_address_utxos() != 20959) {
@@ -31677,6 +32958,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_chain_service() != 2848) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_connection_manager() != 51797) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_default_storage() != 14543) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -31689,19 +32973,37 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_lnurl_client() != 51060) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_mysql_backend() != 49953) {
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_mysql_backend() != 44903) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_mysql_connection_pool() != 54551) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_payment_observer() != 21617) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_postgres_backend() != 59296) {
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_postgres_backend() != 13427) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_postgres_connection_pool() != 24378) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_rest_chain_service() != 63155) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_session_manager() != 64189) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_ssp_connection_manager() != 65505) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_storage() != 59400) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_sessionmanager_get_session() != 64481) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_sessionmanager_set_session() != 55262) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_storage_delete_cached_item() != 6883) {
@@ -31825,6 +33127,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitPasskeyPrfProvider()
     uniffiCallbackInitPaymentObserver()
     uniffiCallbackInitRestClient()
+    uniffiCallbackInitSessionManager()
     uniffiCallbackInitStorage()
     uniffiCallbackInitEventListener()
     uniffiCallbackInitLogger()
