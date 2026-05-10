@@ -32629,15 +32629,20 @@ public func newConnectionManager(connectionsPerOperator: UInt32?) -> ConnectionM
  * For one-off, non-shared use, prefer
  * [`SdkBuilder::with_rest_chain_service`](crate::SdkBuilder::with_rest_chain_service).
  */
-public func newRestChainService(url: String, network: Network, apiType: ChainApiType, credentials: Credentials?) -> BitcoinChainService  {
-    return try!  FfiConverterTypeBitcoinChainService_lift(try! rustCall() {
-    uniffi_breez_sdk_spark_fn_func_new_rest_chain_service(
-        FfiConverterString.lower(url),
-        FfiConverterTypeNetwork_lower(network),
-        FfiConverterTypeChainApiType_lower(apiType),
-        FfiConverterOptionTypeCredentials.lower(credentials),$0
-    )
-})
+public func newRestChainService(url: String, network: Network, apiType: ChainApiType, credentials: Credentials?)async  -> BitcoinChainService  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_func_new_rest_chain_service(FfiConverterString.lower(url),FfiConverterTypeNetwork_lower(network),FfiConverterTypeChainApiType_lower(apiType),FfiConverterOptionTypeCredentials.lower(credentials)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_pointer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_pointer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeBitcoinChainService_lift,
+            errorHandler: nil
+            
+        )
 }
 /**
  * Construct a new shared SSP connection manager.
@@ -32703,7 +32708,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_new_connection_manager() != 25164) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_func_new_rest_chain_service() != 62980) {
+    if (uniffi_breez_sdk_spark_checksum_func_new_rest_chain_service() != 23177) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_new_ssp_connection_manager() != 15222) {
