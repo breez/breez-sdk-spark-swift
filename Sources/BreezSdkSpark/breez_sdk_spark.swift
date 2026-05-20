@@ -1256,6 +1256,19 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     
     func refundDeposit(request: RefundDepositRequest) async throws  -> RefundDepositResponse
     
+    /**
+     * Runs one pass of the pending-conversion refunder.
+     *
+     * Iterates over payments whose conversions failed and have a refund
+     * pending, then attempts to refund each one. This is the same logic the
+     * SDK runs internally on a periodic schedule when
+     * `background_tasks_enabled` is `true`. When background tasks are
+     * disabled the periodic refunder does not run, and this method is the
+     * explicit entry point for driving the pass; when background tasks are
+     * enabled, it can be called to force an immediate refund pass.
+     */
+    func refundPendingConversions() async throws 
+    
     func registerLightningAddress(request: RegisterLightningAddressRequest) async throws  -> LightningAddressInfo
     
     /**
@@ -2125,6 +2138,34 @@ open func refundDeposit(request: RefundDepositRequest)async throws  -> RefundDep
         )
 }
     
+    /**
+     * Runs one pass of the pending-conversion refunder.
+     *
+     * Iterates over payments whose conversions failed and have a refund
+     * pending, then attempts to refund each one. This is the same logic the
+     * SDK runs internally on a periodic schedule when
+     * `background_tasks_enabled` is `true`. When background tasks are
+     * disabled the periodic refunder does not run, and this method is the
+     * explicit entry point for driving the pass; when background tasks are
+     * enabled, it can be called to force an immediate refund pass.
+     */
+open func refundPendingConversions()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_refund_pending_conversions(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
 open func registerLightningAddress(request: RegisterLightningAddressRequest)async throws  -> LightningAddressInfo  {
     return
         try  await uniffiRustCallAsync(
@@ -2415,145 +2456,6 @@ public func FfiConverterTypeBreezSdk_lift(_ pointer: UnsafeMutableRawPointer) th
 #endif
 public func FfiConverterTypeBreezSdk_lower(_ value: BreezSdk) -> UnsafeMutableRawPointer {
     return FfiConverterTypeBreezSdk.lower(value)
-}
-
-
-
-
-
-
-/**
- * A shareable manager for gRPC connections to the Spark operators.
- *
- * Construct one via [`new_connection_manager`] and pass the same `Arc` to
- * multiple [`SdkBuilder`](crate::SdkBuilder)s via
- * [`SdkBuilder::with_connection_manager`](crate::SdkBuilder::with_connection_manager).
- * Connections close when the last `Arc<ConnectionManager>` is dropped;
- * [`BreezSdk::disconnect`](crate::BreezSdk::disconnect) does not affect them.
- *
- * All SDK instances sharing a `ConnectionManager` must be configured for the
- * same network and operator pool. The TLS settings and user agent of the
- * first SDK to connect to a given operator are reused for everyone afterwards.
- */
-public protocol ConnectionManagerProtocol: AnyObject, Sendable {
-    
-}
-/**
- * A shareable manager for gRPC connections to the Spark operators.
- *
- * Construct one via [`new_connection_manager`] and pass the same `Arc` to
- * multiple [`SdkBuilder`](crate::SdkBuilder)s via
- * [`SdkBuilder::with_connection_manager`](crate::SdkBuilder::with_connection_manager).
- * Connections close when the last `Arc<ConnectionManager>` is dropped;
- * [`BreezSdk::disconnect`](crate::BreezSdk::disconnect) does not affect them.
- *
- * All SDK instances sharing a `ConnectionManager` must be configured for the
- * same network and operator pool. The TLS settings and user agent of the
- * first SDK to connect to a given operator are reused for everyone afterwards.
- */
-open class ConnectionManager: ConnectionManagerProtocol, @unchecked Sendable {
-    fileprivate let pointer: UnsafeMutableRawPointer!
-
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoPointer {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_connectionmanager(self.pointer, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_breez_sdk_spark_fn_free_connectionmanager(pointer, $0) }
-    }
-
-    
-
-    
-
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeConnectionManager: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = ConnectionManager
-
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> ConnectionManager {
-        return ConnectionManager(unsafeFromRawPointer: pointer)
-    }
-
-    public static func lower(_ value: ConnectionManager) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConnectionManager {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
-    }
-
-    public static func write(_ value: ConnectionManager, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeConnectionManager_lift(_ pointer: UnsafeMutableRawPointer) throws -> ConnectionManager {
-    return try FfiConverterTypeConnectionManager.lift(pointer)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeConnectionManager_lower(_ value: ConnectionManager) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeConnectionManager.lower(value)
 }
 
 
@@ -4682,7 +4584,9 @@ public func FfiConverterTypeFiatService_lower(_ value: FiatService) -> UnsafeMut
 /**
  * A shareable `MySQL` connection pool. See
  * [`PostgresConnectionPool`](crate::PostgresConnectionPool) for sharing semantics and lifecycle.
-
+ *
+ * Snapshots the `foreign_key_mode` from the originating config so every SDK
+ * instance built on top of this pool migrates with the same FK policy.
  */
 public protocol MysqlConnectionPoolProtocol: AnyObject, Sendable {
     
@@ -4690,7 +4594,9 @@ public protocol MysqlConnectionPoolProtocol: AnyObject, Sendable {
 /**
  * A shareable `MySQL` connection pool. See
  * [`PostgresConnectionPool`](crate::PostgresConnectionPool) for sharing semantics and lifecycle.
-
+ *
+ * Snapshots the `foreign_key_mode` from the originating config so every SDK
+ * instance built on top of this pool migrates with the same FK policy.
  */
 open class MysqlConnectionPool: MysqlConnectionPoolProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -5632,15 +5538,16 @@ public func FfiConverterTypePaymentObserver_lower(_ value: PaymentObserver) -> U
 /**
  * A shareable Postgres connection pool.
  *
- * Construct via [`create_postgres_connection_pool`] and pass the same `Arc` to multiple
- * [`SdkBuilder`](crate::SdkBuilder)s via
- * [`SdkBuilder::with_postgres_connection_pool`](crate::SdkBuilder::with_postgres_connection_pool).
- * All SDKs sharing a pool target the same database; per-tenant isolation is
- * derived from each SDK's seed (the identity public key scopes every row).
+ * Typically owned by an [`SdkContext`](crate::SdkContext): supply a
+ * `PostgresStorageConfig` to [`new_shared_sdk_context`](crate::new_shared_sdk_context) and
+ * the context builds the pool internally. All SDKs sharing the same context
+ * target the same database; per-tenant isolation is derived from each SDK's
+ * seed (the identity public key scopes every row).
  *
- * The pool's lifecycle is owned by the integrator: it stays alive as long
- * as any `Arc<PostgresConnectionPool>` is held. [`BreezSdk::disconnect`](crate::BreezSdk::disconnect)
- * does **not** close the pool.
+ * The pool's lifecycle follows its containing `SdkContext`: connections
+ * close when the last `Arc<SdkContext>` is dropped.
+ * [`BreezSdk::disconnect`](crate::BreezSdk::disconnect) does **not** close
+ * the pool.
  */
 public protocol PostgresConnectionPoolProtocol: AnyObject, Sendable {
     
@@ -5648,15 +5555,16 @@ public protocol PostgresConnectionPoolProtocol: AnyObject, Sendable {
 /**
  * A shareable Postgres connection pool.
  *
- * Construct via [`create_postgres_connection_pool`] and pass the same `Arc` to multiple
- * [`SdkBuilder`](crate::SdkBuilder)s via
- * [`SdkBuilder::with_postgres_connection_pool`](crate::SdkBuilder::with_postgres_connection_pool).
- * All SDKs sharing a pool target the same database; per-tenant isolation is
- * derived from each SDK's seed (the identity public key scopes every row).
+ * Typically owned by an [`SdkContext`](crate::SdkContext): supply a
+ * `PostgresStorageConfig` to [`new_shared_sdk_context`](crate::new_shared_sdk_context) and
+ * the context builds the pool internally. All SDKs sharing the same context
+ * target the same database; per-tenant isolation is derived from each SDK's
+ * seed (the identity public key scopes every row).
  *
- * The pool's lifecycle is owned by the integrator: it stays alive as long
- * as any `Arc<PostgresConnectionPool>` is held. [`BreezSdk::disconnect`](crate::BreezSdk::disconnect)
- * does **not** close the pool.
+ * The pool's lifecycle follows its containing `SdkContext`: connections
+ * close when the last `Arc<SdkContext>` is dropped.
+ * [`BreezSdk::disconnect`](crate::BreezSdk::disconnect) does **not** close
+ * the pool.
  */
 open class PostgresConnectionPool: PostgresConnectionPoolProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -6176,13 +6084,6 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
     func withChainService(chainService: BitcoinChainService) async 
     
     /**
-     * Sets a shared connection manager to be reused across SDK instances.
-     * Arguments:
-     * - `connection_manager`: The shared connection manager.
-     */
-    func withConnectionManager(connectionManager: ConnectionManager) async 
-    
-    /**
      * Sets the root storage directory to initialize the default storage with.
      * This initializes both storage and real-time sync storage with the
      * default implementations.
@@ -6208,12 +6109,8 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
     func withLnurlClient(lnurlClient: RestClient) async 
     
     /**
-     * **Deprecated.** Call `with_mysql_connection_pool(&config)` and `with_mysql_connection_pool(pool) instead`.
-     *
-     * Sets `MySQL` as the backend for all stores (storage, tree store, and token store).
-     * The store instances will be created during `build()`.
-     * Arguments:
-     * - `config`: The `MySQL` storage configuration.
+     * **Deprecated.** Call `create_mysql_connection_pool(&config)` and
+     * `with_mysql_connection_pool(pool)` instead.
      */
     func withMysqlBackend(config: MysqlStorageConfig) async throws 
     
@@ -6222,6 +6119,9 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
      * (storage, tree store, and token store). Construct the pool via
      * [`create_mysql_connection_pool`](crate::create_mysql_connection_pool) and pass the same `Arc`
      * to multiple builders to share connections across SDKs.
+     *
+     * If the same builder also receives an [`SdkContext`](crate::SdkContext)
+     * carrying a `MySQL` pool, `build()` will error — pick one source.
      */
     func withMysqlConnectionPool(pool: MysqlConnectionPool) async 
     
@@ -6233,12 +6133,8 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
     func withPaymentObserver(paymentObserver: PaymentObserver) async 
     
     /**
-     * **Deprecated.** Call `with_postgres_connection_pool(&config)` and `with_postgres_connection_pool(pool) instead`.
-     *
-     * Sets `PostgreSQL` as the backend for all stores (storage, tree store, and token store).
-     * The store instances will be created during `build()`.
-     * Arguments:
-     * - `config`: The `PostgreSQL` storage configuration.
+     * **Deprecated.** Call `create_postgres_connection_pool(&config)` and
+     * `with_postgres_connection_pool(pool)` instead.
      */
     func withPostgresBackend(config: PostgresStorageConfig) async throws 
     
@@ -6247,6 +6143,9 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
      * stores (storage, tree store, and token store). Construct the pool
      * via [`create_postgres_connection_pool`](crate::create_postgres_connection_pool) and pass the
      * same `Arc` to multiple builders to share connections across SDKs.
+     *
+     * If the same builder also receives an [`SdkContext`](crate::SdkContext)
+     * carrying a Postgres pool, `build()` will error — pick one source.
      */
     func withPostgresConnectionPool(pool: PostgresConnectionPool) async 
     
@@ -6260,20 +6159,14 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
     func withRestChainService(url: String, apiType: ChainApiType, credentials: Credentials?) async 
     
     /**
-     * Sets a custom session manager used to persist authentication sessions.
+     * Threads a shared [`SdkContext`](crate::SdkContext) into the builder.
      *
-     * Provide a shared, persistent implementation (e.g. backed by `PostgreSQL`
-     * or Redis) to let multiple SDK instances share authentication state and
-     * bootstrap quickly. If not set, an in-memory session manager is used.
+     * Construct the context once via
+     * [`new_shared_sdk_context`](crate::new_shared_sdk_context) and pass the
+     * same `Arc` to every `SdkBuilder` whose SDKs should share its resources
+     * (operator gRPC channels, SSP HTTP client, database pool).
      */
-    func withSessionManager(sessionManager: SessionManager) async 
-    
-    /**
-     * Sets a shared SSP connection manager to be reused across SDK instances.
-     * Arguments:
-     * - `manager`: The shared SSP connection manager.
-     */
-    func withSspConnectionManager(manager: SspConnectionManager) async 
+    func withSharedContext(context: SdkContext) async 
     
     /**
      * Sets the storage implementation to be used by the SDK.
@@ -6397,29 +6290,6 @@ open func withChainService(chainService: BitcoinChainService)async   {
 }
     
     /**
-     * Sets a shared connection manager to be reused across SDK instances.
-     * Arguments:
-     * - `connection_manager`: The shared connection manager.
-     */
-open func withConnectionManager(connectionManager: ConnectionManager)async   {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_connection_manager(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeConnectionManager_lower(connectionManager)
-                )
-            },
-            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
-            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
-            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: nil
-            
-        )
-}
-    
-    /**
      * Sets the root storage directory to initialize the default storage with.
      * This initializes both storage and real-time sync storage with the
      * default implementations.
@@ -6509,12 +6379,8 @@ open func withLnurlClient(lnurlClient: RestClient)async   {
 }
     
     /**
-     * **Deprecated.** Call `with_mysql_connection_pool(&config)` and `with_mysql_connection_pool(pool) instead`.
-     *
-     * Sets `MySQL` as the backend for all stores (storage, tree store, and token store).
-     * The store instances will be created during `build()`.
-     * Arguments:
-     * - `config`: The `MySQL` storage configuration.
+     * **Deprecated.** Call `create_mysql_connection_pool(&config)` and
+     * `with_mysql_connection_pool(pool)` instead.
      */
 open func withMysqlBackend(config: MysqlStorageConfig)async throws   {
     return
@@ -6538,6 +6404,9 @@ open func withMysqlBackend(config: MysqlStorageConfig)async throws   {
      * (storage, tree store, and token store). Construct the pool via
      * [`create_mysql_connection_pool`](crate::create_mysql_connection_pool) and pass the same `Arc`
      * to multiple builders to share connections across SDKs.
+     *
+     * If the same builder also receives an [`SdkContext`](crate::SdkContext)
+     * carrying a `MySQL` pool, `build()` will error — pick one source.
      */
 open func withMysqlConnectionPool(pool: MysqlConnectionPool)async   {
     return
@@ -6581,12 +6450,8 @@ open func withPaymentObserver(paymentObserver: PaymentObserver)async   {
 }
     
     /**
-     * **Deprecated.** Call `with_postgres_connection_pool(&config)` and `with_postgres_connection_pool(pool) instead`.
-     *
-     * Sets `PostgreSQL` as the backend for all stores (storage, tree store, and token store).
-     * The store instances will be created during `build()`.
-     * Arguments:
-     * - `config`: The `PostgreSQL` storage configuration.
+     * **Deprecated.** Call `create_postgres_connection_pool(&config)` and
+     * `with_postgres_connection_pool(pool)` instead.
      */
 open func withPostgresBackend(config: PostgresStorageConfig)async throws   {
     return
@@ -6610,6 +6475,9 @@ open func withPostgresBackend(config: PostgresStorageConfig)async throws   {
      * stores (storage, tree store, and token store). Construct the pool
      * via [`create_postgres_connection_pool`](crate::create_postgres_connection_pool) and pass the
      * same `Arc` to multiple builders to share connections across SDKs.
+     *
+     * If the same builder also receives an [`SdkContext`](crate::SdkContext)
+     * carrying a Postgres pool, `build()` will error — pick one source.
      */
 open func withPostgresConnectionPool(pool: PostgresConnectionPool)async   {
     return
@@ -6655,42 +6523,20 @@ open func withRestChainService(url: String, apiType: ChainApiType, credentials: 
 }
     
     /**
-     * Sets a custom session manager used to persist authentication sessions.
+     * Threads a shared [`SdkContext`](crate::SdkContext) into the builder.
      *
-     * Provide a shared, persistent implementation (e.g. backed by `PostgreSQL`
-     * or Redis) to let multiple SDK instances share authentication state and
-     * bootstrap quickly. If not set, an in-memory session manager is used.
+     * Construct the context once via
+     * [`new_shared_sdk_context`](crate::new_shared_sdk_context) and pass the
+     * same `Arc` to every `SdkBuilder` whose SDKs should share its resources
+     * (operator gRPC channels, SSP HTTP client, database pool).
      */
-open func withSessionManager(sessionManager: SessionManager)async   {
+open func withSharedContext(context: SdkContext)async   {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_session_manager(
+                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_shared_context(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeSessionManager_lower(sessionManager)
-                )
-            },
-            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
-            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
-            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: nil
-            
-        )
-}
-    
-    /**
-     * Sets a shared SSP connection manager to be reused across SDK instances.
-     * Arguments:
-     * - `manager`: The shared SSP connection manager.
-     */
-open func withSspConnectionManager(manager: SspConnectionManager)async   {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_ssp_connection_manager(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeSspConnectionManager_lower(manager)
+                    FfiConverterTypeSdkContext_lower(context)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -6776,6 +6622,149 @@ public func FfiConverterTypeSdkBuilder_lift(_ pointer: UnsafeMutableRawPointer) 
 #endif
 public func FfiConverterTypeSdkBuilder_lower(_ value: SdkBuilder) -> UnsafeMutableRawPointer {
     return FfiConverterTypeSdkBuilder.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Process-shared resources that can back many `BreezSdk` instances.
+ *
+ * Construct one with [`new_shared_sdk_context`] and pass the same `Arc` to every
+ * [`SdkBuilder`](crate::SdkBuilder) whose SDKs should share those resources
+ * (a single HTTP client across SSP / chain / LNURL / JWT / etc., a gRPC
+ * channel pool to the Spark operators, the Breez backend gRPC client, a
+ * database connection pool, …). Useful for multi-tenant servers that load
+ * many wallets in one process.
+ *
+ * The struct is intentionally opaque — all fields are crate-private. There
+ * is no way to inject pre-built sub-components: the factory builds them
+ * from settings so callers don't need to know about session managers,
+ * connection-manager wiring, or pool plumbing.
+ */
+public protocol SdkContextProtocol: AnyObject, Sendable {
+    
+}
+/**
+ * Process-shared resources that can back many `BreezSdk` instances.
+ *
+ * Construct one with [`new_shared_sdk_context`] and pass the same `Arc` to every
+ * [`SdkBuilder`](crate::SdkBuilder) whose SDKs should share those resources
+ * (a single HTTP client across SSP / chain / LNURL / JWT / etc., a gRPC
+ * channel pool to the Spark operators, the Breez backend gRPC client, a
+ * database connection pool, …). Useful for multi-tenant servers that load
+ * many wallets in one process.
+ *
+ * The struct is intentionally opaque — all fields are crate-private. There
+ * is no way to inject pre-built sub-components: the factory builds them
+ * from settings so callers don't need to know about session managers,
+ * connection-manager wiring, or pool plumbing.
+ */
+open class SdkContext: SdkContextProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_sdkcontext(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_breez_sdk_spark_fn_free_sdkcontext(pointer, $0) }
+    }
+
+    
+
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSdkContext: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = SdkContext
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> SdkContext {
+        return SdkContext(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: SdkContext) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SdkContext {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: SdkContext, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkContext_lift(_ pointer: UnsafeMutableRawPointer) throws -> SdkContext {
+    return try FfiConverterTypeSdkContext.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkContext_lower(_ value: SdkContext) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeSdkContext.lower(value)
 }
 
 
@@ -7052,153 +7041,6 @@ public func FfiConverterTypeSessionManager_lift(_ pointer: UnsafeMutableRawPoint
 #endif
 public func FfiConverterTypeSessionManager_lower(_ value: SessionManager) -> UnsafeMutableRawPointer {
     return FfiConverterTypeSessionManager.lower(value)
-}
-
-
-
-
-
-
-/**
- * A shared HTTP transport for SSP GraphQL traffic.
- *
- * All SDK instances that are built with the same `SspConnectionManager` send
- * SSP requests over the same pooled `reqwest::Client`. This means each
- * process opens at most one TCP+TLS+HTTP/2 connection to the SSP regardless
- * of how many wallets are loaded — useful for multi-tenant servers running
- * many SDK instances.
- *
- * # Caveats
- *
- * - The user-agent of the first SDK to construct this manager is reused for
- * all subsequent instances. This is rarely a problem since SDK instances
- * in one process typically share a build version.
- * - Connections close when the last `Arc<SspConnectionManager>` is dropped.
- * `BreezSdk::disconnect` does not close them.
- */
-public protocol SspConnectionManagerProtocol: AnyObject, Sendable {
-    
-}
-/**
- * A shared HTTP transport for SSP GraphQL traffic.
- *
- * All SDK instances that are built with the same `SspConnectionManager` send
- * SSP requests over the same pooled `reqwest::Client`. This means each
- * process opens at most one TCP+TLS+HTTP/2 connection to the SSP regardless
- * of how many wallets are loaded — useful for multi-tenant servers running
- * many SDK instances.
- *
- * # Caveats
- *
- * - The user-agent of the first SDK to construct this manager is reused for
- * all subsequent instances. This is rarely a problem since SDK instances
- * in one process typically share a build version.
- * - Connections close when the last `Arc<SspConnectionManager>` is dropped.
- * `BreezSdk::disconnect` does not close them.
- */
-open class SspConnectionManager: SspConnectionManagerProtocol, @unchecked Sendable {
-    fileprivate let pointer: UnsafeMutableRawPointer!
-
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoPointer {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_sspconnectionmanager(self.pointer, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_breez_sdk_spark_fn_free_sspconnectionmanager(pointer, $0) }
-    }
-
-    
-
-    
-
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeSspConnectionManager: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = SspConnectionManager
-
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> SspConnectionManager {
-        return SspConnectionManager(unsafeFromRawPointer: pointer)
-    }
-
-    public static func lower(_ value: SspConnectionManager) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SspConnectionManager {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
-    }
-
-    public static func write(_ value: SspConnectionManager, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSspConnectionManager_lift(_ pointer: UnsafeMutableRawPointer) throws -> SspConnectionManager {
-    return try FfiConverterTypeSspConnectionManager.lift(pointer)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSspConnectionManager_lower(_ value: SspConnectionManager) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeSspConnectionManager.lower(value)
 }
 
 
@@ -11751,8 +11593,15 @@ public struct Config {
     /**
      * Whether the Spark private mode is enabled by default.
      *
-     * If set to true, the Spark private mode will be enabled on the first initialization of the SDK.
-     * If set to false, no changes will be made to the Spark private mode.
+     * If set to true, the Spark private mode will be enabled on the first
+     * initialization of the SDK. If set to false, no changes will be made
+     * to the Spark private mode.
+     *
+     * This default is only auto-applied when `background_tasks_enabled` is
+     * `true`. When `background_tasks_enabled` is `false`, the SDK does not
+     * touch the Spark private mode on startup; call `update_user_settings`
+     * with `spark_private_mode_enabled` set as needed on a one-time setup
+     * pass.
      */
     public var privateEnabledDefault: Bool
     /**
@@ -11762,7 +11611,16 @@ public struct Config {
      * Fewer, bigger leaves allow for more funds to be exited unilaterally.
      * More leaves allow payments to be made without needing a swap, reducing payment latency.
      */
-    public var optimizationConfig: OptimizationConfig
+    public var leafOptimizationConfig: LeafOptimizationConfig
+    /**
+     * Configuration for token-output optimization.
+     *
+     * Token-output optimization controls automatic consolidation of a token's
+     * available outputs. Keeping the output set small reduces transaction size,
+     * while keeping enough distinct outputs preserves concurrency for parallel
+     * sends.
+     */
+    public var tokenOptimizationConfig: TokenOptimizationConfig
     /**
      * Configuration for automatic conversion of Bitcoin to stable tokens.
      *
@@ -11784,6 +11642,33 @@ public struct Config {
      * deployments (e.g. dev/staging environments).
      */
     public var sparkConfig: SparkConfig?
+    /**
+     * Master switch for per-instance background services.
+     *
+     * When `true` (default), the SDK runs its standard background work:
+     * periodic sync, lightning-address recovery, private-mode initialization,
+     * the leaf and token-output optimizers, the Spark server-event
+     * subscription, and the real-time sync client (when
+     * `real_time_sync_server_url` is set).
+     *
+     * When `false`, **no background service is started**, regardless of any
+     * other setting on this config. This is intended for multi-tenant server
+     * deployments where the host application orchestrates sync and claims
+     * explicitly and receives events via webhooks. Use
+     * `default_server_config` to get this preset.
+     *
+     * Explicit operations (`sync_wallet`, `claim_deposit`,
+     * `list_unclaimed_deposits`, `refund_deposit`,
+     * `refund_pending_conversions`, leaf/token optimization, etc.) work
+     * regardless of this flag.
+     *
+     * When `false`, the SDK rejects builds where fields whose backing
+     * service is gated off are still in their active shape:
+     * `stable_balance_config` must be `None`, `real_time_sync_server_url`
+     * must be `None`, and `optimization_config.auto_enabled` must be `false`.
+     * `default_server_config` already sets these compatible values.
+     */
+    public var backgroundTasksEnabled: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -11812,8 +11697,15 @@ public struct Config {
         /**
          * Whether the Spark private mode is enabled by default.
          *
-         * If set to true, the Spark private mode will be enabled on the first initialization of the SDK.
-         * If set to false, no changes will be made to the Spark private mode.
+         * If set to true, the Spark private mode will be enabled on the first
+         * initialization of the SDK. If set to false, no changes will be made
+         * to the Spark private mode.
+         *
+         * This default is only auto-applied when `background_tasks_enabled` is
+         * `true`. When `background_tasks_enabled` is `false`, the SDK does not
+         * touch the Spark private mode on startup; call `update_user_settings`
+         * with `spark_private_mode_enabled` set as needed on a one-time setup
+         * pass.
          */privateEnabledDefault: Bool, 
         /**
          * Configuration for leaf optimization.
@@ -11821,7 +11713,15 @@ public struct Config {
          * Leaf optimization controls the denominations of leaves that are held in the wallet.
          * Fewer, bigger leaves allow for more funds to be exited unilaterally.
          * More leaves allow payments to be made without needing a swap, reducing payment latency.
-         */optimizationConfig: OptimizationConfig, 
+         */leafOptimizationConfig: LeafOptimizationConfig, 
+        /**
+         * Configuration for token-output optimization.
+         *
+         * Token-output optimization controls automatic consolidation of a token's
+         * available outputs. Keeping the output set small reduces transaction size,
+         * while keeping enough distinct outputs preserves concurrency for parallel
+         * sends.
+         */tokenOptimizationConfig: TokenOptimizationConfig, 
         /**
          * Configuration for automatic conversion of Bitcoin to stable tokens.
          *
@@ -11839,7 +11739,33 @@ public struct Config {
          * When set, overrides the default Spark operator pool, service provider,
          * threshold, and token settings. Use this to connect to alternative Spark
          * deployments (e.g. dev/staging environments).
-         */sparkConfig: SparkConfig?) {
+         */sparkConfig: SparkConfig?, 
+        /**
+         * Master switch for per-instance background services.
+         *
+         * When `true` (default), the SDK runs its standard background work:
+         * periodic sync, lightning-address recovery, private-mode initialization,
+         * the leaf and token-output optimizers, the Spark server-event
+         * subscription, and the real-time sync client (when
+         * `real_time_sync_server_url` is set).
+         *
+         * When `false`, **no background service is started**, regardless of any
+         * other setting on this config. This is intended for multi-tenant server
+         * deployments where the host application orchestrates sync and claims
+         * explicitly and receives events via webhooks. Use
+         * `default_server_config` to get this preset.
+         *
+         * Explicit operations (`sync_wallet`, `claim_deposit`,
+         * `list_unclaimed_deposits`, `refund_deposit`,
+         * `refund_pending_conversions`, leaf/token optimization, etc.) work
+         * regardless of this flag.
+         *
+         * When `false`, the SDK rejects builds where fields whose backing
+         * service is gated off are still in their active shape:
+         * `stable_balance_config` must be `None`, `real_time_sync_server_url`
+         * must be `None`, and `optimization_config.auto_enabled` must be `false`.
+         * `default_server_config` already sets these compatible values.
+         */backgroundTasksEnabled: Bool) {
         self.apiKey = apiKey
         self.network = network
         self.syncIntervalSecs = syncIntervalSecs
@@ -11850,10 +11776,12 @@ public struct Config {
         self.useDefaultExternalInputParsers = useDefaultExternalInputParsers
         self.realTimeSyncServerUrl = realTimeSyncServerUrl
         self.privateEnabledDefault = privateEnabledDefault
-        self.optimizationConfig = optimizationConfig
+        self.leafOptimizationConfig = leafOptimizationConfig
+        self.tokenOptimizationConfig = tokenOptimizationConfig
         self.stableBalanceConfig = stableBalanceConfig
         self.maxConcurrentClaims = maxConcurrentClaims
         self.sparkConfig = sparkConfig
+        self.backgroundTasksEnabled = backgroundTasksEnabled
     }
 }
 
@@ -11894,7 +11822,10 @@ extension Config: Equatable, Hashable {
         if lhs.privateEnabledDefault != rhs.privateEnabledDefault {
             return false
         }
-        if lhs.optimizationConfig != rhs.optimizationConfig {
+        if lhs.leafOptimizationConfig != rhs.leafOptimizationConfig {
+            return false
+        }
+        if lhs.tokenOptimizationConfig != rhs.tokenOptimizationConfig {
             return false
         }
         if lhs.stableBalanceConfig != rhs.stableBalanceConfig {
@@ -11904,6 +11835,9 @@ extension Config: Equatable, Hashable {
             return false
         }
         if lhs.sparkConfig != rhs.sparkConfig {
+            return false
+        }
+        if lhs.backgroundTasksEnabled != rhs.backgroundTasksEnabled {
             return false
         }
         return true
@@ -11920,10 +11854,12 @@ extension Config: Equatable, Hashable {
         hasher.combine(useDefaultExternalInputParsers)
         hasher.combine(realTimeSyncServerUrl)
         hasher.combine(privateEnabledDefault)
-        hasher.combine(optimizationConfig)
+        hasher.combine(leafOptimizationConfig)
+        hasher.combine(tokenOptimizationConfig)
         hasher.combine(stableBalanceConfig)
         hasher.combine(maxConcurrentClaims)
         hasher.combine(sparkConfig)
+        hasher.combine(backgroundTasksEnabled)
     }
 }
 
@@ -11946,10 +11882,12 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
                 useDefaultExternalInputParsers: FfiConverterBool.read(from: &buf), 
                 realTimeSyncServerUrl: FfiConverterOptionString.read(from: &buf), 
                 privateEnabledDefault: FfiConverterBool.read(from: &buf), 
-                optimizationConfig: FfiConverterTypeOptimizationConfig.read(from: &buf), 
+                leafOptimizationConfig: FfiConverterTypeLeafOptimizationConfig.read(from: &buf), 
+                tokenOptimizationConfig: FfiConverterTypeTokenOptimizationConfig.read(from: &buf), 
                 stableBalanceConfig: FfiConverterOptionTypeStableBalanceConfig.read(from: &buf), 
                 maxConcurrentClaims: FfiConverterUInt32.read(from: &buf), 
-                sparkConfig: FfiConverterOptionTypeSparkConfig.read(from: &buf)
+                sparkConfig: FfiConverterOptionTypeSparkConfig.read(from: &buf), 
+                backgroundTasksEnabled: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -11964,10 +11902,12 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
         FfiConverterBool.write(value.useDefaultExternalInputParsers, into: &buf)
         FfiConverterOptionString.write(value.realTimeSyncServerUrl, into: &buf)
         FfiConverterBool.write(value.privateEnabledDefault, into: &buf)
-        FfiConverterTypeOptimizationConfig.write(value.optimizationConfig, into: &buf)
+        FfiConverterTypeLeafOptimizationConfig.write(value.leafOptimizationConfig, into: &buf)
+        FfiConverterTypeTokenOptimizationConfig.write(value.tokenOptimizationConfig, into: &buf)
         FfiConverterOptionTypeStableBalanceConfig.write(value.stableBalanceConfig, into: &buf)
         FfiConverterUInt32.write(value.maxConcurrentClaims, into: &buf)
         FfiConverterOptionTypeSparkConfig.write(value.sparkConfig, into: &buf)
+        FfiConverterBool.write(value.backgroundTasksEnabled, into: &buf)
     }
 }
 
@@ -14926,11 +14866,27 @@ public func FfiConverterTypeFreezeIssuerTokenResponse_lower(_ value: FreezeIssue
  * Request to get the balance of the wallet
  */
 public struct GetInfoRequest {
+    /**
+     * When `Some(true)`, and `background_tasks_enabled` is `true`, the call
+     * waits for the initial Full sync to complete before returning.
+     *
+     * When `background_tasks_enabled` is `false`, setting this to `Some(true)`
+     * is rejected with an invalid-input error. There is no background sync to
+     * wait on; call `sync_wallet` explicitly first if you need fresh state.
+     */
     public var ensureSynced: Bool?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(ensureSynced: Bool?) {
+    public init(
+        /**
+         * When `Some(true)`, and `background_tasks_enabled` is `true`, the call
+         * waits for the initial Full sync to complete before returning.
+         *
+         * When `background_tasks_enabled` is `false`, setting this to `Some(true)`
+         * is rejected with an invalid-input error. There is no background sync to
+         * wait on; call `sync_wallet` explicitly first if you need fresh state.
+         */ensureSynced: Bool?) {
         self.ensureSynced = ensureSynced
     }
 }
@@ -15783,6 +15739,121 @@ public func FfiConverterTypeKeySetConfig_lift(_ buf: RustBuffer) throws -> KeySe
 #endif
 public func FfiConverterTypeKeySetConfig_lower(_ value: KeySetConfig) -> RustBuffer {
     return FfiConverterTypeKeySetConfig.lower(value)
+}
+
+
+/**
+ * Configuration for leaf optimization.
+ */
+public struct LeafOptimizationConfig {
+    /**
+     * Whether automatic leaf optimization is enabled.
+     *
+     * If set to true, the SDK will automatically optimize the leaf set when it changes.
+     * Otherwise, the manual optimization API must be used to optimize the leaf set.
+     *
+     * Default value is true.
+     */
+    public var autoEnabled: Bool
+    /**
+     * The desired multiplicity for the leaf set.
+     *
+     * Setting this to 0 will optimize for maximizing unilateral exit.
+     * Higher values will optimize for minimizing transfer swaps, with higher values
+     * being more aggressive and allowing better TPS rates.
+     *
+     * For end-user wallets, values of 1-5 are recommended. Values above 5 are
+     * intended for high-throughput server environments and are not recommended
+     * for end-user wallets due to significantly higher unilateral exit costs.
+     *
+     * Default value is 1.
+     */
+    public var multiplicity: UInt8
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Whether automatic leaf optimization is enabled.
+         *
+         * If set to true, the SDK will automatically optimize the leaf set when it changes.
+         * Otherwise, the manual optimization API must be used to optimize the leaf set.
+         *
+         * Default value is true.
+         */autoEnabled: Bool, 
+        /**
+         * The desired multiplicity for the leaf set.
+         *
+         * Setting this to 0 will optimize for maximizing unilateral exit.
+         * Higher values will optimize for minimizing transfer swaps, with higher values
+         * being more aggressive and allowing better TPS rates.
+         *
+         * For end-user wallets, values of 1-5 are recommended. Values above 5 are
+         * intended for high-throughput server environments and are not recommended
+         * for end-user wallets due to significantly higher unilateral exit costs.
+         *
+         * Default value is 1.
+         */multiplicity: UInt8) {
+        self.autoEnabled = autoEnabled
+        self.multiplicity = multiplicity
+    }
+}
+
+#if compiler(>=6)
+extension LeafOptimizationConfig: Sendable {}
+#endif
+
+
+extension LeafOptimizationConfig: Equatable, Hashable {
+    public static func ==(lhs: LeafOptimizationConfig, rhs: LeafOptimizationConfig) -> Bool {
+        if lhs.autoEnabled != rhs.autoEnabled {
+            return false
+        }
+        if lhs.multiplicity != rhs.multiplicity {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(autoEnabled)
+        hasher.combine(multiplicity)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLeafOptimizationConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LeafOptimizationConfig {
+        return
+            try LeafOptimizationConfig(
+                autoEnabled: FfiConverterBool.read(from: &buf), 
+                multiplicity: FfiConverterUInt8.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LeafOptimizationConfig, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.autoEnabled, into: &buf)
+        FfiConverterUInt8.write(value.multiplicity, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLeafOptimizationConfig_lift(_ buf: RustBuffer) throws -> LeafOptimizationConfig {
+    return try FfiConverterTypeLeafOptimizationConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLeafOptimizationConfig_lower(_ value: LeafOptimizationConfig) -> RustBuffer {
+    return FfiConverterTypeLeafOptimizationConfig.lower(value)
 }
 
 
@@ -18079,6 +18150,22 @@ public struct MysqlStorageConfig {
      * (`ssl-mode=verify_ca` or `ssl-mode=verify_identity`).
      */
     public var rootCaPem: String?
+    /**
+     * Whether the SDK should run schema migrations on startup.
+     *
+     * Set to `false` when the database schema is owned and migrated by the
+     * embedding service; the SDK will trust the existing schema and skip all
+     * migrations, including writes to the schema migrations tables. Defaults
+     * to `true`.
+     */
+    public var runMigration: Bool
+    /**
+     * Whether migrations should create database-enforced foreign keys.
+     *
+     * Use `Disabled` for environments that manage relationships in application
+     * code and require schema changes without foreign-key constraints.
+     */
+    public var foreignKeyMode: MysqlForeignKeyMode
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -18100,11 +18187,27 @@ public struct MysqlStorageConfig {
          * Custom CA certificate(s) in PEM format for server verification.
          * Only used when the connection string requests TLS
          * (`ssl-mode=verify_ca` or `ssl-mode=verify_identity`).
-         */rootCaPem: String?) {
+         */rootCaPem: String?, 
+        /**
+         * Whether the SDK should run schema migrations on startup.
+         *
+         * Set to `false` when the database schema is owned and migrated by the
+         * embedding service; the SDK will trust the existing schema and skip all
+         * migrations, including writes to the schema migrations tables. Defaults
+         * to `true`.
+         */runMigration: Bool, 
+        /**
+         * Whether migrations should create database-enforced foreign keys.
+         *
+         * Use `Disabled` for environments that manage relationships in application
+         * code and require schema changes without foreign-key constraints.
+         */foreignKeyMode: MysqlForeignKeyMode) {
         self.connectionString = connectionString
         self.maxPoolSize = maxPoolSize
         self.recycleTimeoutSecs = recycleTimeoutSecs
         self.rootCaPem = rootCaPem
+        self.runMigration = runMigration
+        self.foreignKeyMode = foreignKeyMode
     }
 }
 
@@ -18127,6 +18230,12 @@ extension MysqlStorageConfig: Equatable, Hashable {
         if lhs.rootCaPem != rhs.rootCaPem {
             return false
         }
+        if lhs.runMigration != rhs.runMigration {
+            return false
+        }
+        if lhs.foreignKeyMode != rhs.foreignKeyMode {
+            return false
+        }
         return true
     }
 
@@ -18135,6 +18244,8 @@ extension MysqlStorageConfig: Equatable, Hashable {
         hasher.combine(maxPoolSize)
         hasher.combine(recycleTimeoutSecs)
         hasher.combine(rootCaPem)
+        hasher.combine(runMigration)
+        hasher.combine(foreignKeyMode)
     }
 }
 
@@ -18150,7 +18261,9 @@ public struct FfiConverterTypeMysqlStorageConfig: FfiConverterRustBuffer {
                 connectionString: FfiConverterString.read(from: &buf), 
                 maxPoolSize: FfiConverterUInt32.read(from: &buf), 
                 recycleTimeoutSecs: FfiConverterOptionUInt64.read(from: &buf), 
-                rootCaPem: FfiConverterOptionString.read(from: &buf)
+                rootCaPem: FfiConverterOptionString.read(from: &buf), 
+                runMigration: FfiConverterBool.read(from: &buf), 
+                foreignKeyMode: FfiConverterTypeMysqlForeignKeyMode.read(from: &buf)
         )
     }
 
@@ -18159,6 +18272,8 @@ public struct FfiConverterTypeMysqlStorageConfig: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.maxPoolSize, into: &buf)
         FfiConverterOptionUInt64.write(value.recycleTimeoutSecs, into: &buf)
         FfiConverterOptionString.write(value.rootCaPem, into: &buf)
+        FfiConverterBool.write(value.runMigration, into: &buf)
+        FfiConverterTypeMysqlForeignKeyMode.write(value.foreignKeyMode, into: &buf)
     }
 }
 
@@ -18266,118 +18381,6 @@ public func FfiConverterTypeNostrRelayConfig_lift(_ buf: RustBuffer) throws -> N
 #endif
 public func FfiConverterTypeNostrRelayConfig_lower(_ value: NostrRelayConfig) -> RustBuffer {
     return FfiConverterTypeNostrRelayConfig.lower(value)
-}
-
-
-public struct OptimizationConfig {
-    /**
-     * Whether automatic leaf optimization is enabled.
-     *
-     * If set to true, the SDK will automatically optimize the leaf set when it changes.
-     * Otherwise, the manual optimization API must be used to optimize the leaf set.
-     *
-     * Default value is true.
-     */
-    public var autoEnabled: Bool
-    /**
-     * The desired multiplicity for the leaf set.
-     *
-     * Setting this to 0 will optimize for maximizing unilateral exit.
-     * Higher values will optimize for minimizing transfer swaps, with higher values
-     * being more aggressive and allowing better TPS rates.
-     *
-     * For end-user wallets, values of 1-5 are recommended. Values above 5 are
-     * intended for high-throughput server environments and are not recommended
-     * for end-user wallets due to significantly higher unilateral exit costs.
-     *
-     * Default value is 1.
-     */
-    public var multiplicity: UInt8
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(
-        /**
-         * Whether automatic leaf optimization is enabled.
-         *
-         * If set to true, the SDK will automatically optimize the leaf set when it changes.
-         * Otherwise, the manual optimization API must be used to optimize the leaf set.
-         *
-         * Default value is true.
-         */autoEnabled: Bool, 
-        /**
-         * The desired multiplicity for the leaf set.
-         *
-         * Setting this to 0 will optimize for maximizing unilateral exit.
-         * Higher values will optimize for minimizing transfer swaps, with higher values
-         * being more aggressive and allowing better TPS rates.
-         *
-         * For end-user wallets, values of 1-5 are recommended. Values above 5 are
-         * intended for high-throughput server environments and are not recommended
-         * for end-user wallets due to significantly higher unilateral exit costs.
-         *
-         * Default value is 1.
-         */multiplicity: UInt8) {
-        self.autoEnabled = autoEnabled
-        self.multiplicity = multiplicity
-    }
-}
-
-#if compiler(>=6)
-extension OptimizationConfig: Sendable {}
-#endif
-
-
-extension OptimizationConfig: Equatable, Hashable {
-    public static func ==(lhs: OptimizationConfig, rhs: OptimizationConfig) -> Bool {
-        if lhs.autoEnabled != rhs.autoEnabled {
-            return false
-        }
-        if lhs.multiplicity != rhs.multiplicity {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(autoEnabled)
-        hasher.combine(multiplicity)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeOptimizationConfig: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OptimizationConfig {
-        return
-            try OptimizationConfig(
-                autoEnabled: FfiConverterBool.read(from: &buf), 
-                multiplicity: FfiConverterUInt8.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: OptimizationConfig, into buf: inout [UInt8]) {
-        FfiConverterBool.write(value.autoEnabled, into: &buf)
-        FfiConverterUInt8.write(value.multiplicity, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeOptimizationConfig_lift(_ buf: RustBuffer) throws -> OptimizationConfig {
-    return try FfiConverterTypeOptimizationConfig.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeOptimizationConfig_lower(_ value: OptimizationConfig) -> RustBuffer {
-    return FfiConverterTypeOptimizationConfig.lower(value)
 }
 
 
@@ -18932,6 +18935,15 @@ public struct PostgresStorageConfig {
      * Only used with `sslmode=verify-ca` or `sslmode=verify-full`.
      */
     public var rootCaPem: String?
+    /**
+     * Whether the SDK should run schema migrations on startup.
+     *
+     * Set to `false` when the database schema is owned and migrated by the
+     * embedding service; the SDK will trust the existing schema and skip all
+     * migrations, including writes to the schema migrations tables. Defaults
+     * to `true`.
+     */
+    public var runMigration: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -18967,7 +18979,15 @@ public struct PostgresStorageConfig {
          * Custom CA certificate(s) in PEM format for server verification.
          * If `None`, uses Mozilla's root certificate store (via webpki-roots).
          * Only used with `sslmode=verify-ca` or `sslmode=verify-full`.
-         */rootCaPem: String?) {
+         */rootCaPem: String?, 
+        /**
+         * Whether the SDK should run schema migrations on startup.
+         *
+         * Set to `false` when the database schema is owned and migrated by the
+         * embedding service; the SDK will trust the existing schema and skip all
+         * migrations, including writes to the schema migrations tables. Defaults
+         * to `true`.
+         */runMigration: Bool) {
         self.connectionString = connectionString
         self.maxPoolSize = maxPoolSize
         self.waitTimeoutSecs = waitTimeoutSecs
@@ -18975,6 +18995,7 @@ public struct PostgresStorageConfig {
         self.recycleTimeoutSecs = recycleTimeoutSecs
         self.queueMode = queueMode
         self.rootCaPem = rootCaPem
+        self.runMigration = runMigration
     }
 }
 
@@ -19006,6 +19027,9 @@ extension PostgresStorageConfig: Equatable, Hashable {
         if lhs.rootCaPem != rhs.rootCaPem {
             return false
         }
+        if lhs.runMigration != rhs.runMigration {
+            return false
+        }
         return true
     }
 
@@ -19017,6 +19041,7 @@ extension PostgresStorageConfig: Equatable, Hashable {
         hasher.combine(recycleTimeoutSecs)
         hasher.combine(queueMode)
         hasher.combine(rootCaPem)
+        hasher.combine(runMigration)
     }
 }
 
@@ -19035,7 +19060,8 @@ public struct FfiConverterTypePostgresStorageConfig: FfiConverterRustBuffer {
                 createTimeoutSecs: FfiConverterOptionUInt64.read(from: &buf), 
                 recycleTimeoutSecs: FfiConverterOptionUInt64.read(from: &buf), 
                 queueMode: FfiConverterTypePoolQueueMode.read(from: &buf), 
-                rootCaPem: FfiConverterOptionString.read(from: &buf)
+                rootCaPem: FfiConverterOptionString.read(from: &buf), 
+                runMigration: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -19047,6 +19073,7 @@ public struct FfiConverterTypePostgresStorageConfig: FfiConverterRustBuffer {
         FfiConverterOptionUInt64.write(value.recycleTimeoutSecs, into: &buf)
         FfiConverterTypePoolQueueMode.write(value.queueMode, into: &buf)
         FfiConverterOptionString.write(value.rootCaPem, into: &buf)
+        FfiConverterBool.write(value.runMigration, into: &buf)
     }
 }
 
@@ -20907,6 +20934,156 @@ public func FfiConverterTypeSchnorrSignatureBytes_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypeSchnorrSignatureBytes_lower(_ value: SchnorrSignatureBytes) -> RustBuffer {
     return FfiConverterTypeSchnorrSignatureBytes.lower(value)
+}
+
+
+/**
+ * Settings for [`new_shared_sdk_context`]. All fields are optional; the defaults
+ * match the single-SDK happy path.
+ */
+public struct SdkContextConfig {
+    /**
+     * Network the shared resources target. Defaults to [`Network::Mainnet`].
+     * Used to gate the partner JWT header provider — only constructed on
+     * Mainnet, since Regtest has no JWT-issuing Breez endpoint.
+     */
+    public var network: Network
+    /**
+     * Breez API key. When set together with `network == Mainnet`, the
+     * context constructs a shared partner JWT header provider that all
+     * SDKs built from this context will attach to their SO requests.
+     */
+    public var apiKey: String?
+    /**
+     * Number of gRPC connections per Spark operator. `None` (or `Some(1)`)
+     * keeps a single connection per operator (the right choice for most
+     * deployments); `Some(n)` opens `n` channels per operator and balances
+     * requests across them.
+     */
+    public var connectionsPerOperator: UInt32?
+    /**
+     * `PostgreSQL` backend configuration. When set, the context builds a
+     * shared connection pool and SDKs constructed with this context store
+     * their data in `PostgreSQL`.
+     */
+    public var postgresConfig: PostgresStorageConfig?
+    /**
+     * `MySQL` backend configuration. When set, the context builds a shared
+     * connection pool and SDKs constructed with this context store their
+     * data in `MySQL`.
+     */
+    public var mysqlConfig: MysqlStorageConfig?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Network the shared resources target. Defaults to [`Network::Mainnet`].
+         * Used to gate the partner JWT header provider — only constructed on
+         * Mainnet, since Regtest has no JWT-issuing Breez endpoint.
+         */network: Network, 
+        /**
+         * Breez API key. When set together with `network == Mainnet`, the
+         * context constructs a shared partner JWT header provider that all
+         * SDKs built from this context will attach to their SO requests.
+         */apiKey: String? = nil, 
+        /**
+         * Number of gRPC connections per Spark operator. `None` (or `Some(1)`)
+         * keeps a single connection per operator (the right choice for most
+         * deployments); `Some(n)` opens `n` channels per operator and balances
+         * requests across them.
+         */connectionsPerOperator: UInt32? = nil, 
+        /**
+         * `PostgreSQL` backend configuration. When set, the context builds a
+         * shared connection pool and SDKs constructed with this context store
+         * their data in `PostgreSQL`.
+         */postgresConfig: PostgresStorageConfig? = nil, 
+        /**
+         * `MySQL` backend configuration. When set, the context builds a shared
+         * connection pool and SDKs constructed with this context store their
+         * data in `MySQL`.
+         */mysqlConfig: MysqlStorageConfig? = nil) {
+        self.network = network
+        self.apiKey = apiKey
+        self.connectionsPerOperator = connectionsPerOperator
+        self.postgresConfig = postgresConfig
+        self.mysqlConfig = mysqlConfig
+    }
+}
+
+#if compiler(>=6)
+extension SdkContextConfig: Sendable {}
+#endif
+
+
+extension SdkContextConfig: Equatable, Hashable {
+    public static func ==(lhs: SdkContextConfig, rhs: SdkContextConfig) -> Bool {
+        if lhs.network != rhs.network {
+            return false
+        }
+        if lhs.apiKey != rhs.apiKey {
+            return false
+        }
+        if lhs.connectionsPerOperator != rhs.connectionsPerOperator {
+            return false
+        }
+        if lhs.postgresConfig != rhs.postgresConfig {
+            return false
+        }
+        if lhs.mysqlConfig != rhs.mysqlConfig {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(network)
+        hasher.combine(apiKey)
+        hasher.combine(connectionsPerOperator)
+        hasher.combine(postgresConfig)
+        hasher.combine(mysqlConfig)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSdkContextConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SdkContextConfig {
+        return
+            try SdkContextConfig(
+                network: FfiConverterTypeNetwork.read(from: &buf), 
+                apiKey: FfiConverterOptionString.read(from: &buf), 
+                connectionsPerOperator: FfiConverterOptionUInt32.read(from: &buf), 
+                postgresConfig: FfiConverterOptionTypePostgresStorageConfig.read(from: &buf), 
+                mysqlConfig: FfiConverterOptionTypeMysqlStorageConfig.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SdkContextConfig, into buf: inout [UInt8]) {
+        FfiConverterTypeNetwork.write(value.network, into: &buf)
+        FfiConverterOptionString.write(value.apiKey, into: &buf)
+        FfiConverterOptionUInt32.write(value.connectionsPerOperator, into: &buf)
+        FfiConverterOptionTypePostgresStorageConfig.write(value.postgresConfig, into: &buf)
+        FfiConverterOptionTypeMysqlStorageConfig.write(value.mysqlConfig, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkContextConfig_lift(_ buf: RustBuffer) throws -> SdkContextConfig {
+    return try FfiConverterTypeSdkContextConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkContextConfig_lower(_ value: SdkContextConfig) -> RustBuffer {
+    return FfiConverterTypeSdkContextConfig.lower(value)
 }
 
 
@@ -23414,6 +23591,153 @@ public func FfiConverterTypeTokenMetadata_lift(_ buf: RustBuffer) throws -> Toke
 #endif
 public func FfiConverterTypeTokenMetadata_lower(_ value: TokenMetadata) -> RustBuffer {
     return FfiConverterTypeTokenMetadata.lower(value)
+}
+
+
+/**
+ * Configuration for token-output optimization.
+ */
+public struct TokenOptimizationConfig {
+    /**
+     * Whether automatic token-output consolidation is enabled.
+     *
+     * If set to true, the SDK will periodically consolidate a token's outputs
+     * once their count exceeds [`Self::min_outputs_threshold`]. Otherwise, no
+     * automatic consolidation is performed.
+     *
+     * Default value is true.
+     */
+    public var autoEnabled: Bool
+    /**
+     * Number of token outputs to produce when token-output auto-consolidation
+     * fires.
+     *
+     * Instead of collapsing a token's outputs into a single output (which
+     * serializes subsequent payments), the SDK splits the consolidated balance
+     * across this many outputs of roughly equal value. Higher values preserve
+     * concurrency for parallel sends at the cost of a slightly larger output
+     * set.
+     *
+     * Must be >= 1 and strictly less than [`Self::min_outputs_threshold`].
+     *
+     * Default value is 5.
+     */
+    public var targetOutputCount: UInt32
+    /**
+     * Output count that triggers per-token auto-consolidation.
+     *
+     * Auto-consolidation triggers for a token when its available output count
+     * strictly exceeds this threshold.
+     *
+     * Must be greater than 1.
+     *
+     * Default value is 50.
+     */
+    public var minOutputsThreshold: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Whether automatic token-output consolidation is enabled.
+         *
+         * If set to true, the SDK will periodically consolidate a token's outputs
+         * once their count exceeds [`Self::min_outputs_threshold`]. Otherwise, no
+         * automatic consolidation is performed.
+         *
+         * Default value is true.
+         */autoEnabled: Bool, 
+        /**
+         * Number of token outputs to produce when token-output auto-consolidation
+         * fires.
+         *
+         * Instead of collapsing a token's outputs into a single output (which
+         * serializes subsequent payments), the SDK splits the consolidated balance
+         * across this many outputs of roughly equal value. Higher values preserve
+         * concurrency for parallel sends at the cost of a slightly larger output
+         * set.
+         *
+         * Must be >= 1 and strictly less than [`Self::min_outputs_threshold`].
+         *
+         * Default value is 5.
+         */targetOutputCount: UInt32, 
+        /**
+         * Output count that triggers per-token auto-consolidation.
+         *
+         * Auto-consolidation triggers for a token when its available output count
+         * strictly exceeds this threshold.
+         *
+         * Must be greater than 1.
+         *
+         * Default value is 50.
+         */minOutputsThreshold: UInt32) {
+        self.autoEnabled = autoEnabled
+        self.targetOutputCount = targetOutputCount
+        self.minOutputsThreshold = minOutputsThreshold
+    }
+}
+
+#if compiler(>=6)
+extension TokenOptimizationConfig: Sendable {}
+#endif
+
+
+extension TokenOptimizationConfig: Equatable, Hashable {
+    public static func ==(lhs: TokenOptimizationConfig, rhs: TokenOptimizationConfig) -> Bool {
+        if lhs.autoEnabled != rhs.autoEnabled {
+            return false
+        }
+        if lhs.targetOutputCount != rhs.targetOutputCount {
+            return false
+        }
+        if lhs.minOutputsThreshold != rhs.minOutputsThreshold {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(autoEnabled)
+        hasher.combine(targetOutputCount)
+        hasher.combine(minOutputsThreshold)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTokenOptimizationConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TokenOptimizationConfig {
+        return
+            try TokenOptimizationConfig(
+                autoEnabled: FfiConverterBool.read(from: &buf), 
+                targetOutputCount: FfiConverterUInt32.read(from: &buf), 
+                minOutputsThreshold: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TokenOptimizationConfig, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.autoEnabled, into: &buf)
+        FfiConverterUInt32.write(value.targetOutputCount, into: &buf)
+        FfiConverterUInt32.write(value.minOutputsThreshold, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokenOptimizationConfig_lift(_ buf: RustBuffer) throws -> TokenOptimizationConfig {
+    return try FfiConverterTypeTokenOptimizationConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokenOptimizationConfig_lower(_ value: TokenOptimizationConfig) -> RustBuffer {
+    return FfiConverterTypeTokenOptimizationConfig.lower(value)
 }
 
 
@@ -26228,6 +26552,85 @@ public func FfiConverterTypeMaxFee_lower(_ value: MaxFee) -> RustBuffer {
 
 
 extension MaxFee: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Controls whether `MySQL` migrations create database-enforced foreign keys.
+ */
+
+public enum MysqlForeignKeyMode {
+    
+    /**
+     * Create foreign-key constraints in the managed schema.
+     */
+    case enforced
+    /**
+     * Omit foreign-key constraints from the managed schema.
+     */
+    case disabled
+}
+
+
+#if compiler(>=6)
+extension MysqlForeignKeyMode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMysqlForeignKeyMode: FfiConverterRustBuffer {
+    typealias SwiftType = MysqlForeignKeyMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MysqlForeignKeyMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .enforced
+        
+        case 2: return .disabled
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MysqlForeignKeyMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .enforced:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .disabled:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMysqlForeignKeyMode_lift(_ buf: RustBuffer) throws -> MysqlForeignKeyMode {
+    return try FfiConverterTypeMysqlForeignKeyMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMysqlForeignKeyMode_lower(_ value: MysqlForeignKeyMode) -> RustBuffer {
+    return FfiConverterTypeMysqlForeignKeyMode.lower(value)
+}
+
+
+extension MysqlForeignKeyMode: Equatable, Hashable {}
 
 
 
@@ -30426,6 +30829,30 @@ fileprivate struct FfiConverterOptionTypeLnurlWithdrawInfo: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeMysqlStorageConfig: FfiConverterRustBuffer {
+    typealias SwiftType = MysqlStorageConfig?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMysqlStorageConfig.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMysqlStorageConfig.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeNostrRelayConfig: FfiConverterRustBuffer {
     typealias SwiftType = NostrRelayConfig?
 
@@ -30490,6 +30917,30 @@ fileprivate struct FfiConverterOptionTypePayment: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypePayment.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypePostgresStorageConfig: FfiConverterRustBuffer {
+    typealias SwiftType = PostgresStorageConfig?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePostgresStorageConfig.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePostgresStorageConfig.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -32496,9 +32947,8 @@ public func connectWithSigner(request: ConnectWithSignerRequest)async throws  ->
 /**
  * Creates a shareable `MySQL` connection pool from the given configuration.
  *
- * Hand the returned `Arc` to one or more
- * [`SdkBuilder::with_mysql_connection_pool`](crate::SdkBuilder::with_mysql_connection_pool)
- * calls to share a single pool across multiple SDK instances.
+ * Used internally by [`new_shared_sdk_context`](crate::new_shared_sdk_context). Exposed
+ * for advanced use cases where a caller wants the pool itself.
  */
 public func createMysqlConnectionPool(config: MysqlStorageConfig)throws  -> MysqlConnectionPool  {
     return try  FfiConverterTypeMysqlConnectionPool_lift(try rustCallWithError(FfiConverterTypeSdkError_lift) {
@@ -32510,9 +32960,8 @@ public func createMysqlConnectionPool(config: MysqlStorageConfig)throws  -> Mysq
 /**
  * Creates a shareable Postgres connection pool from the given configuration.
  *
- * Hand the returned `Arc` to one or more
- * [`SdkBuilder::with_postgres_connection_pool`](crate::SdkBuilder::with_postgres_connection_pool)
- * calls to share a single pool across multiple SDK instances.
+ * Used internally by [`new_shared_sdk_context`](crate::new_shared_sdk_context). Exposed
+ * for advanced use cases where a caller wants the pool itself.
  */
 public func createPostgresConnectionPool(config: PostgresStorageConfig)throws  -> PostgresConnectionPool  {
     return try  FfiConverterTypePostgresConnectionPool_lift(try rustCallWithError(FfiConverterTypeSdkError_lift) {
@@ -32576,6 +33025,48 @@ public func defaultPostgresStorageConfig(connectionString: String) -> PostgresSt
 })
 }
 /**
+ * Builds a [`Config`] suitable for multi-tenant server-mode deployments.
+ *
+ * This preset returns the same configuration as [`default_config`] with
+ * [`background_tasks_enabled`](Config::background_tasks_enabled) set to
+ * `false`. In server mode, the SDK is treated as a library: the host
+ * orchestrates sync, claiming, and event delivery (typically via webhooks)
+ * explicitly, so an ephemeral SDK instance stays cheap and predictable.
+ *
+ * Config fields whose background services are gated off are reset to their
+ * inactive shape: `real_time_sync_server_url` is set to `None`, and both
+ * `leaf_optimization_config.auto_enabled` and
+ * `token_optimization_config.auto_enabled` are set to `false`. The SDK
+ * rejects builds where `background_tasks_enabled` is `false` and any of
+ * those fields is left in its active shape, so flip the flag via this
+ * helper rather than by hand.
+ *
+ * Explicit operations (`sync_wallet`, `claim_deposit`,
+ * `list_unclaimed_deposits`, `refund_deposit`,
+ * `refund_pending_conversions`, etc.) continue to work and are the intended
+ * entry points in this mode.
+ *
+ * Stable Balance is not supported in this mode because its conversion worker
+ * is a background service.
+ *
+ * One-time setup that the SDK normally applies automatically — notably
+ * `private_enabled_default` — is NOT applied in this mode. Drive setup
+ * explicitly via `update_user_settings` (and any other relevant APIs) so
+ * ephemeral per-request SDK instances incur no implicit setup overhead.
+ *
+ * `get_info` reads balance directly from the spark wallet in this mode
+ * rather than from the background-maintained storage cache, so balance
+ * reflects the latest local sync and `ensure_synced=true` is rejected with
+ * an invalid-input error
+ */
+public func defaultServerConfig(network: Network) -> Config  {
+    return try!  FfiConverterTypeConfig_lift(try! rustCall() {
+    uniffi_breez_sdk_spark_fn_func_default_server_config(
+        FfiConverterTypeNetwork_lower(network),$0
+    )
+})
+}
+/**
  * Fetches the current status of Spark network services relevant to the SDK.
  *
  * This function queries the Spark status API and returns the worst status
@@ -32604,21 +33095,6 @@ public func initLogging(logDir: String?, appLogger: Logger?, logFilter: String?)
 }
 }
 /**
- * Creates a new shareable [`ConnectionManager`].
- *
- * `connections_per_operator` controls per-operator connection pooling:
- * `None` keeps a single connection per operator (suitable for almost every
- * deployment); `Some(n)` opens `n` connections per operator and balances
- * requests across them.
- */
-public func newConnectionManager(connectionsPerOperator: UInt32?) -> ConnectionManager  {
-    return try!  FfiConverterTypeConnectionManager_lift(try! rustCall() {
-    uniffi_breez_sdk_spark_fn_func_new_connection_manager(
-        FfiConverterOptionUInt32.lower(connectionsPerOperator),$0
-    )
-})
-}
-/**
  * Constructs a shareable REST-based [`BitcoinChainService`].
  *
  * Pass the returned `Arc` to multiple [`SdkBuilder`](crate::SdkBuilder)s via
@@ -32645,19 +33121,26 @@ public func newRestChainService(url: String, network: Network, apiType: ChainApi
         )
 }
 /**
- * Construct a new shared SSP connection manager.
+ * Constructs an [`SdkContext`] from a `SdkContextConfig`.
  *
- * Pass the returned `Arc<SspConnectionManager>` to
- * [`SdkBuilder::with_ssp_connection_manager`](crate::SdkBuilder::with_ssp_connection_manager)
- * when building each SDK instance that should share the underlying HTTP
- * connection pool.
+ * The returned `Arc` is cheap to clone and can back many SDK instances.
+ * `SdkContextConfig::new(network)` yields an in-memory, single-tenant setup;
+ * supply a DB config to back the SDKs with a shared `PostgreSQL` or `MySQL`
+ * pool.
  */
-public func newSspConnectionManager(userAgent: String?) -> SspConnectionManager  {
-    return try!  FfiConverterTypeSspConnectionManager_lift(try! rustCall() {
-    uniffi_breez_sdk_spark_fn_func_new_ssp_connection_manager(
-        FfiConverterOptionString.lower(userAgent),$0
-    )
-})
+public func newSharedSdkContext(config: SdkContextConfig)async throws  -> SdkContext  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_func_new_shared_sdk_context(FfiConverterTypeSdkContextConfig_lower(config)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_pointer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_pointer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeSdkContext_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
 }
 
 private enum InitializationResult {
@@ -32681,10 +33164,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_connect_with_signer() != 1399) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_func_create_mysql_connection_pool() != 44890) {
+    if (uniffi_breez_sdk_spark_checksum_func_create_mysql_connection_pool() != 525) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_func_create_postgres_connection_pool() != 41178) {
+    if (uniffi_breez_sdk_spark_checksum_func_create_postgres_connection_pool() != 5686) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_default_config() != 62194) {
@@ -32699,19 +33182,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_default_postgres_storage_config() != 3515) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_func_default_server_config() != 33858) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_func_get_spark_status() != 62888) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_init_logging() != 8518) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_func_new_connection_manager() != 25164) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_breez_sdk_spark_checksum_func_new_rest_chain_service() != 23177) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_func_new_ssp_connection_manager() != 15222) {
+    if (uniffi_breez_sdk_spark_checksum_func_new_shared_sdk_context() != 28438) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_address_utxos() != 20959) {
@@ -32829,6 +33312,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_refund_deposit() != 33646) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_refund_pending_conversions() != 24173) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_register_lightning_address() != 530) {
@@ -32963,9 +33449,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_chain_service() != 2848) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_connection_manager() != 51797) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_default_storage() != 14543) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -32978,28 +33461,25 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_lnurl_client() != 51060) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_mysql_backend() != 44903) {
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_mysql_backend() != 37576) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_mysql_connection_pool() != 54551) {
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_mysql_connection_pool() != 28936) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_payment_observer() != 21617) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_postgres_backend() != 13427) {
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_postgres_backend() != 26901) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_postgres_connection_pool() != 24378) {
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_postgres_connection_pool() != 53944) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_rest_chain_service() != 63155) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_session_manager() != 64189) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_ssp_connection_manager() != 65505) {
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_shared_context() != 64829) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_storage() != 59400) {
