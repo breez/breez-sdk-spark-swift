@@ -10,17 +10,33 @@ let package = Package(
         .iOS(.v13),
     ],
     products: [
-        .library(name: "BreezSdkSpark", targets: ["breez_sdk_sparkFFI", "BreezSdkSpark"])
+        .library(name: "BreezSdkSpark", targets: ["breez_sdk_sparkFFI", "BreezSdkSpark", "PasskeyPRFHelperObjC"])
     ],
     dependencies: [
         .package(url: "https://github.com/mkrd/Swift-BigInt.git", from: "2.0.0")
     ],
     targets: [
-        .binaryTarget(name: "breez_sdk_sparkFFI", url: "https://github.com/breez/breez-sdk-spark-swift/releases/download/0.15.1/breez_sdk_sparkFFI.xcframework.zip", checksum: "513e9cf473f143ee8ecf762f336e6c752cfedcee5a44f6b07946bfdbe8323675"),
+        .binaryTarget(name: "breez_sdk_sparkFFI", url: "https://github.com/breez/breez-sdk-spark-swift/releases/download/0.16.1-dev1/breez_sdk_sparkFFI.xcframework.zip", checksum: "34a95db949e5cad539115c8e87905bbaf270bd599bbcf5e9eff306ec58240d63"),
+        // ObjC helper for passkey PRF types hidden by NS_REFINED_FOR_SWIFT.
+        // This target's copy is canonical: `cargo xtask sync-passkey-core`
+        // mirrors it verbatim into the Flutter and React Native ios trees.
+        // Header lives flat alongside the .m (no `include/`) so the same
+        // file works here (publicHeadersPath: ".") and in those pods, which
+        // package both files at the pod root.
+        .target(
+            name: "PasskeyPRFHelperObjC",
+            path: "Sources/PasskeyPRFHelperObjC",
+            publicHeadersPath: ".",
+            linkerSettings: [
+                .linkedFramework("AuthenticationServices"),
+            ]
+        ),
         .target(
             name: "BreezSdkSpark",
             dependencies: [
-                "breez_sdk_sparkFFI", .product(name: "BigNumber", package: "Swift-BigInt"),
+                "breez_sdk_sparkFFI",
+                "PasskeyPRFHelperObjC",
+                .product(name: "BigNumber", package: "Swift-BigInt"),
             ]),
     ]
 )
