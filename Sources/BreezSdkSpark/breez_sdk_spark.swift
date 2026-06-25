@@ -1127,6 +1127,16 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     func fetchConversionLimits(request: FetchConversionLimitsRequest) async throws  -> FetchConversionLimitsResponse
     
     /**
+     * Returns the available cross-chain routes.
+     *
+     * Use [`CrossChainRouteFilter::Send`] to get routes for sending from Spark
+     * (filtered by the parsed recipient address), or
+     * [`CrossChainRouteFilter::Receive`] to get routes for receiving into Spark
+     * (optionally filtered by a source contract address).
+     */
+    func getCrossChainRoutes(filter: CrossChainRouteFilter) async throws  -> [CrossChainRoutePair]
+    
+    /**
      * Returns the balance of the wallet in satoshis
      */
     func getInfo(request: GetInfoRequest) async throws  -> GetInfoResponse
@@ -1729,6 +1739,31 @@ open func fetchConversionLimits(request: FetchConversionLimitsRequest)async thro
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFetchConversionLimitsResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
+     * Returns the available cross-chain routes.
+     *
+     * Use [`CrossChainRouteFilter::Send`] to get routes for sending from Spark
+     * (filtered by the parsed recipient address), or
+     * [`CrossChainRouteFilter::Receive`] to get routes for receiving into Spark
+     * (optionally filtered by a source contract address).
+     */
+open func getCrossChainRoutes(filter: CrossChainRouteFilter)async throws  -> [CrossChainRoutePair]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_get_cross_chain_routes(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeCrossChainRouteFilter_lower(filter)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeCrossChainRoutePair.lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
@@ -7656,6 +7691,22 @@ public protocol Storage: AnyObject, Sendable {
      */
     func deleteContact(id: String) async throws 
     
+    /**
+     * Inserts or overwrites a cross-chain swap row (upsert by `(provider, id)`).
+     */
+    func setCrossChainSwap(swap: StoredCrossChainSwap) async throws 
+    
+    /**
+     * Gets a single cross-chain swap row by its `(provider, id)`, or `None` if absent.
+     */
+    func getCrossChainSwap(provider: String, id: String) async throws  -> StoredCrossChainSwap?
+    
+    /**
+     * Lists all non-terminal cross-chain swap rows for a single provider
+     * (`provider = ? AND is_terminal = false`).
+     */
+    func listActiveCrossChainSwaps(provider: String) async throws  -> [StoredCrossChainSwap]
+    
     func addOutgoingChange(record: UnversionedRecordChange) async throws  -> UInt64
     
     func completeOutgoingSync(record: Record, localRevision: UInt64) async throws 
@@ -8174,6 +8225,67 @@ open func deleteContact(id: String)async throws   {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
             liftFunc: { $0 },
+            errorHandler: FfiConverterTypeStorageError_lift
+        )
+}
+    
+    /**
+     * Inserts or overwrites a cross-chain swap row (upsert by `(provider, id)`).
+     */
+open func setCrossChainSwap(swap: StoredCrossChainSwap)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_set_cross_chain_swap(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeStoredCrossChainSwap_lower(swap)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeStorageError_lift
+        )
+}
+    
+    /**
+     * Gets a single cross-chain swap row by its `(provider, id)`, or `None` if absent.
+     */
+open func getCrossChainSwap(provider: String, id: String)async throws  -> StoredCrossChainSwap?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_get_cross_chain_swap(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(provider),FfiConverterString.lower(id)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeStoredCrossChainSwap.lift,
+            errorHandler: FfiConverterTypeStorageError_lift
+        )
+}
+    
+    /**
+     * Lists all non-terminal cross-chain swap rows for a single provider
+     * (`provider = ? AND is_terminal = false`).
+     */
+open func listActiveCrossChainSwaps(provider: String)async throws  -> [StoredCrossChainSwap]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_list_active_cross_chain_swaps(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(provider)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeStoredCrossChainSwap.lift,
             errorHandler: FfiConverterTypeStorageError_lift
         )
 }
@@ -9125,6 +9237,135 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeStorageError_lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        setCrossChainSwap: { (
+            uniffiHandle: UInt64,
+            swap: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.setCrossChainSwap(
+                     swap: try FfiConverterTypeStoredCrossChainSwap_lift(swap)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeStorageError_lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        getCrossChainSwap: { (
+            uniffiHandle: UInt64,
+            provider: RustBuffer,
+            id: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> StoredCrossChainSwap? in
+                guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.getCrossChainSwap(
+                     provider: try FfiConverterString.lift(provider),
+                     id: try FfiConverterString.lift(id)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: StoredCrossChainSwap?) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterOptionTypeStoredCrossChainSwap.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeStorageError_lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        listActiveCrossChainSwaps: { (
+            uniffiHandle: UInt64,
+            provider: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> [StoredCrossChainSwap] in
+                guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.listActiveCrossChainSwaps(
+                     provider: try FfiConverterString.lift(provider)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: [StoredCrossChainSwap]) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterSequenceTypeStoredCrossChainSwap.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
                         callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
                     )
                 )
@@ -12427,6 +12668,16 @@ public struct Config {
      * `default_server_config` already sets these compatible values.
      */
     public var backgroundTasksEnabled: Bool
+    /**
+     * Configuration for cross-chain sends via Orchestra and Boltz.
+     *
+     * `Some(_)` enables cross-chain sends (sats to USDT on external chains).
+     * `None` (default) disables them entirely. Opt in by setting this to
+     * [`CrossChainConfig::default`] (or a customized value): the providers
+     * run background work (e.g. web sockets), so enabling is left to the
+     * caller. Cross-chain sends are only supported on mainnet.
+     */
+    public var crossChainConfig: CrossChainConfig?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -12523,7 +12774,16 @@ public struct Config {
          * `stable_balance_config` must be `None`, `real_time_sync_server_url`
          * must be `None`, and `optimization_config.auto_enabled` must be `false`.
          * `default_server_config` already sets these compatible values.
-         */backgroundTasksEnabled: Bool) {
+         */backgroundTasksEnabled: Bool, 
+        /**
+         * Configuration for cross-chain sends via Orchestra and Boltz.
+         *
+         * `Some(_)` enables cross-chain sends (sats to USDT on external chains).
+         * `None` (default) disables them entirely. Opt in by setting this to
+         * [`CrossChainConfig::default`] (or a customized value): the providers
+         * run background work (e.g. web sockets), so enabling is left to the
+         * caller. Cross-chain sends are only supported on mainnet.
+         */crossChainConfig: CrossChainConfig?) {
         self.apiKey = apiKey
         self.network = network
         self.syncIntervalSecs = syncIntervalSecs
@@ -12540,6 +12800,7 @@ public struct Config {
         self.maxConcurrentClaims = maxConcurrentClaims
         self.sparkConfig = sparkConfig
         self.backgroundTasksEnabled = backgroundTasksEnabled
+        self.crossChainConfig = crossChainConfig
     }
 }
 
@@ -12598,6 +12859,9 @@ extension Config: Equatable, Hashable {
         if lhs.backgroundTasksEnabled != rhs.backgroundTasksEnabled {
             return false
         }
+        if lhs.crossChainConfig != rhs.crossChainConfig {
+            return false
+        }
         return true
     }
 
@@ -12618,6 +12882,7 @@ extension Config: Equatable, Hashable {
         hasher.combine(maxConcurrentClaims)
         hasher.combine(sparkConfig)
         hasher.combine(backgroundTasksEnabled)
+        hasher.combine(crossChainConfig)
     }
 }
 
@@ -12645,7 +12910,8 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
                 stableBalanceConfig: FfiConverterOptionTypeStableBalanceConfig.read(from: &buf), 
                 maxConcurrentClaims: FfiConverterUInt32.read(from: &buf), 
                 sparkConfig: FfiConverterOptionTypeSparkConfig.read(from: &buf), 
-                backgroundTasksEnabled: FfiConverterBool.read(from: &buf)
+                backgroundTasksEnabled: FfiConverterBool.read(from: &buf), 
+                crossChainConfig: FfiConverterOptionTypeCrossChainConfig.read(from: &buf)
         )
     }
 
@@ -12666,6 +12932,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.maxConcurrentClaims, into: &buf)
         FfiConverterOptionTypeSparkConfig.write(value.sparkConfig, into: &buf)
         FfiConverterBool.write(value.backgroundTasksEnabled, into: &buf)
+        FfiConverterOptionTypeCrossChainConfig.write(value.crossChainConfig, into: &buf)
     }
 }
 
@@ -13139,40 +13406,273 @@ public func FfiConverterTypeContact_lower(_ value: Contact) -> RustBuffer {
 
 
 /**
- * Outlines the steps involved in a conversion.
- *
- * Built progressively: `status` is available immediately from payment metadata,
- * while `from`/`to` steps are enriched later from child payments.
+ * A single conversion in a payment's conversion chain.
  */
-public struct ConversionDetails {
+public struct Conversion {
     /**
-     * Current status of the conversion
+     * The provider that performed this conversion
+     */
+    public var provider: ConversionProvider
+    /**
+     * Status of this specific conversion step
      */
     public var status: ConversionStatus
     /**
-     * The send step of the conversion (e.g., sats sent to Flashnet)
+     * Source side of the conversion
      */
-    public var from: ConversionStep?
+    public var from: ConversionSide
     /**
-     * The receive step of the conversion (e.g., tokens received from Flashnet)
+     * Destination side of the conversion
      */
-    public var to: ConversionStep?
+    public var to: ConversionSide
+    /**
+     * Reason the conversion amount was adjusted, if applicable (AMM only)
+     */
+    public var amountAdjustment: AmountAdjustmentReason?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(
         /**
-         * Current status of the conversion
+         * The provider that performed this conversion
+         */provider: ConversionProvider, 
+        /**
+         * Status of this specific conversion step
          */status: ConversionStatus, 
         /**
-         * The send step of the conversion (e.g., sats sent to Flashnet)
-         */from: ConversionStep?, 
+         * Source side of the conversion
+         */from: ConversionSide, 
         /**
-         * The receive step of the conversion (e.g., tokens received from Flashnet)
-         */to: ConversionStep?) {
+         * Destination side of the conversion
+         */to: ConversionSide, 
+        /**
+         * Reason the conversion amount was adjusted, if applicable (AMM only)
+         */amountAdjustment: AmountAdjustmentReason?) {
+        self.provider = provider
         self.status = status
         self.from = from
         self.to = to
+        self.amountAdjustment = amountAdjustment
+    }
+}
+
+#if compiler(>=6)
+extension Conversion: Sendable {}
+#endif
+
+
+extension Conversion: Equatable, Hashable {
+    public static func ==(lhs: Conversion, rhs: Conversion) -> Bool {
+        if lhs.provider != rhs.provider {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        if lhs.from != rhs.from {
+            return false
+        }
+        if lhs.to != rhs.to {
+            return false
+        }
+        if lhs.amountAdjustment != rhs.amountAdjustment {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(provider)
+        hasher.combine(status)
+        hasher.combine(from)
+        hasher.combine(to)
+        hasher.combine(amountAdjustment)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConversion: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Conversion {
+        return
+            try Conversion(
+                provider: FfiConverterTypeConversionProvider.read(from: &buf), 
+                status: FfiConverterTypeConversionStatus.read(from: &buf), 
+                from: FfiConverterTypeConversionSide.read(from: &buf), 
+                to: FfiConverterTypeConversionSide.read(from: &buf), 
+                amountAdjustment: FfiConverterOptionTypeAmountAdjustmentReason.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Conversion, into buf: inout [UInt8]) {
+        FfiConverterTypeConversionProvider.write(value.provider, into: &buf)
+        FfiConverterTypeConversionStatus.write(value.status, into: &buf)
+        FfiConverterTypeConversionSide.write(value.from, into: &buf)
+        FfiConverterTypeConversionSide.write(value.to, into: &buf)
+        FfiConverterOptionTypeAmountAdjustmentReason.write(value.amountAdjustment, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversion_lift(_ buf: RustBuffer) throws -> Conversion {
+    return try FfiConverterTypeConversion.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversion_lower(_ value: Conversion) -> RustBuffer {
+    return FfiConverterTypeConversion.lower(value)
+}
+
+
+/**
+ * The asset on a [`ConversionSide`] — groups the ticker, stable identifier,
+ * and decimals that always travel together.
+ */
+public struct ConversionAsset {
+    /**
+     * Ticker (e.g. `"BTC"`, `"USDB"`, `"USDC"`, `"USDT"`). Tickers alone
+     * are ambiguous across chains — pair with [`Self::identifier`] for a
+     * hard match.
+     */
+    public var ticker: String
+    /**
+     * Stable identifier: a Spark token identifier for Spark tokens, or a
+     * contract/mint address for cross-chain assets. `None` for BTC/sats.
+     */
+    public var identifier: String?
+    /**
+     * Number of decimals for the asset.
+     * `0` for BTC/sats sides (amount is already in the smallest unit,
+     * so no scaling is needed); non-zero for token assets (e.g. `6` for
+     * USDC/USDT/USDB).
+     */
+    public var decimals: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Ticker (e.g. `"BTC"`, `"USDB"`, `"USDC"`, `"USDT"`). Tickers alone
+         * are ambiguous across chains — pair with [`Self::identifier`] for a
+         * hard match.
+         */ticker: String, 
+        /**
+         * Stable identifier: a Spark token identifier for Spark tokens, or a
+         * contract/mint address for cross-chain assets. `None` for BTC/sats.
+         */identifier: String?, 
+        /**
+         * Number of decimals for the asset.
+         * `0` for BTC/sats sides (amount is already in the smallest unit,
+         * so no scaling is needed); non-zero for token assets (e.g. `6` for
+         * USDC/USDT/USDB).
+         */decimals: UInt32) {
+        self.ticker = ticker
+        self.identifier = identifier
+        self.decimals = decimals
+    }
+}
+
+#if compiler(>=6)
+extension ConversionAsset: Sendable {}
+#endif
+
+
+extension ConversionAsset: Equatable, Hashable {
+    public static func ==(lhs: ConversionAsset, rhs: ConversionAsset) -> Bool {
+        if lhs.ticker != rhs.ticker {
+            return false
+        }
+        if lhs.identifier != rhs.identifier {
+            return false
+        }
+        if lhs.decimals != rhs.decimals {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(ticker)
+        hasher.combine(identifier)
+        hasher.combine(decimals)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConversionAsset: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConversionAsset {
+        return
+            try ConversionAsset(
+                ticker: FfiConverterString.read(from: &buf), 
+                identifier: FfiConverterOptionString.read(from: &buf), 
+                decimals: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ConversionAsset, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.ticker, into: &buf)
+        FfiConverterOptionString.write(value.identifier, into: &buf)
+        FfiConverterUInt32.write(value.decimals, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversionAsset_lift(_ buf: RustBuffer) throws -> ConversionAsset {
+    return try FfiConverterTypeConversionAsset.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversionAsset_lower(_ value: ConversionAsset) -> RustBuffer {
+    return FfiConverterTypeConversionAsset.lower(value)
+}
+
+
+/**
+ * Outlines the steps involved in one or more conversions on a payment.
+ *
+ * Built progressively: `status` is available immediately from payment metadata,
+ * while `conversions` are enriched later from child payments and conversion info.
+ */
+public struct ConversionDetails {
+    /**
+     * Overall status of the conversion (persisted in storage)
+     */
+    public var status: ConversionStatus
+    /**
+     * Ordered list of conversion steps. For sends: [AMM, cross-chain].
+     * For receives: [cross-chain, AMM]. Rebuilt on retrieval, not persisted.
+     */
+    public var conversions: [Conversion]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Overall status of the conversion (persisted in storage)
+         */status: ConversionStatus, 
+        /**
+         * Ordered list of conversion steps. For sends: [AMM, cross-chain].
+         * For receives: [cross-chain, AMM]. Rebuilt on retrieval, not persisted.
+         */conversions: [Conversion]) {
+        self.status = status
+        self.conversions = conversions
     }
 }
 
@@ -13186,10 +13686,7 @@ extension ConversionDetails: Equatable, Hashable {
         if lhs.status != rhs.status {
             return false
         }
-        if lhs.from != rhs.from {
-            return false
-        }
-        if lhs.to != rhs.to {
+        if lhs.conversions != rhs.conversions {
             return false
         }
         return true
@@ -13197,8 +13694,7 @@ extension ConversionDetails: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(status)
-        hasher.combine(from)
-        hasher.combine(to)
+        hasher.combine(conversions)
     }
 }
 
@@ -13212,15 +13708,13 @@ public struct FfiConverterTypeConversionDetails: FfiConverterRustBuffer {
         return
             try ConversionDetails(
                 status: FfiConverterTypeConversionStatus.read(from: &buf), 
-                from: FfiConverterOptionTypeConversionStep.read(from: &buf), 
-                to: FfiConverterOptionTypeConversionStep.read(from: &buf)
+                conversions: FfiConverterSequenceTypeConversion.read(from: &buf)
         )
     }
 
     public static func write(_ value: ConversionDetails, into buf: inout [UInt8]) {
         FfiConverterTypeConversionStatus.write(value.status, into: &buf)
-        FfiConverterOptionTypeConversionStep.write(value.from, into: &buf)
-        FfiConverterOptionTypeConversionStep.write(value.to, into: &buf)
+        FfiConverterSequenceTypeConversion.write(value.conversions, into: &buf)
     }
 }
 
@@ -13377,146 +13871,6 @@ public func FfiConverterTypeConversionEstimate_lower(_ value: ConversionEstimate
 }
 
 
-public struct ConversionInfo {
-    /**
-     * The pool id associated with the conversion
-     */
-    public var poolId: String
-    /**
-     * The conversion id shared by both sides of the conversion
-     */
-    public var conversionId: String
-    /**
-     * The status of the conversion
-     */
-    public var status: ConversionStatus
-    /**
-     * The fee paid for the conversion
-     * Denominated in satoshis if converting from Bitcoin, otherwise in the token base units.
-     */
-    public var fee: U128?
-    /**
-     * The purpose of the conversion
-     */
-    public var purpose: ConversionPurpose?
-    /**
-     * The reason the conversion amount was adjusted, if applicable.
-     */
-    public var amountAdjustment: AmountAdjustmentReason?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(
-        /**
-         * The pool id associated with the conversion
-         */poolId: String, 
-        /**
-         * The conversion id shared by both sides of the conversion
-         */conversionId: String, 
-        /**
-         * The status of the conversion
-         */status: ConversionStatus, 
-        /**
-         * The fee paid for the conversion
-         * Denominated in satoshis if converting from Bitcoin, otherwise in the token base units.
-         */fee: U128?, 
-        /**
-         * The purpose of the conversion
-         */purpose: ConversionPurpose?, 
-        /**
-         * The reason the conversion amount was adjusted, if applicable.
-         */amountAdjustment: AmountAdjustmentReason?) {
-        self.poolId = poolId
-        self.conversionId = conversionId
-        self.status = status
-        self.fee = fee
-        self.purpose = purpose
-        self.amountAdjustment = amountAdjustment
-    }
-}
-
-#if compiler(>=6)
-extension ConversionInfo: Sendable {}
-#endif
-
-
-extension ConversionInfo: Equatable, Hashable {
-    public static func ==(lhs: ConversionInfo, rhs: ConversionInfo) -> Bool {
-        if lhs.poolId != rhs.poolId {
-            return false
-        }
-        if lhs.conversionId != rhs.conversionId {
-            return false
-        }
-        if lhs.status != rhs.status {
-            return false
-        }
-        if lhs.fee != rhs.fee {
-            return false
-        }
-        if lhs.purpose != rhs.purpose {
-            return false
-        }
-        if lhs.amountAdjustment != rhs.amountAdjustment {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(poolId)
-        hasher.combine(conversionId)
-        hasher.combine(status)
-        hasher.combine(fee)
-        hasher.combine(purpose)
-        hasher.combine(amountAdjustment)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeConversionInfo: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConversionInfo {
-        return
-            try ConversionInfo(
-                poolId: FfiConverterString.read(from: &buf), 
-                conversionId: FfiConverterString.read(from: &buf), 
-                status: FfiConverterTypeConversionStatus.read(from: &buf), 
-                fee: FfiConverterOptionTypeu128.read(from: &buf), 
-                purpose: FfiConverterOptionTypeConversionPurpose.read(from: &buf), 
-                amountAdjustment: FfiConverterOptionTypeAmountAdjustmentReason.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ConversionInfo, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.poolId, into: &buf)
-        FfiConverterString.write(value.conversionId, into: &buf)
-        FfiConverterTypeConversionStatus.write(value.status, into: &buf)
-        FfiConverterOptionTypeu128.write(value.fee, into: &buf)
-        FfiConverterOptionTypeConversionPurpose.write(value.purpose, into: &buf)
-        FfiConverterOptionTypeAmountAdjustmentReason.write(value.amountAdjustment, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeConversionInfo_lift(_ buf: RustBuffer) throws -> ConversionInfo {
-    return try FfiConverterTypeConversionInfo.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeConversionInfo_lower(_ value: ConversionInfo) -> RustBuffer {
-    return FfiConverterTypeConversionInfo.lower(value)
-}
-
-
 /**
  * Options for conversion when fulfilling a payment. When set, the SDK will
  * perform a conversion before fulfilling the payment. If not set, the payment
@@ -13631,74 +13985,59 @@ public func FfiConverterTypeConversionOptions_lower(_ value: ConversionOptions) 
 
 
 /**
- * A single step in a conversion
+ * One side (source or destination) of a conversion.
  */
-public struct ConversionStep {
+public struct ConversionSide {
     /**
-     * The underlying payment id of the conversion step
+     * The chain or network for this side.
      */
-    public var paymentId: String
+    public var chain: ConversionChain
     /**
-     * Payment amount in satoshis or token base units
+     * The asset being converted on this side.
+     */
+    public var asset: ConversionAsset
+    /**
+     * Amount in base units (satoshis or token base units)
      */
     public var amount: U128
     /**
-     * Fee paid in satoshis or token base units
-     * This represents the payment fee + the conversion fee
+     * Fee in the same base units
      */
     public var fee: U128
-    /**
-     * Method of payment
-     */
-    public var method: PaymentMethod
-    /**
-     * Token metadata if a token is used for payment
-     */
-    public var tokenMetadata: TokenMetadata?
-    /**
-     * The reason the conversion amount was adjusted, if applicable.
-     */
-    public var amountAdjustment: AmountAdjustmentReason?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(
         /**
-         * The underlying payment id of the conversion step
-         */paymentId: String, 
+         * The chain or network for this side.
+         */chain: ConversionChain, 
         /**
-         * Payment amount in satoshis or token base units
+         * The asset being converted on this side.
+         */asset: ConversionAsset, 
+        /**
+         * Amount in base units (satoshis or token base units)
          */amount: U128, 
         /**
-         * Fee paid in satoshis or token base units
-         * This represents the payment fee + the conversion fee
-         */fee: U128, 
-        /**
-         * Method of payment
-         */method: PaymentMethod, 
-        /**
-         * Token metadata if a token is used for payment
-         */tokenMetadata: TokenMetadata?, 
-        /**
-         * The reason the conversion amount was adjusted, if applicable.
-         */amountAdjustment: AmountAdjustmentReason?) {
-        self.paymentId = paymentId
+         * Fee in the same base units
+         */fee: U128) {
+        self.chain = chain
+        self.asset = asset
         self.amount = amount
         self.fee = fee
-        self.method = method
-        self.tokenMetadata = tokenMetadata
-        self.amountAdjustment = amountAdjustment
     }
 }
 
 #if compiler(>=6)
-extension ConversionStep: Sendable {}
+extension ConversionSide: Sendable {}
 #endif
 
 
-extension ConversionStep: Equatable, Hashable {
-    public static func ==(lhs: ConversionStep, rhs: ConversionStep) -> Bool {
-        if lhs.paymentId != rhs.paymentId {
+extension ConversionSide: Equatable, Hashable {
+    public static func ==(lhs: ConversionSide, rhs: ConversionSide) -> Bool {
+        if lhs.chain != rhs.chain {
+            return false
+        }
+        if lhs.asset != rhs.asset {
             return false
         }
         if lhs.amount != rhs.amount {
@@ -13707,25 +14046,14 @@ extension ConversionStep: Equatable, Hashable {
         if lhs.fee != rhs.fee {
             return false
         }
-        if lhs.method != rhs.method {
-            return false
-        }
-        if lhs.tokenMetadata != rhs.tokenMetadata {
-            return false
-        }
-        if lhs.amountAdjustment != rhs.amountAdjustment {
-            return false
-        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(paymentId)
+        hasher.combine(chain)
+        hasher.combine(asset)
         hasher.combine(amount)
         hasher.combine(fee)
-        hasher.combine(method)
-        hasher.combine(tokenMetadata)
-        hasher.combine(amountAdjustment)
     }
 }
 
@@ -13734,26 +14062,22 @@ extension ConversionStep: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeConversionStep: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConversionStep {
+public struct FfiConverterTypeConversionSide: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConversionSide {
         return
-            try ConversionStep(
-                paymentId: FfiConverterString.read(from: &buf), 
+            try ConversionSide(
+                chain: FfiConverterTypeConversionChain.read(from: &buf), 
+                asset: FfiConverterTypeConversionAsset.read(from: &buf), 
                 amount: FfiConverterTypeu128.read(from: &buf), 
-                fee: FfiConverterTypeu128.read(from: &buf), 
-                method: FfiConverterTypePaymentMethod.read(from: &buf), 
-                tokenMetadata: FfiConverterOptionTypeTokenMetadata.read(from: &buf), 
-                amountAdjustment: FfiConverterOptionTypeAmountAdjustmentReason.read(from: &buf)
+                fee: FfiConverterTypeu128.read(from: &buf)
         )
     }
 
-    public static func write(_ value: ConversionStep, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.paymentId, into: &buf)
+    public static func write(_ value: ConversionSide, into buf: inout [UInt8]) {
+        FfiConverterTypeConversionChain.write(value.chain, into: &buf)
+        FfiConverterTypeConversionAsset.write(value.asset, into: &buf)
         FfiConverterTypeu128.write(value.amount, into: &buf)
         FfiConverterTypeu128.write(value.fee, into: &buf)
-        FfiConverterTypePaymentMethod.write(value.method, into: &buf)
-        FfiConverterOptionTypeTokenMetadata.write(value.tokenMetadata, into: &buf)
-        FfiConverterOptionTypeAmountAdjustmentReason.write(value.amountAdjustment, into: &buf)
     }
 }
 
@@ -13761,15 +14085,15 @@ public struct FfiConverterTypeConversionStep: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeConversionStep_lift(_ buf: RustBuffer) throws -> ConversionStep {
-    return try FfiConverterTypeConversionStep.lift(buf)
+public func FfiConverterTypeConversionSide_lift(_ buf: RustBuffer) throws -> ConversionSide {
+    return try FfiConverterTypeConversionSide.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeConversionStep_lower(_ value: ConversionStep) -> RustBuffer {
-    return FfiConverterTypeConversionStep.lower(value)
+public func FfiConverterTypeConversionSide_lower(_ value: ConversionSide) -> RustBuffer {
+    return FfiConverterTypeConversionSide.lower(value)
 }
 
 
@@ -13934,6 +14258,384 @@ public func FfiConverterTypeCredentials_lift(_ buf: RustBuffer) throws -> Creden
 #endif
 public func FfiConverterTypeCredentials_lower(_ value: Credentials) -> RustBuffer {
     return FfiConverterTypeCredentials.lower(value)
+}
+
+
+public struct CrossChainAddressDetails {
+    public var address: String
+    public var addressFamily: CrossChainAddressFamily
+    public var contractAddress: String?
+    public var chainId: UInt64?
+    public var amount: U128?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(address: String, addressFamily: CrossChainAddressFamily, contractAddress: String?, chainId: UInt64?, amount: U128?) {
+        self.address = address
+        self.addressFamily = addressFamily
+        self.contractAddress = contractAddress
+        self.chainId = chainId
+        self.amount = amount
+    }
+}
+
+#if compiler(>=6)
+extension CrossChainAddressDetails: Sendable {}
+#endif
+
+
+extension CrossChainAddressDetails: Equatable, Hashable {
+    public static func ==(lhs: CrossChainAddressDetails, rhs: CrossChainAddressDetails) -> Bool {
+        if lhs.address != rhs.address {
+            return false
+        }
+        if lhs.addressFamily != rhs.addressFamily {
+            return false
+        }
+        if lhs.contractAddress != rhs.contractAddress {
+            return false
+        }
+        if lhs.chainId != rhs.chainId {
+            return false
+        }
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(address)
+        hasher.combine(addressFamily)
+        hasher.combine(contractAddress)
+        hasher.combine(chainId)
+        hasher.combine(amount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCrossChainAddressDetails: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrossChainAddressDetails {
+        return
+            try CrossChainAddressDetails(
+                address: FfiConverterString.read(from: &buf), 
+                addressFamily: FfiConverterTypeCrossChainAddressFamily.read(from: &buf), 
+                contractAddress: FfiConverterOptionString.read(from: &buf), 
+                chainId: FfiConverterOptionUInt64.read(from: &buf), 
+                amount: FfiConverterOptionTypeu128.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CrossChainAddressDetails, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.address, into: &buf)
+        FfiConverterTypeCrossChainAddressFamily.write(value.addressFamily, into: &buf)
+        FfiConverterOptionString.write(value.contractAddress, into: &buf)
+        FfiConverterOptionUInt64.write(value.chainId, into: &buf)
+        FfiConverterOptionTypeu128.write(value.amount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainAddressDetails_lift(_ buf: RustBuffer) throws -> CrossChainAddressDetails {
+    return try FfiConverterTypeCrossChainAddressDetails.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainAddressDetails_lower(_ value: CrossChainAddressDetails) -> RustBuffer {
+    return FfiConverterTypeCrossChainAddressDetails.lower(value)
+}
+
+
+/**
+ * Configuration for cross-chain sends.
+ *
+ * The presence of this struct on [`Config::cross_chain_config`] enables
+ * cross-chain providers; `None` disables them.
+ */
+public struct CrossChainConfig {
+    /**
+     * Default maximum slippage in basis points used when
+     * [`PaymentRequest::CrossChain::max_slippage_bps`] is not set on the
+     * prepare request. Must be in `10..=500`. Falls back to 100 bps (1%)
+     * when this field is `None`.
+     */
+    public var defaultSlippageBps: UInt32?
+    /**
+     * Default target-overpay pad in basis points applied to the user's
+     * destination amount on `FeesExcluded` conversion sends. Bumps the
+     * target upward before quoting so the recipient lands at or above the
+     * requested amount despite provider slippage. Must be in `0..=500`.
+     * Falls back to 15 bps when `None`.
+     */
+    public var defaultTargetOverpayBps: UInt32?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Default maximum slippage in basis points used when
+         * [`PaymentRequest::CrossChain::max_slippage_bps`] is not set on the
+         * prepare request. Must be in `10..=500`. Falls back to 100 bps (1%)
+         * when this field is `None`.
+         */defaultSlippageBps: UInt32? = nil, 
+        /**
+         * Default target-overpay pad in basis points applied to the user's
+         * destination amount on `FeesExcluded` conversion sends. Bumps the
+         * target upward before quoting so the recipient lands at or above the
+         * requested amount despite provider slippage. Must be in `0..=500`.
+         * Falls back to 15 bps when `None`.
+         */defaultTargetOverpayBps: UInt32? = nil) {
+        self.defaultSlippageBps = defaultSlippageBps
+        self.defaultTargetOverpayBps = defaultTargetOverpayBps
+    }
+}
+
+#if compiler(>=6)
+extension CrossChainConfig: Sendable {}
+#endif
+
+
+extension CrossChainConfig: Equatable, Hashable {
+    public static func ==(lhs: CrossChainConfig, rhs: CrossChainConfig) -> Bool {
+        if lhs.defaultSlippageBps != rhs.defaultSlippageBps {
+            return false
+        }
+        if lhs.defaultTargetOverpayBps != rhs.defaultTargetOverpayBps {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(defaultSlippageBps)
+        hasher.combine(defaultTargetOverpayBps)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCrossChainConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrossChainConfig {
+        return
+            try CrossChainConfig(
+                defaultSlippageBps: FfiConverterOptionUInt32.read(from: &buf), 
+                defaultTargetOverpayBps: FfiConverterOptionUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CrossChainConfig, into buf: inout [UInt8]) {
+        FfiConverterOptionUInt32.write(value.defaultSlippageBps, into: &buf)
+        FfiConverterOptionUInt32.write(value.defaultTargetOverpayBps, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainConfig_lift(_ buf: RustBuffer) throws -> CrossChainConfig {
+    return try FfiConverterTypeCrossChainConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainConfig_lower(_ value: CrossChainConfig) -> RustBuffer {
+    return FfiConverterTypeCrossChainConfig.lower(value)
+}
+
+
+/**
+ * A single route available for cross-chain transfers, tagged with the provider
+ * that offers it. Returned by `get_cross_chain_routes()`.
+ */
+public struct CrossChainRoutePair {
+    /**
+     * Which provider offers this route.
+     */
+    public var provider: CrossChainProvider
+    /**
+     * Destination blockchain (e.g. `"base"`, `"solana"`, `"tron"`).
+     */
+    public var chain: String
+    /**
+     * Stable chain identifier (e.g. EVM `chainId` as a decimal string).
+     * `None` for non-EVM chains that don't expose one, or when the
+     * provider doesn't surface it.
+     */
+    public var chainId: String?
+    /**
+     * Destination asset symbol (e.g. `"USDC"`, `"USDT"`).
+     */
+    public var asset: String
+    /**
+     * Token contract / mint address on the destination chain.
+     */
+    public var contractAddress: String?
+    /**
+     * Decimal places for the destination asset.
+     */
+    public var decimals: UInt8
+    /**
+     * Whether the route supports exact-out mode.
+     */
+    public var exactOutEligible: Bool
+    /**
+     * The source assets this route accepts on the Spark side.
+     *
+     * Boltz routes accept `[SourceAsset::Bitcoin]`. Orchestra routes accept
+     * one or more of `Bitcoin` / `Token(...)` (a given destination endpoint
+     * may be fronted by multiple source variants on Orchestra).
+     */
+    public var supportedSources: [SourceAsset]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Which provider offers this route.
+         */provider: CrossChainProvider, 
+        /**
+         * Destination blockchain (e.g. `"base"`, `"solana"`, `"tron"`).
+         */chain: String, 
+        /**
+         * Stable chain identifier (e.g. EVM `chainId` as a decimal string).
+         * `None` for non-EVM chains that don't expose one, or when the
+         * provider doesn't surface it.
+         */chainId: String?, 
+        /**
+         * Destination asset symbol (e.g. `"USDC"`, `"USDT"`).
+         */asset: String, 
+        /**
+         * Token contract / mint address on the destination chain.
+         */contractAddress: String?, 
+        /**
+         * Decimal places for the destination asset.
+         */decimals: UInt8, 
+        /**
+         * Whether the route supports exact-out mode.
+         */exactOutEligible: Bool, 
+        /**
+         * The source assets this route accepts on the Spark side.
+         *
+         * Boltz routes accept `[SourceAsset::Bitcoin]`. Orchestra routes accept
+         * one or more of `Bitcoin` / `Token(...)` (a given destination endpoint
+         * may be fronted by multiple source variants on Orchestra).
+         */supportedSources: [SourceAsset]) {
+        self.provider = provider
+        self.chain = chain
+        self.chainId = chainId
+        self.asset = asset
+        self.contractAddress = contractAddress
+        self.decimals = decimals
+        self.exactOutEligible = exactOutEligible
+        self.supportedSources = supportedSources
+    }
+}
+
+#if compiler(>=6)
+extension CrossChainRoutePair: Sendable {}
+#endif
+
+
+extension CrossChainRoutePair: Equatable, Hashable {
+    public static func ==(lhs: CrossChainRoutePair, rhs: CrossChainRoutePair) -> Bool {
+        if lhs.provider != rhs.provider {
+            return false
+        }
+        if lhs.chain != rhs.chain {
+            return false
+        }
+        if lhs.chainId != rhs.chainId {
+            return false
+        }
+        if lhs.asset != rhs.asset {
+            return false
+        }
+        if lhs.contractAddress != rhs.contractAddress {
+            return false
+        }
+        if lhs.decimals != rhs.decimals {
+            return false
+        }
+        if lhs.exactOutEligible != rhs.exactOutEligible {
+            return false
+        }
+        if lhs.supportedSources != rhs.supportedSources {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(provider)
+        hasher.combine(chain)
+        hasher.combine(chainId)
+        hasher.combine(asset)
+        hasher.combine(contractAddress)
+        hasher.combine(decimals)
+        hasher.combine(exactOutEligible)
+        hasher.combine(supportedSources)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCrossChainRoutePair: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrossChainRoutePair {
+        return
+            try CrossChainRoutePair(
+                provider: FfiConverterTypeCrossChainProvider.read(from: &buf), 
+                chain: FfiConverterString.read(from: &buf), 
+                chainId: FfiConverterOptionString.read(from: &buf), 
+                asset: FfiConverterString.read(from: &buf), 
+                contractAddress: FfiConverterOptionString.read(from: &buf), 
+                decimals: FfiConverterUInt8.read(from: &buf), 
+                exactOutEligible: FfiConverterBool.read(from: &buf), 
+                supportedSources: FfiConverterSequenceTypeSourceAsset.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CrossChainRoutePair, into buf: inout [UInt8]) {
+        FfiConverterTypeCrossChainProvider.write(value.provider, into: &buf)
+        FfiConverterString.write(value.chain, into: &buf)
+        FfiConverterOptionString.write(value.chainId, into: &buf)
+        FfiConverterString.write(value.asset, into: &buf)
+        FfiConverterOptionString.write(value.contractAddress, into: &buf)
+        FfiConverterUInt8.write(value.decimals, into: &buf)
+        FfiConverterBool.write(value.exactOutEligible, into: &buf)
+        FfiConverterSequenceTypeSourceAsset.write(value.supportedSources, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainRoutePair_lift(_ buf: RustBuffer) throws -> CrossChainRoutePair {
+    return try FfiConverterTypeCrossChainRoutePair.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainRoutePair_lower(_ value: CrossChainRoutePair) -> RustBuffer {
+    return FfiConverterTypeCrossChainRoutePair.lower(value)
 }
 
 
@@ -21600,12 +22302,20 @@ public struct PaymentMetadata {
     public var lnurlPayInfo: LnurlPayInfo?
     public var lnurlWithdrawInfo: LnurlWithdrawInfo?
     public var lnurlDescription: String?
+    /**
+     * Conversion info for this payment. Defaults `"type"` to `"amm"` when the
+     * tag is missing (pre-migration sync records).
+     */
     public var conversionInfo: ConversionInfo?
     public var conversionStatus: ConversionStatus?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(parentPaymentId: String?, lnurlPayInfo: LnurlPayInfo?, lnurlWithdrawInfo: LnurlWithdrawInfo?, lnurlDescription: String?, conversionInfo: ConversionInfo?, conversionStatus: ConversionStatus?) {
+    public init(parentPaymentId: String?, lnurlPayInfo: LnurlPayInfo?, lnurlWithdrawInfo: LnurlWithdrawInfo?, lnurlDescription: String?, 
+        /**
+         * Conversion info for this payment. Defaults `"type"` to `"amm"` when the
+         * tag is missing (pre-migration sync records).
+         */conversionInfo: ConversionInfo?, conversionStatus: ConversionStatus?) {
         self.parentPaymentId = parentPaymentId
         self.lnurlPayInfo = lnurlPayInfo
         self.lnurlWithdrawInfo = lnurlWithdrawInfo
@@ -21986,7 +22696,7 @@ public struct PrepareLnurlPayRequest {
      */
     public var conversionOptions: ConversionOptions?
     /**
-     * How fees should be handled. Defaults to `FeesExcluded` (fees added on top).
+     * How fees are handled. See [`FeePolicy`]. Defaults to `FeesExcluded`.
      */
     public var feePolicy: FeePolicy?
 
@@ -22004,7 +22714,7 @@ public struct PrepareLnurlPayRequest {
          * If provided, the payment will include a token conversion step before sending the payment
          */conversionOptions: ConversionOptions? = nil, 
         /**
-         * How fees should be handled. Defaults to `FeesExcluded` (fees added on top).
+         * How fees are handled. See [`FeePolicy`]. Defaults to `FeesExcluded`.
          */feePolicy: FeePolicy? = nil) {
         self.amount = amount
         self.payRequest = payRequest
@@ -22126,7 +22836,9 @@ public struct PrepareLnurlPayResponse {
      */
     public var conversionEstimate: ConversionEstimate?
     /**
-     * How fees are handled for this payment.
+     * The fee policy actually applied. May differ from the request — e.g.,
+     * LNURL sends with `token_identifier` set + conversion are always
+     * `FeesIncluded` (explicit `FeesExcluded` is rejected).
      */
     public var feePolicy: FeePolicy
 
@@ -22147,7 +22859,9 @@ public struct PrepareLnurlPayResponse {
          * When set, the payment will include a token conversion step before sending the payment
          */conversionEstimate: ConversionEstimate?, 
         /**
-         * How fees are handled for this payment.
+         * The fee policy actually applied. May differ from the request — e.g.,
+         * LNURL sends with `token_identifier` set + conversion are always
+         * `FeesIncluded` (explicit `FeesExcluded` is rejected).
          */feePolicy: FeePolicy) {
         self.amountSats = amountSats
         self.comment = comment
@@ -22255,7 +22969,7 @@ public func FfiConverterTypePrepareLnurlPayResponse_lower(_ value: PrepareLnurlP
 
 
 public struct PrepareSendPaymentRequest {
-    public var paymentRequest: String
+    public var paymentRequest: PaymentRequest
     /**
      * The amount to send.
      * Optional for payment requests with embedded amounts (e.g., Spark/Bolt11 invoices with amounts).
@@ -22273,13 +22987,19 @@ public struct PrepareSendPaymentRequest {
      */
     public var conversionOptions: ConversionOptions?
     /**
-     * How fees should be handled. Defaults to `FeesExcluded` (fees added on top).
+     * How fees are handled. See [`FeePolicy`]. Defaults to `FeesExcluded`.
+     *
+     * Ignored on cross-chain AMM-conversion sends (whether the conversion was
+     * explicitly requested or auto-injected by stable balance) — fees come
+     * out of the converted sats. Bolt11 and Bitcoin AMM-conversion sends
+     * still respect this field by sizing the conversion to cover fees. The
+     * prepare response's `fee_policy` reflects what was actually applied.
      */
     public var feePolicy: FeePolicy?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(paymentRequest: String, 
+    public init(paymentRequest: PaymentRequest, 
         /**
          * The amount to send.
          * Optional for payment requests with embedded amounts (e.g., Spark/Bolt11 invoices with amounts).
@@ -22294,7 +23014,13 @@ public struct PrepareSendPaymentRequest {
          * If provided, the payment will include a conversion step before sending the payment
          */conversionOptions: ConversionOptions? = nil, 
         /**
-         * How fees should be handled. Defaults to `FeesExcluded` (fees added on top).
+         * How fees are handled. See [`FeePolicy`]. Defaults to `FeesExcluded`.
+         *
+         * Ignored on cross-chain AMM-conversion sends (whether the conversion was
+         * explicitly requested or auto-injected by stable balance) — fees come
+         * out of the converted sats. Bolt11 and Bitcoin AMM-conversion sends
+         * still respect this field by sizing the conversion to cover fees. The
+         * prepare response's `fee_policy` reflects what was actually applied.
          */feePolicy: FeePolicy? = nil) {
         self.paymentRequest = paymentRequest
         self.amount = amount
@@ -22347,7 +23073,7 @@ public struct FfiConverterTypePrepareSendPaymentRequest: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrepareSendPaymentRequest {
         return
             try PrepareSendPaymentRequest(
-                paymentRequest: FfiConverterString.read(from: &buf), 
+                paymentRequest: FfiConverterTypePaymentRequest.read(from: &buf), 
                 amount: FfiConverterOptionTypeu128.read(from: &buf), 
                 tokenIdentifier: FfiConverterOptionString.read(from: &buf), 
                 conversionOptions: FfiConverterOptionTypeConversionOptions.read(from: &buf), 
@@ -22356,7 +23082,7 @@ public struct FfiConverterTypePrepareSendPaymentRequest: FfiConverterRustBuffer 
     }
 
     public static func write(_ value: PrepareSendPaymentRequest, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.paymentRequest, into: &buf)
+        FfiConverterTypePaymentRequest.write(value.paymentRequest, into: &buf)
         FfiConverterOptionTypeu128.write(value.amount, into: &buf)
         FfiConverterOptionString.write(value.tokenIdentifier, into: &buf)
         FfiConverterOptionTypeConversionOptions.write(value.conversionOptions, into: &buf)
@@ -22399,7 +23125,8 @@ public struct PrepareSendPaymentResponse {
      */
     public var conversionEstimate: ConversionEstimate?
     /**
-     * How fees are handled for this payment.
+     * The fee policy actually applied. May differ from the request — e.g.,
+     * cross-chain AMM-conversion sends are always `FeesIncluded`.
      */
     public var feePolicy: FeePolicy
 
@@ -22420,7 +23147,8 @@ public struct PrepareSendPaymentResponse {
          * When set, the payment will include a conversion step before sending the payment
          */conversionEstimate: ConversionEstimate?, 
         /**
-         * How fees are handled for this payment.
+         * The fee policy actually applied. May differ from the request — e.g.,
+         * cross-chain AMM-conversion sends are always `FeesIncluded`.
          */feePolicy: FeePolicy) {
         self.paymentMethod = paymentMethod
         self.amount = amount
@@ -24349,7 +25077,8 @@ public struct SendPaymentRequest {
     public var prepareResponse: PrepareSendPaymentResponse
     public var options: SendPaymentOptions?
     /**
-     * The optional idempotency key for all Spark based transfers (excludes token payments).
+     * The optional idempotency key for all Spark based transfers (excludes token payments
+     * and cross-chain sends).
      * If set, providing the same idempotency key for multiple requests will ensure that only one
      * payment is made. If an idempotency key is re-used, the same payment will be returned.
      * The idempotency key must be a valid UUID.
@@ -24360,7 +25089,8 @@ public struct SendPaymentRequest {
     // declare one manually.
     public init(prepareResponse: PrepareSendPaymentResponse, options: SendPaymentOptions? = nil, 
         /**
-         * The optional idempotency key for all Spark based transfers (excludes token payments).
+         * The optional idempotency key for all Spark based transfers (excludes token payments
+         * and cross-chain sends).
          * If set, providing the same idempotency key for multiple requests will ensure that only one
          * payment is made. If an idempotency key is re-used, the same payment will be returned.
          * The idempotency key must be a valid UUID.
@@ -25920,6 +26650,13 @@ public struct SparkSigningOperator {
      * Hex-encoded compressed public key of the operator.
      */
     public var identityPublicKey: String
+    /**
+     * Optional PEM-encoded CA certificate for TLS verification.
+     * When set, the SDK uses this CA to verify the operator's TLS certificate
+     * instead of the system/default roots. Useful for local development with
+     * self-signed certificates.
+     */
+    public var caCertPem: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -25935,11 +26672,18 @@ public struct SparkSigningOperator {
          */address: String, 
         /**
          * Hex-encoded compressed public key of the operator.
-         */identityPublicKey: String) {
+         */identityPublicKey: String, 
+        /**
+         * Optional PEM-encoded CA certificate for TLS verification.
+         * When set, the SDK uses this CA to verify the operator's TLS certificate
+         * instead of the system/default roots. Useful for local development with
+         * self-signed certificates.
+         */caCertPem: String?) {
         self.id = id
         self.identifier = identifier
         self.address = address
         self.identityPublicKey = identityPublicKey
+        self.caCertPem = caCertPem
     }
 }
 
@@ -25962,6 +26706,9 @@ extension SparkSigningOperator: Equatable, Hashable {
         if lhs.identityPublicKey != rhs.identityPublicKey {
             return false
         }
+        if lhs.caCertPem != rhs.caCertPem {
+            return false
+        }
         return true
     }
 
@@ -25970,6 +26717,7 @@ extension SparkSigningOperator: Equatable, Hashable {
         hasher.combine(identifier)
         hasher.combine(address)
         hasher.combine(identityPublicKey)
+        hasher.combine(caCertPem)
     }
 }
 
@@ -25985,7 +26733,8 @@ public struct FfiConverterTypeSparkSigningOperator: FfiConverterRustBuffer {
                 id: FfiConverterUInt32.read(from: &buf), 
                 identifier: FfiConverterString.read(from: &buf), 
                 address: FfiConverterString.read(from: &buf), 
-                identityPublicKey: FfiConverterString.read(from: &buf)
+                identityPublicKey: FfiConverterString.read(from: &buf), 
+                caCertPem: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -25994,6 +26743,7 @@ public struct FfiConverterTypeSparkSigningOperator: FfiConverterRustBuffer {
         FfiConverterString.write(value.identifier, into: &buf)
         FfiConverterString.write(value.address, into: &buf)
         FfiConverterString.write(value.identityPublicKey, into: &buf)
+        FfiConverterOptionString.write(value.caCertPem, into: &buf)
     }
 }
 
@@ -26562,6 +27312,160 @@ public func FfiConverterTypeStorageListPaymentsRequest_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeStorageListPaymentsRequest_lower(_ value: StorageListPaymentsRequest) -> RustBuffer {
     return FfiConverterTypeStorageListPaymentsRequest.lower(value)
+}
+
+
+/**
+ * A cross-chain swap row as persisted and synced. Shared across providers
+ * (Boltz, Orchestra, future) so each provider's adapter writes opaque
+ * JSON into `data` and (optionally) opaque ciphertext into `secrets`.
+ *
+ * For providers with money-critical secrets, the adapter lifts them out of
+ * the swap JSON, ECIES-encrypts them, and carries only the ciphertext in
+ * `secrets`. The storage layer treats both fields as opaque, so it needs
+ * no signer.
+ */
+public struct StoredCrossChainSwap {
+    /**
+     * Provider tag (e.g. `"boltz"`, `"orchestra"`).
+     */
+    public var provider: String
+    /**
+     * Provider-scoped swap id (boltz swap id, orchestra quote-or-order id).
+     */
+    public var id: String
+    /**
+     * Lifted from the underlying swap's terminal flag into an indexed column
+     * so `list_active_cross_chain_swaps` filters without parsing `data`.
+     */
+    public var isTerminal: Bool
+    /**
+     * Lifted from the underlying swap's `updated_at` into a column so the
+     * row's freshness is inspectable without parsing `data`.
+     */
+    public var updatedAt: UInt64
+    /**
+     * Serialized JSON owned by the cross-chain provider's storage adapter.
+     */
+    public var data: String
+    /**
+     * Base64 of the ECIES ciphertext of the provider's lifted secrets.
+     * Empty for providers with no money-critical secrets to protect at rest.
+     */
+    public var secrets: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Provider tag (e.g. `"boltz"`, `"orchestra"`).
+         */provider: String, 
+        /**
+         * Provider-scoped swap id (boltz swap id, orchestra quote-or-order id).
+         */id: String, 
+        /**
+         * Lifted from the underlying swap's terminal flag into an indexed column
+         * so `list_active_cross_chain_swaps` filters without parsing `data`.
+         */isTerminal: Bool, 
+        /**
+         * Lifted from the underlying swap's `updated_at` into a column so the
+         * row's freshness is inspectable without parsing `data`.
+         */updatedAt: UInt64, 
+        /**
+         * Serialized JSON owned by the cross-chain provider's storage adapter.
+         */data: String, 
+        /**
+         * Base64 of the ECIES ciphertext of the provider's lifted secrets.
+         * Empty for providers with no money-critical secrets to protect at rest.
+         */secrets: String) {
+        self.provider = provider
+        self.id = id
+        self.isTerminal = isTerminal
+        self.updatedAt = updatedAt
+        self.data = data
+        self.secrets = secrets
+    }
+}
+
+#if compiler(>=6)
+extension StoredCrossChainSwap: Sendable {}
+#endif
+
+
+extension StoredCrossChainSwap: Equatable, Hashable {
+    public static func ==(lhs: StoredCrossChainSwap, rhs: StoredCrossChainSwap) -> Bool {
+        if lhs.provider != rhs.provider {
+            return false
+        }
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.isTerminal != rhs.isTerminal {
+            return false
+        }
+        if lhs.updatedAt != rhs.updatedAt {
+            return false
+        }
+        if lhs.data != rhs.data {
+            return false
+        }
+        if lhs.secrets != rhs.secrets {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(provider)
+        hasher.combine(id)
+        hasher.combine(isTerminal)
+        hasher.combine(updatedAt)
+        hasher.combine(data)
+        hasher.combine(secrets)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoredCrossChainSwap: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoredCrossChainSwap {
+        return
+            try StoredCrossChainSwap(
+                provider: FfiConverterString.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf), 
+                isTerminal: FfiConverterBool.read(from: &buf), 
+                updatedAt: FfiConverterUInt64.read(from: &buf), 
+                data: FfiConverterString.read(from: &buf), 
+                secrets: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoredCrossChainSwap, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.provider, into: &buf)
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterBool.write(value.isTerminal, into: &buf)
+        FfiConverterUInt64.write(value.updatedAt, into: &buf)
+        FfiConverterString.write(value.data, into: &buf)
+        FfiConverterString.write(value.secrets, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoredCrossChainSwap_lift(_ buf: RustBuffer) throws -> StoredCrossChainSwap {
+    return try FfiConverterTypeStoredCrossChainSwap.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoredCrossChainSwap_lower(_ value: StoredCrossChainSwap) -> RustBuffer {
+    return FfiConverterTypeStoredCrossChainSwap.lower(value)
 }
 
 
@@ -29378,6 +30282,564 @@ extension ChainServiceError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * The chain or network that a [`ConversionSide`] lives on.
+ */
+
+public enum ConversionChain {
+    
+    /**
+     * Spark layer-2 network.
+     */
+    case spark
+    /**
+     * Bitcoin Lightning Network.
+     */
+    case lightning
+    /**
+     * An external chain reached via a cross-chain provider.
+     */
+    case external(
+        /**
+         * Human-readable chain name (e.g. `"base"`, `"solana"`, `"arbitrum"`).
+         */name: String, 
+        /**
+         * Stable chain identifier (e.g. EVM `chainId` as a decimal string,
+         * or a chain-native identifier). `None` when the provider does not
+         * expose one for this route.
+         */chainId: String?
+    )
+}
+
+
+#if compiler(>=6)
+extension ConversionChain: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConversionChain: FfiConverterRustBuffer {
+    typealias SwiftType = ConversionChain
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConversionChain {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .spark
+        
+        case 2: return .lightning
+        
+        case 3: return .external(name: try FfiConverterString.read(from: &buf), chainId: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ConversionChain, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .spark:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .lightning:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .external(name,chainId):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(name, into: &buf)
+            FfiConverterOptionString.write(chainId, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversionChain_lift(_ buf: RustBuffer) throws -> ConversionChain {
+    return try FfiConverterTypeConversionChain.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversionChain_lower(_ value: ConversionChain) -> RustBuffer {
+    return FfiConverterTypeConversionChain.lower(value)
+}
+
+
+extension ConversionChain: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Selects payments by conversion type + status for background tasks.
+ */
+
+public enum ConversionFilter {
+    
+    /**
+     * AMM conversions that need a refund (clawback).
+     */
+    case ammRefundNeeded
+    /**
+     * Orchestra orders that have not yet reached a terminal state.
+     */
+    case orchestraPending
+    /**
+     * Boltz reverse swaps that have not yet reached a terminal state. Lives on
+     * the Lightning leg (the hold-invoice pay), so it is selected via the
+     * [`StoragePaymentDetailsFilter::Lightning`] filter.
+     */
+    case boltzPending
+}
+
+
+#if compiler(>=6)
+extension ConversionFilter: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConversionFilter: FfiConverterRustBuffer {
+    typealias SwiftType = ConversionFilter
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConversionFilter {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .ammRefundNeeded
+        
+        case 2: return .orchestraPending
+        
+        case 3: return .boltzPending
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ConversionFilter, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .ammRefundNeeded:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .orchestraPending:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .boltzPending:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversionFilter_lift(_ buf: RustBuffer) throws -> ConversionFilter {
+    return try FfiConverterTypeConversionFilter.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversionFilter_lower(_ value: ConversionFilter) -> RustBuffer {
+    return FfiConverterTypeConversionFilter.lower(value)
+}
+
+
+extension ConversionFilter: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Details of the asset conversion attached to a payment, when the payment
+ * involves a swap or cross-chain bridge in addition to the on-Spark transfer.
+ *
+ * The variant identifies which provider handled the conversion:
+ * - [`ConversionInfo::Amm`] for Spark token swaps via Flashnet AMM pools.
+ * - [`ConversionInfo::Orchestra`] for cross-chain sends via Flashnet
+ * Orchestra (Spark → external chain).
+ * - [`ConversionInfo::Boltz`] for sats → stable-coin reverse swaps via Boltz.
+ */
+
+public enum ConversionInfo {
+    
+    /**
+     * AMM (Flashnet pool-based) conversion — Spark ↔ Spark token swaps.
+     */
+    case amm(
+        /**
+         * The pool id associated with the conversion
+         */poolId: String, 
+        /**
+         * The conversion id shared by both sides of the conversion
+         */conversionId: String, 
+        /**
+         * The status of the conversion
+         */status: ConversionStatus, 
+        /**
+         * The fee paid for the conversion.
+         * Denominated in satoshis if converting from Bitcoin, otherwise in the token base units.
+         */fee: U128?, 
+        /**
+         * The purpose of the conversion
+         */purpose: ConversionPurpose?, 
+        /**
+         * The reason the conversion amount was adjusted, if applicable.
+         */amountAdjustment: AmountAdjustmentReason?
+    )
+    /**
+     * Orchestra cross-chain conversion via the Flashnet orchestration API.
+     */
+    case orchestra(
+        /**
+         * The Orchestra order id returned by `/v1/orchestration/submit`.
+         */orderId: String, 
+        /**
+         * The Orchestra quote id used to create this order.
+         */quoteId: String, 
+        /**
+         * Opaque token required for querying order status.
+         */readToken: String?, 
+        /**
+         * Chain name (e.g. `"base"`, `"solana"`, `"tron"`).
+         */chain: String, 
+        /**
+         * Stable chain identifier (e.g. EVM `chainId` decimal string `"8453"`
+         * for Base, SLIP-44 or similar for other chains). `None` if the
+         * provider doesn't expose one for this route.
+         */chainId: String?, 
+        /**
+         * Asset ticker (e.g. `"USDC"`, `"USDT"`).
+         */asset: String, 
+        /**
+         * Recipient address on the target chain.
+         */recipientAddress: String, 
+        /**
+         * Amount in expressed in the cross-chain asset's base units, via
+         * the rate the SDK used at prepare time.
+         */assetAmountIn: U128?, 
+        /**
+         * Estimated recipient amount, frozen at prepare time.
+         */estimatedOut: U128, 
+        /**
+         * Actual delivered amount, Unset until the order reaches a terminal state.
+         */deliveredAmount: U128?, status: ConversionStatus, 
+        /**
+         * Best-available total fee in destination asset base units.
+         * Prepare-time estimate while pending, realized fee when Completed.
+         */feeAmount: U128?, 
+        /**
+         * Orchestra service fee.
+         */serviceFeeAmount: U128?, 
+        /**
+         * Asset the service fee is denominated in. Unset means BTC sats.
+         */serviceFeeAsset: String?, 
+        /**
+         * Asset decimals (e.g. 6 for USDC).
+         */assetDecimals: UInt32, 
+        /**
+         * Token contract / mint address. Unset for native-asset destinations.
+         */assetContract: String?
+    )
+    /**
+     * Boltz reverse swap: cross-chain conversion via Lightning hold invoice.
+     *
+     * The swap's secrets and lifecycle state live on the synced Boltz swap row
+     * keyed by `swap_id`, which also drives cross-instance recovery.
+     */
+    case boltz(
+        /**
+         * The Boltz swap id returned by `POST /swap/reverse`.
+         */swapId: String, 
+        /**
+         * The BOLT11 hold invoice paid on the Spark/Lightning side.
+         */invoice: String, 
+        /**
+         * Amount of the hold invoice in sats.
+         */invoiceAmountSats: UInt64, 
+        /**
+         * Cross-chain bridge tracking handle for bridged swaps: a `LayerZero`
+         * message GUID for OFT (USDT0) routes, or a CCTP reference for USDC
+         * routes. `None` for same-chain (Arbitrum-direct) delivery.
+         */bridgeRef: String?, 
+        /**
+         * DEX slippage tolerance (basis points) committed at prepare time.
+         */maxSlippageBps: UInt32, 
+        /**
+         * Whether the claim-time DEX quote drifted beyond `max_slippage_bps`.
+         */quoteDegraded: Bool, 
+        /**
+         * Chain name (e.g. `"arbitrum"`, `"solana"`, `"tron"`).
+         */chain: String, 
+        /**
+         * Stable chain identifier (e.g. EVM `chainId` decimal string `"42161"`
+         * for Arbitrum). `None` if the provider doesn't expose one for this
+         * route.
+         */chainId: String?, 
+        /**
+         * Asset ticker (e.g. `"USDT"`, `"USDT0"`).
+         */asset: String, 
+        /**
+         * Recipient address on the target chain.
+         */recipientAddress: String, 
+        /**
+         * Estimated amount in the asset's base units, frozen at prepare time.
+         */estimatedOut: U128, 
+        /**
+         * Actual amount delivered. `None` until the claim receipt is processed.
+         */deliveredAmount: U128?, 
+        /**
+         * Current status of the reverse swap.
+         */status: ConversionStatus, 
+        /**
+         * Amount in expressed in the cross-chain asset's base units, via the
+         * BTC/USD rate the SDK used at prepare time.
+         */assetAmountIn: U128?, 
+        /**
+         * Best-available total fee in destination asset base units.
+         * Prepare-time estimate while pending, realized fee on Completed.
+         */feeAmount: U128?, 
+        /**
+         * Boltz spread in sats.
+         */serviceFeeAmount: U128?, 
+        /**
+         * Asset service fee is denominated in. Unset means BTC sats.
+         */serviceFeeAsset: String?, 
+        /**
+         * Asset decimals (e.g. 6 for USDT).
+         */assetDecimals: UInt32, 
+        /**
+         * Token contract / mint address. Unset for native-asset destinations.
+         */assetContract: String?
+    )
+}
+
+
+#if compiler(>=6)
+extension ConversionInfo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConversionInfo: FfiConverterRustBuffer {
+    typealias SwiftType = ConversionInfo
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConversionInfo {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .amm(poolId: try FfiConverterString.read(from: &buf), conversionId: try FfiConverterString.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), fee: try FfiConverterOptionTypeu128.read(from: &buf), purpose: try FfiConverterOptionTypeConversionPurpose.read(from: &buf), amountAdjustment: try FfiConverterOptionTypeAmountAdjustmentReason.read(from: &buf)
+        )
+        
+        case 2: return .orchestra(orderId: try FfiConverterString.read(from: &buf), quoteId: try FfiConverterString.read(from: &buf), readToken: try FfiConverterOptionString.read(from: &buf), chain: try FfiConverterString.read(from: &buf), chainId: try FfiConverterOptionString.read(from: &buf), asset: try FfiConverterString.read(from: &buf), recipientAddress: try FfiConverterString.read(from: &buf), assetAmountIn: try FfiConverterOptionTypeu128.read(from: &buf), estimatedOut: try FfiConverterTypeu128.read(from: &buf), deliveredAmount: try FfiConverterOptionTypeu128.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), feeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAsset: try FfiConverterOptionString.read(from: &buf), assetDecimals: try FfiConverterUInt32.read(from: &buf), assetContract: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 3: return .boltz(swapId: try FfiConverterString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), invoiceAmountSats: try FfiConverterUInt64.read(from: &buf), bridgeRef: try FfiConverterOptionString.read(from: &buf), maxSlippageBps: try FfiConverterUInt32.read(from: &buf), quoteDegraded: try FfiConverterBool.read(from: &buf), chain: try FfiConverterString.read(from: &buf), chainId: try FfiConverterOptionString.read(from: &buf), asset: try FfiConverterString.read(from: &buf), recipientAddress: try FfiConverterString.read(from: &buf), estimatedOut: try FfiConverterTypeu128.read(from: &buf), deliveredAmount: try FfiConverterOptionTypeu128.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), assetAmountIn: try FfiConverterOptionTypeu128.read(from: &buf), feeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAsset: try FfiConverterOptionString.read(from: &buf), assetDecimals: try FfiConverterUInt32.read(from: &buf), assetContract: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ConversionInfo, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .amm(poolId,conversionId,status,fee,purpose,amountAdjustment):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(poolId, into: &buf)
+            FfiConverterString.write(conversionId, into: &buf)
+            FfiConverterTypeConversionStatus.write(status, into: &buf)
+            FfiConverterOptionTypeu128.write(fee, into: &buf)
+            FfiConverterOptionTypeConversionPurpose.write(purpose, into: &buf)
+            FfiConverterOptionTypeAmountAdjustmentReason.write(amountAdjustment, into: &buf)
+            
+        
+        case let .orchestra(orderId,quoteId,readToken,chain,chainId,asset,recipientAddress,assetAmountIn,estimatedOut,deliveredAmount,status,feeAmount,serviceFeeAmount,serviceFeeAsset,assetDecimals,assetContract):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(orderId, into: &buf)
+            FfiConverterString.write(quoteId, into: &buf)
+            FfiConverterOptionString.write(readToken, into: &buf)
+            FfiConverterString.write(chain, into: &buf)
+            FfiConverterOptionString.write(chainId, into: &buf)
+            FfiConverterString.write(asset, into: &buf)
+            FfiConverterString.write(recipientAddress, into: &buf)
+            FfiConverterOptionTypeu128.write(assetAmountIn, into: &buf)
+            FfiConverterTypeu128.write(estimatedOut, into: &buf)
+            FfiConverterOptionTypeu128.write(deliveredAmount, into: &buf)
+            FfiConverterTypeConversionStatus.write(status, into: &buf)
+            FfiConverterOptionTypeu128.write(feeAmount, into: &buf)
+            FfiConverterOptionTypeu128.write(serviceFeeAmount, into: &buf)
+            FfiConverterOptionString.write(serviceFeeAsset, into: &buf)
+            FfiConverterUInt32.write(assetDecimals, into: &buf)
+            FfiConverterOptionString.write(assetContract, into: &buf)
+            
+        
+        case let .boltz(swapId,invoice,invoiceAmountSats,bridgeRef,maxSlippageBps,quoteDegraded,chain,chainId,asset,recipientAddress,estimatedOut,deliveredAmount,status,assetAmountIn,feeAmount,serviceFeeAmount,serviceFeeAsset,assetDecimals,assetContract):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(swapId, into: &buf)
+            FfiConverterString.write(invoice, into: &buf)
+            FfiConverterUInt64.write(invoiceAmountSats, into: &buf)
+            FfiConverterOptionString.write(bridgeRef, into: &buf)
+            FfiConverterUInt32.write(maxSlippageBps, into: &buf)
+            FfiConverterBool.write(quoteDegraded, into: &buf)
+            FfiConverterString.write(chain, into: &buf)
+            FfiConverterOptionString.write(chainId, into: &buf)
+            FfiConverterString.write(asset, into: &buf)
+            FfiConverterString.write(recipientAddress, into: &buf)
+            FfiConverterTypeu128.write(estimatedOut, into: &buf)
+            FfiConverterOptionTypeu128.write(deliveredAmount, into: &buf)
+            FfiConverterTypeConversionStatus.write(status, into: &buf)
+            FfiConverterOptionTypeu128.write(assetAmountIn, into: &buf)
+            FfiConverterOptionTypeu128.write(feeAmount, into: &buf)
+            FfiConverterOptionTypeu128.write(serviceFeeAmount, into: &buf)
+            FfiConverterOptionString.write(serviceFeeAsset, into: &buf)
+            FfiConverterUInt32.write(assetDecimals, into: &buf)
+            FfiConverterOptionString.write(assetContract, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversionInfo_lift(_ buf: RustBuffer) throws -> ConversionInfo {
+    return try FfiConverterTypeConversionInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversionInfo_lower(_ value: ConversionInfo) -> RustBuffer {
+    return FfiConverterTypeConversionInfo.lower(value)
+}
+
+
+extension ConversionInfo: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * The provider that performed a conversion.
+ */
+
+public enum ConversionProvider {
+    
+    /**
+     * AMM (Flashnet pool) conversion between token and BTC on Spark
+     */
+    case amm
+    /**
+     * Orchestra cross-chain conversion
+     */
+    case orchestra
+    /**
+     * Boltz reverse-swap cross-chain conversion
+     */
+    case boltz
+}
+
+
+#if compiler(>=6)
+extension ConversionProvider: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConversionProvider: FfiConverterRustBuffer {
+    typealias SwiftType = ConversionProvider
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConversionProvider {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .amm
+        
+        case 2: return .orchestra
+        
+        case 3: return .boltz
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ConversionProvider, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .amm:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .orchestra:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .boltz:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversionProvider_lift(_ buf: RustBuffer) throws -> ConversionProvider {
+    return try FfiConverterTypeConversionProvider.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversionProvider_lower(_ value: ConversionProvider) -> RustBuffer {
+    return FfiConverterTypeConversionProvider.lower(value)
+}
+
+
+extension ConversionProvider: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * The purpose of the conversion, which is used to provide context for the conversion
  * if its related to an ongoing payment or a self-transfer.
  */
@@ -29654,6 +31116,426 @@ public func FfiConverterTypeConversionType_lower(_ value: ConversionType) -> Rus
 
 
 extension ConversionType: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum CrossChainAddressFamily {
+    
+    case evm
+    case solana
+    case tron
+}
+
+
+#if compiler(>=6)
+extension CrossChainAddressFamily: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCrossChainAddressFamily: FfiConverterRustBuffer {
+    typealias SwiftType = CrossChainAddressFamily
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrossChainAddressFamily {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .evm
+        
+        case 2: return .solana
+        
+        case 3: return .tron
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CrossChainAddressFamily, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .evm:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .solana:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .tron:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainAddressFamily_lift(_ buf: RustBuffer) throws -> CrossChainAddressFamily {
+    return try FfiConverterTypeCrossChainAddressFamily.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainAddressFamily_lower(_ value: CrossChainAddressFamily) -> RustBuffer {
+    return FfiConverterTypeCrossChainAddressFamily.lower(value)
+}
+
+
+extension CrossChainAddressFamily: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * How the caller wants fees handled against the request `amount`.
+ *
+ * - `FeesExcluded`: `amount` is the provider invoice/deposit target; the
+ * wallet pays `amount + source_transfer_fee_sats` in total.
+ * - `FeesIncluded`: `amount` is the wallet's total sats budget; the provider
+ * leg is sized so `amount_in + source_transfer_fee_sats <= amount`.
+ */
+
+public enum CrossChainFeeMode {
+    
+    case feesExcluded
+    case feesIncluded
+}
+
+
+#if compiler(>=6)
+extension CrossChainFeeMode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCrossChainFeeMode: FfiConverterRustBuffer {
+    typealias SwiftType = CrossChainFeeMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrossChainFeeMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .feesExcluded
+        
+        case 2: return .feesIncluded
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CrossChainFeeMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .feesExcluded:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .feesIncluded:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainFeeMode_lift(_ buf: RustBuffer) throws -> CrossChainFeeMode {
+    return try FfiConverterTypeCrossChainFeeMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainFeeMode_lower(_ value: CrossChainFeeMode) -> RustBuffer {
+    return FfiConverterTypeCrossChainFeeMode.lower(value)
+}
+
+
+extension CrossChainFeeMode: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum CrossChainProvider {
+    
+    case orchestra
+    case boltz
+}
+
+
+#if compiler(>=6)
+extension CrossChainProvider: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCrossChainProvider: FfiConverterRustBuffer {
+    typealias SwiftType = CrossChainProvider
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrossChainProvider {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .orchestra
+        
+        case 2: return .boltz
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CrossChainProvider, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .orchestra:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .boltz:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainProvider_lift(_ buf: RustBuffer) throws -> CrossChainProvider {
+    return try FfiConverterTypeCrossChainProvider.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainProvider_lower(_ value: CrossChainProvider) -> RustBuffer {
+    return FfiConverterTypeCrossChainProvider.lower(value)
+}
+
+
+extension CrossChainProvider: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Provider-internal state produced by `prepare` and consumed by `send`.
+ * Typed per provider so the send stage can resume without re-quoting and
+ * without a serde round-trip. Callers should round-trip this value as-is.
+ */
+
+public enum CrossChainProviderContext {
+    
+    case orchestra(
+        /**
+         * Orchestra quote id, passed back on `/submit`.
+         */quoteId: String, 
+        /**
+         * Spark address Orchestra expects the deposit transfer to land on.
+         */depositAddress: String, 
+        /**
+         * Spark-side deposit amount in the route's source-asset base units.
+         */depositAmount: U128
+    )
+    case boltz(
+        /**
+         * Boltz swap id.
+         */swapId: String, 
+        /**
+         * Hold invoice to pay.
+         */invoice: String, 
+        /**
+         * Hold invoice amount in sats.
+         */invoiceAmountSats: UInt64, 
+        /**
+         * Slippage tolerance in basis points.
+         */maxSlippageBps: UInt32
+    )
+}
+
+
+#if compiler(>=6)
+extension CrossChainProviderContext: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCrossChainProviderContext: FfiConverterRustBuffer {
+    typealias SwiftType = CrossChainProviderContext
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrossChainProviderContext {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .orchestra(quoteId: try FfiConverterString.read(from: &buf), depositAddress: try FfiConverterString.read(from: &buf), depositAmount: try FfiConverterTypeu128.read(from: &buf)
+        )
+        
+        case 2: return .boltz(swapId: try FfiConverterString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), invoiceAmountSats: try FfiConverterUInt64.read(from: &buf), maxSlippageBps: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CrossChainProviderContext, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .orchestra(quoteId,depositAddress,depositAmount):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(quoteId, into: &buf)
+            FfiConverterString.write(depositAddress, into: &buf)
+            FfiConverterTypeu128.write(depositAmount, into: &buf)
+            
+        
+        case let .boltz(swapId,invoice,invoiceAmountSats,maxSlippageBps):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(swapId, into: &buf)
+            FfiConverterString.write(invoice, into: &buf)
+            FfiConverterUInt64.write(invoiceAmountSats, into: &buf)
+            FfiConverterUInt32.write(maxSlippageBps, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainProviderContext_lift(_ buf: RustBuffer) throws -> CrossChainProviderContext {
+    return try FfiConverterTypeCrossChainProviderContext.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainProviderContext_lower(_ value: CrossChainProviderContext) -> RustBuffer {
+    return FfiConverterTypeCrossChainProviderContext.lower(value)
+}
+
+
+extension CrossChainProviderContext: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Filter for [`CrossChainService::get_routes`] and the public
+ * `get_cross_chain_routes()` API.
+ */
+
+public enum CrossChainRouteFilter {
+    
+    /**
+     * Routes for sending from Spark to another chain.
+     * Filtered by the parsed recipient address details.
+     */
+    case send(addressDetails: CrossChainAddressDetails
+    )
+    /**
+     * Routes for receiving to Spark from another chain.
+     * Optionally filtered by the source token contract address.
+     */
+    case receive(contractAddress: String?
+    )
+}
+
+
+#if compiler(>=6)
+extension CrossChainRouteFilter: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCrossChainRouteFilter: FfiConverterRustBuffer {
+    typealias SwiftType = CrossChainRouteFilter
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrossChainRouteFilter {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .send(addressDetails: try FfiConverterTypeCrossChainAddressDetails.read(from: &buf)
+        )
+        
+        case 2: return .receive(contractAddress: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CrossChainRouteFilter, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .send(addressDetails):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeCrossChainAddressDetails.write(addressDetails, into: &buf)
+            
+        
+        case let .receive(contractAddress):
+            writeInt(&buf, Int32(2))
+            FfiConverterOptionString.write(contractAddress, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainRouteFilter_lift(_ buf: RustBuffer) throws -> CrossChainRouteFilter {
+    return try FfiConverterTypeCrossChainRouteFilter.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainRouteFilter_lower(_ value: CrossChainRouteFilter) -> RustBuffer {
+    return FfiConverterTypeCrossChainRouteFilter.lower(value)
+}
+
+
+extension CrossChainRouteFilter: Equatable, Hashable {}
 
 
 
@@ -30346,18 +32228,26 @@ extension Fee: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Specifies how fees are handled in a payment.
+ *
+ * "Fees" are the wallet's sender-paid fees (Lightning routing, on-chain,
+ * Spark transfer). They do not include provider spreads or destination-chain
+ * costs on cross-chain routes; those are reported separately via
+ * `estimated_out` on the prepare response and are not deterministic.
+ * `FeePolicy` only controls the wallet's spend accounting.
  */
 
 public enum FeePolicy {
     
     /**
-     * Fees are added on top of the specified amount (default behavior).
-     * The receiver gets the exact amount specified.
+     * Fees are added on top of `amount`. Wallet's total spend is
+     * `amount + fees`. For direct sat sends, the recipient receives exactly
+     * `amount`. Default.
      */
     case feesExcluded
     /**
-     * Fees are deducted from the specified amount.
-     * The receiver gets the amount minus fees.
+     * Fees are deducted from `amount`. Wallet's total spend is `amount`.
+     * Use this to drain a balance — pass `amount = balance` and the wallet
+     * spends exactly that.
      */
     case feesIncluded
 }
@@ -30456,6 +32346,8 @@ public enum InputType {
     )
     case sparkInvoice(SparkInvoiceDetails
     )
+    case crossChainAddress(CrossChainAddressDetails
+    )
 }
 
 
@@ -30513,6 +32405,9 @@ public struct FfiConverterTypeInputType: FfiConverterRustBuffer {
         )
         
         case 14: return .sparkInvoice(try FfiConverterTypeSparkInvoiceDetails.read(from: &buf)
+        )
+        
+        case 15: return .crossChainAddress(try FfiConverterTypeCrossChainAddressDetails.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -30591,6 +32486,11 @@ public struct FfiConverterTypeInputType: FfiConverterRustBuffer {
         case let .sparkInvoice(v1):
             writeInt(&buf, Int32(14))
             FfiConverterTypeSparkInvoiceDetails.write(v1, into: &buf)
+            
+        
+        case let .crossChainAddress(v1):
+            writeInt(&buf, Int32(15))
+            FfiConverterTypeCrossChainAddressDetails.write(v1, into: &buf)
             
         }
     }
@@ -31531,7 +33431,12 @@ public enum PaymentDetails {
          */lnurlWithdrawInfo: LnurlWithdrawInfo?, 
         /**
          * Lnurl receive information if this was a received lnurl payment.
-         */lnurlReceiveMetadata: LnurlReceiveMetadata?
+         */lnurlReceiveMetadata: LnurlReceiveMetadata?, 
+        /**
+         * The information for a conversion — populated when this Lightning
+         * payment is the source leg of a cross-chain conversion (e.g. a
+         * Boltz reverse swap paying a hold invoice).
+         */conversionInfo: ConversionInfo?
     )
     case withdraw(txId: String
     )
@@ -31560,7 +33465,7 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
         case 2: return .token(metadata: try FfiConverterTypeTokenMetadata.read(from: &buf), txHash: try FfiConverterString.read(from: &buf), txType: try FfiConverterTypeTokenTransactionType.read(from: &buf), invoiceDetails: try FfiConverterOptionTypeSparkInvoicePaymentDetails.read(from: &buf), conversionInfo: try FfiConverterOptionTypeConversionInfo.read(from: &buf)
         )
         
-        case 3: return .lightning(description: try FfiConverterOptionString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), destinationPubkey: try FfiConverterString.read(from: &buf), htlcDetails: try FfiConverterTypeSparkHtlcDetails.read(from: &buf), lnurlPayInfo: try FfiConverterOptionTypeLnurlPayInfo.read(from: &buf), lnurlWithdrawInfo: try FfiConverterOptionTypeLnurlWithdrawInfo.read(from: &buf), lnurlReceiveMetadata: try FfiConverterOptionTypeLnurlReceiveMetadata.read(from: &buf)
+        case 3: return .lightning(description: try FfiConverterOptionString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), destinationPubkey: try FfiConverterString.read(from: &buf), htlcDetails: try FfiConverterTypeSparkHtlcDetails.read(from: &buf), lnurlPayInfo: try FfiConverterOptionTypeLnurlPayInfo.read(from: &buf), lnurlWithdrawInfo: try FfiConverterOptionTypeLnurlWithdrawInfo.read(from: &buf), lnurlReceiveMetadata: try FfiConverterOptionTypeLnurlReceiveMetadata.read(from: &buf), conversionInfo: try FfiConverterOptionTypeConversionInfo.read(from: &buf)
         )
         
         case 4: return .withdraw(txId: try FfiConverterString.read(from: &buf)
@@ -31593,7 +33498,7 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
             FfiConverterOptionTypeConversionInfo.write(conversionInfo, into: &buf)
             
         
-        case let .lightning(description,invoice,destinationPubkey,htlcDetails,lnurlPayInfo,lnurlWithdrawInfo,lnurlReceiveMetadata):
+        case let .lightning(description,invoice,destinationPubkey,htlcDetails,lnurlPayInfo,lnurlWithdrawInfo,lnurlReceiveMetadata,conversionInfo):
             writeInt(&buf, Int32(3))
             FfiConverterOptionString.write(description, into: &buf)
             FfiConverterString.write(invoice, into: &buf)
@@ -31602,6 +33507,7 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
             FfiConverterOptionTypeLnurlPayInfo.write(lnurlPayInfo, into: &buf)
             FfiConverterOptionTypeLnurlWithdrawInfo.write(lnurlWithdrawInfo, into: &buf)
             FfiConverterOptionTypeLnurlReceiveMetadata.write(lnurlReceiveMetadata, into: &buf)
+            FfiConverterOptionTypeConversionInfo.write(conversionInfo, into: &buf)
             
         
         case let .withdraw(txId):
@@ -31928,6 +33834,111 @@ extension PaymentObserverError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * The payment destination. Either a raw string (bolt11, spark address, BIP-21,
+ * cross-chain URI, etc.) that is parsed internally, or a structured
+ * cross-chain destination with explicit chain + asset selection.
+ */
+
+public enum PaymentRequest {
+    
+    /**
+     * Unparsed user input string (bolt11, spark address, BIP-21, cross-chain URI, etc.)
+     */
+    case input(input: String
+    )
+    /**
+     * Cross-chain send with a selected route from `get_cross_chain_routes()`.
+     * Amount comes from `PrepareSendPaymentRequest.amount`, not here.
+     */
+    case crossChain(address: String, route: CrossChainRoutePair, 
+        /**
+         * Maximum slippage tolerance in basis points (1/100 of a percent)
+         * for the cross-chain quote. Must be in `10..=500`. Falls back to
+         * [`Config::default_slippage_bps`] when `None`, which itself
+         * defaults to 100 bps (1%) when unset.
+         */maxSlippageBps: UInt32?, 
+        /**
+         * Target-overpay pad in basis points applied on `FeesExcluded`
+         * conversion sends. Inflates the destination target before quoting
+         * so the recipient lands at or above the user's requested amount
+         * despite provider slippage. Must be in `0..=500`. Falls back to
+         * [`CrossChainConfig::default_target_overpay_bps`] when `None`,
+         * which itself defaults to 15 bps.
+         */targetOverpayBps: UInt32?
+    )
+}
+
+
+#if compiler(>=6)
+extension PaymentRequest: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePaymentRequest: FfiConverterRustBuffer {
+    typealias SwiftType = PaymentRequest
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PaymentRequest {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .input(input: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .crossChain(address: try FfiConverterString.read(from: &buf), route: try FfiConverterTypeCrossChainRoutePair.read(from: &buf), maxSlippageBps: try FfiConverterOptionUInt32.read(from: &buf), targetOverpayBps: try FfiConverterOptionUInt32.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PaymentRequest, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .input(input):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(input, into: &buf)
+            
+        
+        case let .crossChain(address,route,maxSlippageBps,targetOverpayBps):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(address, into: &buf)
+            FfiConverterTypeCrossChainRoutePair.write(route, into: &buf)
+            FfiConverterOptionUInt32.write(maxSlippageBps, into: &buf)
+            FfiConverterOptionUInt32.write(targetOverpayBps, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePaymentRequest_lift(_ buf: RustBuffer) throws -> PaymentRequest {
+    return try FfiConverterTypePaymentRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePaymentRequest_lower(_ value: PaymentRequest) -> RustBuffer {
+    return FfiConverterTypePaymentRequest.lower(value)
+}
+
+
+extension PaymentRequest: Equatable, Hashable {}
+
+
 
 
 
@@ -33092,6 +35103,57 @@ public enum SendPaymentMethod {
          * If empty, it is a Bitcoin payment
          */tokenIdentifier: String?
     )
+    /**
+     * A cross-chain send via a bridge/swap provider.
+     */
+    case crossChainAddress(
+        /**
+         * The route selected for this cross-chain send (includes provider, chain, asset).
+         */route: CrossChainRoutePair, 
+        /**
+         * Raw destination address (e.g. `0xabc...`).
+         */recipientAddress: String, 
+        /**
+         * Amount routed to the provider, in the route's source-asset units
+         * (Boltz invoice sats; Orchestra deposit sats/token). On the
+         * token-conversion path (both `FeesIncluded` and `FeesExcluded`)
+         * the dispatcher overrides this with the wallet-side token debit
+         * when the source token and destination asset form a USD-stable pair.
+         */amountIn: U128, 
+        /**
+         * `amount_in` expressed in the cross-chain (destination) asset's
+         * base units, via the same rate the SDK used at prepare time.
+         */assetAmountIn: U128, 
+        /**
+         * Estimated recipient amount in cross-chain asset base units.
+         */estimatedOut: U128, 
+        /**
+         * Prepare-time total user-visible fee in cross-chain asset base units.
+         * Covers provider spread + bridge/gas + DEX slippage. On the
+         * token-conversion path it also rolls in the LN routing budget; on
+         * the direct path that budget lives separately in
+         * `source_transfer_fee_sats`.
+         */feeAmount: U128, 
+        /**
+         * Provider's own service fee/spread in its native denomination.
+         */serviceFeeAmount: U128, 
+        /**
+         * Asset which service fee is denominated in. Unset means BTC sats.
+         */serviceFeeAsset: String?, 
+        /**
+         * Sats budget for moving the amount in from the wallet to the provider.
+         */sourceTransferFeeSats: UInt64, 
+        /**
+         * Fee mode the prepare ran under; the send stage matches.
+         */feeMode: CrossChainFeeMode, 
+        /**
+         * ISO8601 timestamp after which the quote is no longer valid.
+         */expiresAt: String, 
+        /**
+         * Provider-internal state, produced when preparing and consumed
+         * when sending.
+         */providerContext: CrossChainProviderContext
+    )
 }
 
 
@@ -33119,6 +35181,9 @@ public struct FfiConverterTypeSendPaymentMethod: FfiConverterRustBuffer {
         )
         
         case 4: return .sparkInvoice(sparkInvoiceDetails: try FfiConverterTypeSparkInvoiceDetails.read(from: &buf), fee: try FfiConverterTypeu128.read(from: &buf), tokenIdentifier: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 5: return .crossChainAddress(route: try FfiConverterTypeCrossChainRoutePair.read(from: &buf), recipientAddress: try FfiConverterString.read(from: &buf), amountIn: try FfiConverterTypeu128.read(from: &buf), assetAmountIn: try FfiConverterTypeu128.read(from: &buf), estimatedOut: try FfiConverterTypeu128.read(from: &buf), feeAmount: try FfiConverterTypeu128.read(from: &buf), serviceFeeAmount: try FfiConverterTypeu128.read(from: &buf), serviceFeeAsset: try FfiConverterOptionString.read(from: &buf), sourceTransferFeeSats: try FfiConverterUInt64.read(from: &buf), feeMode: try FfiConverterTypeCrossChainFeeMode.read(from: &buf), expiresAt: try FfiConverterString.read(from: &buf), providerContext: try FfiConverterTypeCrossChainProviderContext.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -33154,6 +35219,22 @@ public struct FfiConverterTypeSendPaymentMethod: FfiConverterRustBuffer {
             FfiConverterTypeSparkInvoiceDetails.write(sparkInvoiceDetails, into: &buf)
             FfiConverterTypeu128.write(fee, into: &buf)
             FfiConverterOptionString.write(tokenIdentifier, into: &buf)
+            
+        
+        case let .crossChainAddress(route,recipientAddress,amountIn,assetAmountIn,estimatedOut,feeAmount,serviceFeeAmount,serviceFeeAsset,sourceTransferFeeSats,feeMode,expiresAt,providerContext):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeCrossChainRoutePair.write(route, into: &buf)
+            FfiConverterString.write(recipientAddress, into: &buf)
+            FfiConverterTypeu128.write(amountIn, into: &buf)
+            FfiConverterTypeu128.write(assetAmountIn, into: &buf)
+            FfiConverterTypeu128.write(estimatedOut, into: &buf)
+            FfiConverterTypeu128.write(feeAmount, into: &buf)
+            FfiConverterTypeu128.write(serviceFeeAmount, into: &buf)
+            FfiConverterOptionString.write(serviceFeeAsset, into: &buf)
+            FfiConverterUInt64.write(sourceTransferFeeSats, into: &buf)
+            FfiConverterTypeCrossChainFeeMode.write(feeMode, into: &buf)
+            FfiConverterString.write(expiresAt, into: &buf)
+            FfiConverterTypeCrossChainProviderContext.write(providerContext, into: &buf)
             
         }
     }
@@ -33780,6 +35861,88 @@ extension SignerError: Foundation.LocalizedError {
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * The source asset a cross-chain route accepts as input on the Spark side.
+ */
+
+public enum SourceAsset {
+    
+    /**
+     * Native BTC (sats).
+     */
+    case bitcoin
+    /**
+     * A Spark token, identified by its bech32m `token_identifier` (e.g. `btkn1...`).
+     */
+    case token(tokenIdentifier: String
+    )
+}
+
+
+#if compiler(>=6)
+extension SourceAsset: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSourceAsset: FfiConverterRustBuffer {
+    typealias SwiftType = SourceAsset
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SourceAsset {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .bitcoin
+        
+        case 2: return .token(tokenIdentifier: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SourceAsset, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .bitcoin:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .token(tokenIdentifier):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(tokenIdentifier, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSourceAsset_lift(_ buf: RustBuffer) throws -> SourceAsset {
+    return try FfiConverterTypeSourceAsset.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSourceAsset_lower(_ value: SourceAsset) -> RustBuffer {
+    return FfiConverterTypeSourceAsset.lower(value)
+}
+
+
+extension SourceAsset: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum SparkHtlcStatus {
     
@@ -34076,11 +36239,11 @@ extension StorageError: Foundation.LocalizedError {
 
 public enum StoragePaymentDetailsFilter {
     
-    case spark(htlcStatus: [SparkHtlcStatus]?, conversionRefundNeeded: Bool?
+    case spark(htlcStatus: [SparkHtlcStatus]?, conversionFilter: ConversionFilter?
     )
-    case token(conversionRefundNeeded: Bool?, txHash: String?, txType: TokenTransactionType?
+    case token(conversionFilter: ConversionFilter?, txHash: String?, txType: TokenTransactionType?
     )
-    case lightning(htlcStatus: [SparkHtlcStatus]?
+    case lightning(htlcStatus: [SparkHtlcStatus]?, conversionFilter: ConversionFilter?
     )
 }
 
@@ -34099,13 +36262,13 @@ public struct FfiConverterTypeStoragePaymentDetailsFilter: FfiConverterRustBuffe
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .spark(htlcStatus: try FfiConverterOptionSequenceTypeSparkHtlcStatus.read(from: &buf), conversionRefundNeeded: try FfiConverterOptionBool.read(from: &buf)
+        case 1: return .spark(htlcStatus: try FfiConverterOptionSequenceTypeSparkHtlcStatus.read(from: &buf), conversionFilter: try FfiConverterOptionTypeConversionFilter.read(from: &buf)
         )
         
-        case 2: return .token(conversionRefundNeeded: try FfiConverterOptionBool.read(from: &buf), txHash: try FfiConverterOptionString.read(from: &buf), txType: try FfiConverterOptionTypeTokenTransactionType.read(from: &buf)
+        case 2: return .token(conversionFilter: try FfiConverterOptionTypeConversionFilter.read(from: &buf), txHash: try FfiConverterOptionString.read(from: &buf), txType: try FfiConverterOptionTypeTokenTransactionType.read(from: &buf)
         )
         
-        case 3: return .lightning(htlcStatus: try FfiConverterOptionSequenceTypeSparkHtlcStatus.read(from: &buf)
+        case 3: return .lightning(htlcStatus: try FfiConverterOptionSequenceTypeSparkHtlcStatus.read(from: &buf), conversionFilter: try FfiConverterOptionTypeConversionFilter.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -34116,22 +36279,23 @@ public struct FfiConverterTypeStoragePaymentDetailsFilter: FfiConverterRustBuffe
         switch value {
         
         
-        case let .spark(htlcStatus,conversionRefundNeeded):
+        case let .spark(htlcStatus,conversionFilter):
             writeInt(&buf, Int32(1))
             FfiConverterOptionSequenceTypeSparkHtlcStatus.write(htlcStatus, into: &buf)
-            FfiConverterOptionBool.write(conversionRefundNeeded, into: &buf)
+            FfiConverterOptionTypeConversionFilter.write(conversionFilter, into: &buf)
             
         
-        case let .token(conversionRefundNeeded,txHash,txType):
+        case let .token(conversionFilter,txHash,txType):
             writeInt(&buf, Int32(2))
-            FfiConverterOptionBool.write(conversionRefundNeeded, into: &buf)
+            FfiConverterOptionTypeConversionFilter.write(conversionFilter, into: &buf)
             FfiConverterOptionString.write(txHash, into: &buf)
             FfiConverterOptionTypeTokenTransactionType.write(txType, into: &buf)
             
         
-        case let .lightning(htlcStatus):
+        case let .lightning(htlcStatus,conversionFilter):
             writeInt(&buf, Int32(3))
             FfiConverterOptionSequenceTypeSparkHtlcStatus.write(htlcStatus, into: &buf)
+            FfiConverterOptionTypeConversionFilter.write(conversionFilter, into: &buf)
             
         }
     }
@@ -35078,30 +37242,6 @@ fileprivate struct FfiConverterOptionTypeConversionEstimate: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeConversionInfo: FfiConverterRustBuffer {
-    typealias SwiftType = ConversionInfo?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeConversionInfo.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeConversionInfo.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeConversionOptions: FfiConverterRustBuffer {
     typealias SwiftType = ConversionOptions?
 
@@ -35126,30 +37266,6 @@ fileprivate struct FfiConverterOptionTypeConversionOptions: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeConversionStep: FfiConverterRustBuffer {
-    typealias SwiftType = ConversionStep?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeConversionStep.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeConversionStep.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeCredentials: FfiConverterRustBuffer {
     typealias SwiftType = Credentials?
 
@@ -35166,6 +37282,30 @@ fileprivate struct FfiConverterOptionTypeCredentials: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeCredentials.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeCrossChainConfig: FfiConverterRustBuffer {
+    typealias SwiftType = CrossChainConfig?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCrossChainConfig.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCrossChainConfig.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -35534,6 +37674,30 @@ fileprivate struct FfiConverterOptionTypeStableBalanceConfig: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeStoredCrossChainSwap: FfiConverterRustBuffer {
+    typealias SwiftType = StoredCrossChainSwap?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStoredCrossChainSwap.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStoredCrossChainSwap.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeSymbol: FfiConverterRustBuffer {
     typealias SwiftType = Symbol?
 
@@ -35550,30 +37714,6 @@ fileprivate struct FfiConverterOptionTypeSymbol: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeSymbol.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionTypeTokenMetadata: FfiConverterRustBuffer {
-    typealias SwiftType = TokenMetadata?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeTokenMetadata.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeTokenMetadata.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -35670,6 +37810,54 @@ fileprivate struct FfiConverterOptionTypeAssetFilter: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeAssetFilter.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeConversionFilter: FfiConverterRustBuffer {
+    typealias SwiftType = ConversionFilter?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeConversionFilter.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeConversionFilter.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeConversionInfo: FfiConverterRustBuffer {
+    typealias SwiftType = ConversionInfo?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeConversionInfo.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeConversionInfo.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -36381,6 +38569,56 @@ fileprivate struct FfiConverterSequenceTypeContact: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeConversion: FfiConverterRustBuffer {
+    typealias SwiftType = [Conversion]
+
+    public static func write(_ value: [Conversion], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeConversion.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Conversion] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Conversion]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeConversion.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCrossChainRoutePair: FfiConverterRustBuffer {
+    typealias SwiftType = [CrossChainRoutePair]
+
+    public static func write(_ value: [CrossChainRoutePair], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCrossChainRoutePair.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CrossChainRoutePair] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CrossChainRoutePair]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCrossChainRoutePair.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeDepositInfo: FfiConverterRustBuffer {
     typealias SwiftType = [DepositInfo]
 
@@ -37006,6 +39244,31 @@ fileprivate struct FfiConverterSequenceTypeStableBalanceToken: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeStoredCrossChainSwap: FfiConverterRustBuffer {
+    typealias SwiftType = [StoredCrossChainSwap]
+
+    public static func write(_ value: [StoredCrossChainSwap], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStoredCrossChainSwap.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StoredCrossChainSwap] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StoredCrossChainSwap]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStoredCrossChainSwap.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTokenMetadata: FfiConverterRustBuffer {
     typealias SwiftType = [TokenMetadata]
 
@@ -37173,6 +39436,31 @@ fileprivate struct FfiConverterSequenceTypePaymentType: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypePaymentType.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSourceAsset: FfiConverterRustBuffer {
+    typealias SwiftType = [SourceAsset]
+
+    public static func write(_ value: [SourceAsset], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSourceAsset.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SourceAsset] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SourceAsset]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSourceAsset.read(from: &buf))
         }
         return seq
     }
@@ -37706,8 +39994,8 @@ public func defaultPostgresStorageConfig(connectionString: String) -> PostgresSt
  * explicitly, so an ephemeral SDK instance stays cheap and predictable.
  *
  * Config fields whose background services are gated off are reset to their
- * inactive shape: `real_time_sync_server_url` is set to `None`, and both
- * `leaf_optimization_config.auto_enabled` and
+ * inactive shape: `real_time_sync_server_url` and `cross_chain_config` are
+ * set to `None`, and both `leaf_optimization_config.auto_enabled` and
  * `token_optimization_config.auto_enabled` are set to `false`. The SDK
  * rejects builds where `background_tasks_enabled` is `false` and any of
  * those fields is left in its active shape, so flip the flag via this
@@ -37886,7 +40174,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_default_postgres_storage_config() != 3515) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_func_default_server_config() != 33858) {
+    if (uniffi_breez_sdk_spark_checksum_func_default_server_config() != 40188) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_default_storage() != 56226) {
@@ -37962,6 +40250,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_fetch_conversion_limits() != 50958) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_cross_chain_routes() != 25164) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_info() != 6771) {
@@ -38279,31 +40570,40 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_storage_delete_contact() != 50274) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_add_outgoing_change() != 1304) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_set_cross_chain_swap() != 31116) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_complete_outgoing_sync() != 7860) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_cross_chain_swap() != 20172) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_pending_outgoing_changes() != 30862) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_list_active_cross_chain_swaps() != 23493) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_last_revision() != 6931) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_add_outgoing_change() != 44890) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_insert_incoming_records() != 59522) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_complete_outgoing_sync() != 8492) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_delete_incoming_record() != 19643) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_pending_outgoing_changes() != 54668) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_incoming_records() != 28540) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_last_revision() != 17237) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_latest_outgoing_change() != 41369) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_insert_incoming_records() != 35265) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_update_record_from_incoming() != 18793) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_delete_incoming_record() != 32789) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_incoming_records() != 18699) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_latest_outgoing_change() != 59591) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_storage_update_record_from_incoming() != 30443) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_storagebackend_create_stores() != 51497) {
