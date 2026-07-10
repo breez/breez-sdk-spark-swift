@@ -1062,6 +1062,10 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
      */
     func authorizeLightningAddressTransfer(request: AuthorizeTransferRequest) async throws  -> TransferAuthorization
     
+    func buildUnsignedLnurlPayPackage(request: BuildUnsignedLnurlPayPackageRequest) async throws  -> UnsignedTransferPackage
+    
+    func buildUnsignedTransferPackage(request: BuildUnsignedTransferPackageRequest) async throws  -> UnsignedTransferPackage
+    
     /**
      * Initiates a Bitcoin purchase flow via an external provider.
      *
@@ -1285,6 +1289,10 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     func prepareLnurlPay(request: PrepareLnurlPayRequest) async throws  -> PrepareLnurlPayResponse
     
     func prepareSendPayment(request: PrepareSendPaymentRequest) async throws  -> PrepareSendPaymentResponse
+    
+    func publishSignedLnurlPayPackage(request: PublishSignedLnurlPayPackageRequest) async throws  -> PublishSignedLnurlPayResponse
+    
+    func publishSignedTransferPackage(request: PublishSignedTransferPackageRequest) async throws  -> PublishSignedTransferPackageResponse
     
     func receivePayment(request: ReceivePaymentRequest) async throws  -> ReceivePaymentResponse
     
@@ -1525,6 +1533,40 @@ open func authorizeLightningAddressTransfer(request: AuthorizeTransferRequest)as
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeTransferAuthorization_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+open func buildUnsignedLnurlPayPackage(request: BuildUnsignedLnurlPayPackageRequest)async throws  -> UnsignedTransferPackage  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_build_unsigned_lnurl_pay_package(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeBuildUnsignedLnurlPayPackageRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnsignedTransferPackage_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+open func buildUnsignedTransferPackage(request: BuildUnsignedTransferPackageRequest)async throws  -> UnsignedTransferPackage  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_build_unsigned_transfer_package(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeBuildUnsignedTransferPackageRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnsignedTransferPackage_lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
@@ -2189,6 +2231,40 @@ open func prepareSendPayment(request: PrepareSendPaymentRequest)async throws  ->
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypePrepareSendPaymentResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+open func publishSignedLnurlPayPackage(request: PublishSignedLnurlPayPackageRequest)async throws  -> PublishSignedLnurlPayResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_publish_signed_lnurl_pay_package(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePublishSignedLnurlPayPackageRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePublishSignedLnurlPayResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+open func publishSignedTransferPackage(request: PublishSignedTransferPackageRequest)async throws  -> PublishSignedTransferPackageResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_publish_signed_transfer_package(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePublishSignedTransferPackageRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePublishSignedTransferPackageResponse_lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
@@ -3835,6 +3911,14 @@ public protocol ExternalSparkSigner: AnyObject, Sendable {
     func getPublicKeyForLeaf(leafId: ExternalTreeNodeId) async throws  -> PublicKeyBytes
     
     /**
+     * Whether this signer is backed by a remote service, so its operations are
+     * network round-trips rather than local computation. Local signers return
+     * false; a hosted signer like Turnkey returns true so the SDK can avoid
+     * redundant calls, e.g. re-deriving keys for leaves it has already verified.
+     */
+    func isRemote()  -> Bool
+    
+    /**
      * The static-deposit signing public key at `index`.
      */
     func getStaticDepositPublicKey(index: UInt32) async throws  -> PublicKeyBytes
@@ -3993,6 +4077,19 @@ open func getPublicKeyForLeaf(leafId: ExternalTreeNodeId)async throws  -> Public
             liftFunc: FfiConverterTypePublicKeyBytes_lift,
             errorHandler: FfiConverterTypeSignerError_lift
         )
+}
+    
+    /**
+     * Whether this signer is backed by a remote service, so its operations are
+     * network round-trips rather than local computation. Local signers return
+     * false; a hosted signer like Turnkey returns true so the SDK can avoid
+     * redundant calls, e.g. re-deriving keys for leaves it has already verified.
+     */
+open func isRemote() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_breez_sdk_spark_fn_method_externalsparksigner_is_remote(self.uniffiClonePointer(),$0
+    )
+})
 }
     
     /**
@@ -4351,6 +4448,28 @@ fileprivate struct UniffiCallbackInterfaceExternalSparkSigner {
                 lowerError: FfiConverterTypeSignerError_lower
             )
             uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        isRemote: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterTypeExternalSparkSigner.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.isRemote(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
         },
         getStaticDepositPublicKey: { (
             uniffiHandle: UInt64,
@@ -7122,6 +7241,17 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
     func withRestChainService(url: String, apiType: ChainApiType, credentials: Credentials?) async 
     
     /**
+     * Overrides the session store used to cache auth tokens, replacing the one
+     * the backend provides. Supply any [`SessionStore`]: for example one that
+     * wraps the backend's own store (from
+     * [`default_session_store`](crate::default_session_store)) to add at-rest
+     * encryption, which the SDK does not apply itself.
+     * Arguments:
+     * - `session_store`: The session store to use in place of the backend's.
+     */
+    func withSessionStore(sessionStore: SessionStore) async 
+    
+    /**
      * Threads a shared [`SdkContext`](crate::SdkContext) into the builder.
      *
      * Construct the context once via
@@ -7481,6 +7611,33 @@ open func withRestChainService(url: String, apiType: ChainApiType, credentials: 
                 uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_rest_chain_service(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(url),FfiConverterTypeChainApiType_lower(apiType),FfiConverterOptionTypeCredentials.lower(credentials)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
+}
+    
+    /**
+     * Overrides the session store used to cache auth tokens, replacing the one
+     * the backend provides. Supply any [`SessionStore`]: for example one that
+     * wraps the backend's own store (from
+     * [`default_session_store`](crate::default_session_store)) to add at-rest
+     * encryption, which the SDK does not apply itself.
+     * Arguments:
+     * - `session_store`: The session store to use in place of the backend's.
+     */
+open func withSessionStore(sessionStore: SessionStore)async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_sdkbuilder_with_session_store(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSessionStore_lower(sessionStore)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -12373,6 +12530,138 @@ public func FfiConverterTypeBolt12OfferDetails_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeBolt12OfferDetails_lower(_ value: Bolt12OfferDetails) -> RustBuffer {
     return FfiConverterTypeBolt12OfferDetails.lower(value)
+}
+
+
+public struct BuildUnsignedLnurlPayPackageRequest {
+    public var prepareResponse: PrepareLnurlPayResponse
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(prepareResponse: PrepareLnurlPayResponse) {
+        self.prepareResponse = prepareResponse
+    }
+}
+
+#if compiler(>=6)
+extension BuildUnsignedLnurlPayPackageRequest: Sendable {}
+#endif
+
+
+extension BuildUnsignedLnurlPayPackageRequest: Equatable, Hashable {
+    public static func ==(lhs: BuildUnsignedLnurlPayPackageRequest, rhs: BuildUnsignedLnurlPayPackageRequest) -> Bool {
+        if lhs.prepareResponse != rhs.prepareResponse {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(prepareResponse)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBuildUnsignedLnurlPayPackageRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BuildUnsignedLnurlPayPackageRequest {
+        return
+            try BuildUnsignedLnurlPayPackageRequest(
+                prepareResponse: FfiConverterTypePrepareLnurlPayResponse.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BuildUnsignedLnurlPayPackageRequest, into buf: inout [UInt8]) {
+        FfiConverterTypePrepareLnurlPayResponse.write(value.prepareResponse, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuildUnsignedLnurlPayPackageRequest_lift(_ buf: RustBuffer) throws -> BuildUnsignedLnurlPayPackageRequest {
+    return try FfiConverterTypeBuildUnsignedLnurlPayPackageRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuildUnsignedLnurlPayPackageRequest_lower(_ value: BuildUnsignedLnurlPayPackageRequest) -> RustBuffer {
+    return FfiConverterTypeBuildUnsignedLnurlPayPackageRequest.lower(value)
+}
+
+
+public struct BuildUnsignedTransferPackageRequest {
+    public var prepareResponse: PrepareSendPaymentResponse
+    public var options: BuildTransferPackageOptions?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(prepareResponse: PrepareSendPaymentResponse, options: BuildTransferPackageOptions? = nil) {
+        self.prepareResponse = prepareResponse
+        self.options = options
+    }
+}
+
+#if compiler(>=6)
+extension BuildUnsignedTransferPackageRequest: Sendable {}
+#endif
+
+
+extension BuildUnsignedTransferPackageRequest: Equatable, Hashable {
+    public static func ==(lhs: BuildUnsignedTransferPackageRequest, rhs: BuildUnsignedTransferPackageRequest) -> Bool {
+        if lhs.prepareResponse != rhs.prepareResponse {
+            return false
+        }
+        if lhs.options != rhs.options {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(prepareResponse)
+        hasher.combine(options)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBuildUnsignedTransferPackageRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BuildUnsignedTransferPackageRequest {
+        return
+            try BuildUnsignedTransferPackageRequest(
+                prepareResponse: FfiConverterTypePrepareSendPaymentResponse.read(from: &buf), 
+                options: FfiConverterOptionTypeBuildTransferPackageOptions.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BuildUnsignedTransferPackageRequest, into buf: inout [UInt8]) {
+        FfiConverterTypePrepareSendPaymentResponse.write(value.prepareResponse, into: &buf)
+        FfiConverterOptionTypeBuildTransferPackageOptions.write(value.options, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuildUnsignedTransferPackageRequest_lift(_ buf: RustBuffer) throws -> BuildUnsignedTransferPackageRequest {
+    return try FfiConverterTypeBuildUnsignedTransferPackageRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuildUnsignedTransferPackageRequest_lower(_ value: BuildUnsignedTransferPackageRequest) -> RustBuffer {
+    return FfiConverterTypeBuildUnsignedTransferPackageRequest.lower(value)
 }
 
 
@@ -20611,6 +20900,84 @@ public func FfiConverterTypeLnurlInfo_lower(_ value: LnurlInfo) -> RustBuffer {
 }
 
 
+public struct LnurlPayContext {
+    public var payRequest: LnurlPayRequestDetails
+    public var comment: String?
+    public var successAction: SuccessAction?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(payRequest: LnurlPayRequestDetails, comment: String?, successAction: SuccessAction?) {
+        self.payRequest = payRequest
+        self.comment = comment
+        self.successAction = successAction
+    }
+}
+
+#if compiler(>=6)
+extension LnurlPayContext: Sendable {}
+#endif
+
+
+extension LnurlPayContext: Equatable, Hashable {
+    public static func ==(lhs: LnurlPayContext, rhs: LnurlPayContext) -> Bool {
+        if lhs.payRequest != rhs.payRequest {
+            return false
+        }
+        if lhs.comment != rhs.comment {
+            return false
+        }
+        if lhs.successAction != rhs.successAction {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(payRequest)
+        hasher.combine(comment)
+        hasher.combine(successAction)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLnurlPayContext: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LnurlPayContext {
+        return
+            try LnurlPayContext(
+                payRequest: FfiConverterTypeLnurlPayRequestDetails.read(from: &buf), 
+                comment: FfiConverterOptionString.read(from: &buf), 
+                successAction: FfiConverterOptionTypeSuccessAction.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LnurlPayContext, into buf: inout [UInt8]) {
+        FfiConverterTypeLnurlPayRequestDetails.write(value.payRequest, into: &buf)
+        FfiConverterOptionString.write(value.comment, into: &buf)
+        FfiConverterOptionTypeSuccessAction.write(value.successAction, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlPayContext_lift(_ buf: RustBuffer) throws -> LnurlPayContext {
+    return try FfiConverterTypeLnurlPayContext.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLnurlPayContext_lower(_ value: LnurlPayContext) -> RustBuffer {
+    return FfiConverterTypeLnurlPayContext.lower(value)
+}
+
+
 /**
  * Represents the payment LNURL info
  */
@@ -24000,6 +24367,130 @@ public func FfiConverterTypePublicKeyBytes_lower(_ value: PublicKeyBytes) -> Rus
 }
 
 
+public struct PublishSignedLnurlPayPackageRequest {
+    public var signedPackage: SignedTransferPackage
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(signedPackage: SignedTransferPackage) {
+        self.signedPackage = signedPackage
+    }
+}
+
+#if compiler(>=6)
+extension PublishSignedLnurlPayPackageRequest: Sendable {}
+#endif
+
+
+extension PublishSignedLnurlPayPackageRequest: Equatable, Hashable {
+    public static func ==(lhs: PublishSignedLnurlPayPackageRequest, rhs: PublishSignedLnurlPayPackageRequest) -> Bool {
+        if lhs.signedPackage != rhs.signedPackage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(signedPackage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublishSignedLnurlPayPackageRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublishSignedLnurlPayPackageRequest {
+        return
+            try PublishSignedLnurlPayPackageRequest(
+                signedPackage: FfiConverterTypeSignedTransferPackage.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PublishSignedLnurlPayPackageRequest, into buf: inout [UInt8]) {
+        FfiConverterTypeSignedTransferPackage.write(value.signedPackage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublishSignedLnurlPayPackageRequest_lift(_ buf: RustBuffer) throws -> PublishSignedLnurlPayPackageRequest {
+    return try FfiConverterTypePublishSignedLnurlPayPackageRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublishSignedLnurlPayPackageRequest_lower(_ value: PublishSignedLnurlPayPackageRequest) -> RustBuffer {
+    return FfiConverterTypePublishSignedLnurlPayPackageRequest.lower(value)
+}
+
+
+public struct PublishSignedTransferPackageRequest {
+    public var signedPackage: SignedTransferPackage
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(signedPackage: SignedTransferPackage) {
+        self.signedPackage = signedPackage
+    }
+}
+
+#if compiler(>=6)
+extension PublishSignedTransferPackageRequest: Sendable {}
+#endif
+
+
+extension PublishSignedTransferPackageRequest: Equatable, Hashable {
+    public static func ==(lhs: PublishSignedTransferPackageRequest, rhs: PublishSignedTransferPackageRequest) -> Bool {
+        if lhs.signedPackage != rhs.signedPackage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(signedPackage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublishSignedTransferPackageRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublishSignedTransferPackageRequest {
+        return
+            try PublishSignedTransferPackageRequest(
+                signedPackage: FfiConverterTypeSignedTransferPackage.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PublishSignedTransferPackageRequest, into buf: inout [UInt8]) {
+        FfiConverterTypeSignedTransferPackage.write(value.signedPackage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublishSignedTransferPackageRequest_lift(_ buf: RustBuffer) throws -> PublishSignedTransferPackageRequest {
+    return try FfiConverterTypePublishSignedTransferPackageRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublishSignedTransferPackageRequest_lower(_ value: PublishSignedTransferPackageRequest) -> RustBuffer {
+    return FfiConverterTypePublishSignedTransferPackageRequest.lower(value)
+}
+
+
 /**
  * Denominator in an exchange rate
  */
@@ -26478,6 +26969,76 @@ public func FfiConverterTypeSignMessageResponse_lower(_ value: SignMessageRespon
 }
 
 
+public struct SignedTransferPackage {
+    public var unsigned: UnsignedTransferPackage
+    public var signature: TransferSignature
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(unsigned: UnsignedTransferPackage, signature: TransferSignature) {
+        self.unsigned = unsigned
+        self.signature = signature
+    }
+}
+
+#if compiler(>=6)
+extension SignedTransferPackage: Sendable {}
+#endif
+
+
+extension SignedTransferPackage: Equatable, Hashable {
+    public static func ==(lhs: SignedTransferPackage, rhs: SignedTransferPackage) -> Bool {
+        if lhs.unsigned != rhs.unsigned {
+            return false
+        }
+        if lhs.signature != rhs.signature {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(unsigned)
+        hasher.combine(signature)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSignedTransferPackage: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignedTransferPackage {
+        return
+            try SignedTransferPackage(
+                unsigned: FfiConverterTypeUnsignedTransferPackage.read(from: &buf), 
+                signature: FfiConverterTypeTransferSignature.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SignedTransferPackage, into buf: inout [UInt8]) {
+        FfiConverterTypeUnsignedTransferPackage.write(value.unsigned, into: &buf)
+        FfiConverterTypeTransferSignature.write(value.signature, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignedTransferPackage_lift(_ buf: RustBuffer) throws -> SignedTransferPackage {
+    return try FfiConverterTypeSignedTransferPackage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignedTransferPackage_lower(_ value: SignedTransferPackage) -> RustBuffer {
+    return FfiConverterTypeSignedTransferPackage.lower(value)
+}
+
+
 /**
  * A signing-only external signer paired with the Spark signer, for wallets that
  * connect via [`connect_with_signing_only_signer`]. The Breez half performs
@@ -26755,6 +27316,12 @@ public struct SparkConfig {
      * Expected relative block locktime for token withdrawals.
      */
     public var expectedWithdrawRelativeBlockLocktime: UInt64
+    /**
+     * Cap on the inputs a single token transaction may spend. A send needing
+     * more first consolidates the wallet's token outputs. Unset uses the SDK
+     * default (500).
+     */
+    public var maxTokenTransactionInputs: UInt32?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -26776,13 +27343,19 @@ public struct SparkConfig {
          */expectedWithdrawBondSats: UInt64, 
         /**
          * Expected relative block locktime for token withdrawals.
-         */expectedWithdrawRelativeBlockLocktime: UInt64) {
+         */expectedWithdrawRelativeBlockLocktime: UInt64, 
+        /**
+         * Cap on the inputs a single token transaction may spend. A send needing
+         * more first consolidates the wallet's token outputs. Unset uses the SDK
+         * default (500).
+         */maxTokenTransactionInputs: UInt32?) {
         self.coordinatorIdentifier = coordinatorIdentifier
         self.threshold = threshold
         self.signingOperators = signingOperators
         self.sspConfig = sspConfig
         self.expectedWithdrawBondSats = expectedWithdrawBondSats
         self.expectedWithdrawRelativeBlockLocktime = expectedWithdrawRelativeBlockLocktime
+        self.maxTokenTransactionInputs = maxTokenTransactionInputs
     }
 }
 
@@ -26811,6 +27384,9 @@ extension SparkConfig: Equatable, Hashable {
         if lhs.expectedWithdrawRelativeBlockLocktime != rhs.expectedWithdrawRelativeBlockLocktime {
             return false
         }
+        if lhs.maxTokenTransactionInputs != rhs.maxTokenTransactionInputs {
+            return false
+        }
         return true
     }
 
@@ -26821,6 +27397,7 @@ extension SparkConfig: Equatable, Hashable {
         hasher.combine(sspConfig)
         hasher.combine(expectedWithdrawBondSats)
         hasher.combine(expectedWithdrawRelativeBlockLocktime)
+        hasher.combine(maxTokenTransactionInputs)
     }
 }
 
@@ -26838,7 +27415,8 @@ public struct FfiConverterTypeSparkConfig: FfiConverterRustBuffer {
                 signingOperators: FfiConverterSequenceTypeSparkSigningOperator.read(from: &buf), 
                 sspConfig: FfiConverterTypeSparkSspConfig.read(from: &buf), 
                 expectedWithdrawBondSats: FfiConverterUInt64.read(from: &buf), 
-                expectedWithdrawRelativeBlockLocktime: FfiConverterUInt64.read(from: &buf)
+                expectedWithdrawRelativeBlockLocktime: FfiConverterUInt64.read(from: &buf), 
+                maxTokenTransactionInputs: FfiConverterOptionUInt32.read(from: &buf)
         )
     }
 
@@ -26849,6 +27427,7 @@ public struct FfiConverterTypeSparkConfig: FfiConverterRustBuffer {
         FfiConverterTypeSparkSspConfig.write(value.sspConfig, into: &buf)
         FfiConverterUInt64.write(value.expectedWithdrawBondSats, into: &buf)
         FfiConverterUInt64.write(value.expectedWithdrawRelativeBlockLocktime, into: &buf)
+        FfiConverterOptionUInt32.write(value.maxTokenTransactionInputs, into: &buf)
     }
 }
 
@@ -28820,9 +29399,33 @@ public struct TurnkeyConfig {
      */
     public var accountNumber: UInt32?
     /**
+     * The wallet's identity public key (compressed, hex), to skip fetching it
+     * from Turnkey on init. Obtain it once from a freshly-built signer via
+     * [`ExternalSparkSigner::get_identity_public_key`] — the simplest source,
+     * available right after `create_turnkey_signer` with no separate connect —
+     * or, if you only have a connected SDK, from `identity_pubkey` on the
+     * get-info response. Pass it back on later inits: the signer then serves the
+     * identity key and its Spark address from this value instead of the per-init
+     * Turnkey round-trips, making signer setup network-free. Unset fetches
+     * lazily, as before. It is a stable, non-secret, per-wallet value; a value
+     * that does not match the wallet yields a signer that signs with the wrong
+     * identity, so only pass one read from this same wallet.
+     *
+     * [`ExternalSparkSigner::get_identity_public_key`]: crate::signer::ExternalSparkSigner::get_identity_public_key
+     */
+    public var identityPublicKey: String?
+    /**
      * Retry policy for Turnkey requests. Unset uses the default policy.
      */
     public var retry: TurnkeyRetryConfig?
+    /**
+     * Maximum requests per second the client issues to this suborganization,
+     * across all concurrent operations. The client paces itself to this rate.
+     * Unset uses Turnkey's documented per-suborganization cap of 10 RPS; set it
+     * to the account's actual limit if a different one is provisioned. Must be
+     * greater than 0 when set: 0 is rejected at connect.
+     */
+    public var maxRps: UInt32?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -28853,8 +29456,30 @@ public struct TurnkeyConfig {
          * either backend.
          */accountNumber: UInt32?, 
         /**
+         * The wallet's identity public key (compressed, hex), to skip fetching it
+         * from Turnkey on init. Obtain it once from a freshly-built signer via
+         * [`ExternalSparkSigner::get_identity_public_key`] — the simplest source,
+         * available right after `create_turnkey_signer` with no separate connect —
+         * or, if you only have a connected SDK, from `identity_pubkey` on the
+         * get-info response. Pass it back on later inits: the signer then serves the
+         * identity key and its Spark address from this value instead of the per-init
+         * Turnkey round-trips, making signer setup network-free. Unset fetches
+         * lazily, as before. It is a stable, non-secret, per-wallet value; a value
+         * that does not match the wallet yields a signer that signs with the wrong
+         * identity, so only pass one read from this same wallet.
+         *
+         * [`ExternalSparkSigner::get_identity_public_key`]: crate::signer::ExternalSparkSigner::get_identity_public_key
+         */identityPublicKey: String?, 
+        /**
          * Retry policy for Turnkey requests. Unset uses the default policy.
-         */retry: TurnkeyRetryConfig?) {
+         */retry: TurnkeyRetryConfig?, 
+        /**
+         * Maximum requests per second the client issues to this suborganization,
+         * across all concurrent operations. The client paces itself to this rate.
+         * Unset uses Turnkey's documented per-suborganization cap of 10 RPS; set it
+         * to the account's actual limit if a different one is provisioned. Must be
+         * greater than 0 when set: 0 is rejected at connect.
+         */maxRps: UInt32? = nil) {
         self.baseUrl = baseUrl
         self.organizationId = organizationId
         self.apiPublicKey = apiPublicKey
@@ -28862,7 +29487,9 @@ public struct TurnkeyConfig {
         self.walletId = walletId
         self.network = network
         self.accountNumber = accountNumber
+        self.identityPublicKey = identityPublicKey
         self.retry = retry
+        self.maxRps = maxRps
     }
 }
 
@@ -28894,7 +29521,13 @@ extension TurnkeyConfig: Equatable, Hashable {
         if lhs.accountNumber != rhs.accountNumber {
             return false
         }
+        if lhs.identityPublicKey != rhs.identityPublicKey {
+            return false
+        }
         if lhs.retry != rhs.retry {
+            return false
+        }
+        if lhs.maxRps != rhs.maxRps {
             return false
         }
         return true
@@ -28908,7 +29541,9 @@ extension TurnkeyConfig: Equatable, Hashable {
         hasher.combine(walletId)
         hasher.combine(network)
         hasher.combine(accountNumber)
+        hasher.combine(identityPublicKey)
         hasher.combine(retry)
+        hasher.combine(maxRps)
     }
 }
 
@@ -28928,7 +29563,9 @@ public struct FfiConverterTypeTurnkeyConfig: FfiConverterRustBuffer {
                 walletId: FfiConverterString.read(from: &buf), 
                 network: FfiConverterTypeNetwork.read(from: &buf), 
                 accountNumber: FfiConverterOptionUInt32.read(from: &buf), 
-                retry: FfiConverterOptionTypeTurnkeyRetryConfig.read(from: &buf)
+                identityPublicKey: FfiConverterOptionString.read(from: &buf), 
+                retry: FfiConverterOptionTypeTurnkeyRetryConfig.read(from: &buf), 
+                maxRps: FfiConverterOptionUInt32.read(from: &buf)
         )
     }
 
@@ -28940,7 +29577,9 @@ public struct FfiConverterTypeTurnkeyConfig: FfiConverterRustBuffer {
         FfiConverterString.write(value.walletId, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterOptionUInt32.write(value.accountNumber, into: &buf)
+        FfiConverterOptionString.write(value.identityPublicKey, into: &buf)
         FfiConverterOptionTypeTurnkeyRetryConfig.write(value.retry, into: &buf)
+        FfiConverterOptionUInt32.write(value.maxRps, into: &buf)
     }
 }
 
@@ -30675,6 +31314,88 @@ public func FfiConverterTypeBitcoinNetwork_lower(_ value: BitcoinNetwork) -> Rus
 
 
 extension BitcoinNetwork: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum BuildTransferPackageOptions {
+    
+    case bitcoinAddress(confirmationSpeed: OnchainConfirmationSpeed
+    )
+    case bolt11Invoice(preferSpark: Bool, 
+        /**
+         * If set, publishing the package waits up to this many seconds for the
+         * payment to complete before returning it while still pending. If unset,
+         * publishing returns immediately after initiating the payment.
+         */completionTimeoutSecs: UInt32?
+    )
+}
+
+
+#if compiler(>=6)
+extension BuildTransferPackageOptions: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBuildTransferPackageOptions: FfiConverterRustBuffer {
+    typealias SwiftType = BuildTransferPackageOptions
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BuildTransferPackageOptions {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .bitcoinAddress(confirmationSpeed: try FfiConverterTypeOnchainConfirmationSpeed.read(from: &buf)
+        )
+        
+        case 2: return .bolt11Invoice(preferSpark: try FfiConverterBool.read(from: &buf), completionTimeoutSecs: try FfiConverterOptionUInt32.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BuildTransferPackageOptions, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .bitcoinAddress(confirmationSpeed):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeOnchainConfirmationSpeed.write(confirmationSpeed, into: &buf)
+            
+        
+        case let .bolt11Invoice(preferSpark,completionTimeoutSecs):
+            writeInt(&buf, Int32(2))
+            FfiConverterBool.write(preferSpark, into: &buf)
+            FfiConverterOptionUInt32.write(completionTimeoutSecs, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuildTransferPackageOptions_lift(_ buf: RustBuffer) throws -> BuildTransferPackageOptions {
+    return try FfiConverterTypeBuildTransferPackageOptions.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuildTransferPackageOptions_lower(_ value: BuildTransferPackageOptions) -> RustBuffer {
+    return FfiConverterTypeBuildTransferPackageOptions.lower(value)
+}
+
+
+extension BuildTransferPackageOptions: Equatable, Hashable {}
 
 
 
@@ -35145,6 +35866,152 @@ extension ProvisionalPaymentDetails: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum PublishSignedLnurlPayResponse {
+    
+    case swapCompleted
+    case paymentSent(response: LnurlPayResponse
+    )
+}
+
+
+#if compiler(>=6)
+extension PublishSignedLnurlPayResponse: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublishSignedLnurlPayResponse: FfiConverterRustBuffer {
+    typealias SwiftType = PublishSignedLnurlPayResponse
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublishSignedLnurlPayResponse {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .swapCompleted
+        
+        case 2: return .paymentSent(response: try FfiConverterTypeLnurlPayResponse.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PublishSignedLnurlPayResponse, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .swapCompleted:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .paymentSent(response):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeLnurlPayResponse.write(response, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublishSignedLnurlPayResponse_lift(_ buf: RustBuffer) throws -> PublishSignedLnurlPayResponse {
+    return try FfiConverterTypePublishSignedLnurlPayResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublishSignedLnurlPayResponse_lower(_ value: PublishSignedLnurlPayResponse) -> RustBuffer {
+    return FfiConverterTypePublishSignedLnurlPayResponse.lower(value)
+}
+
+
+extension PublishSignedLnurlPayResponse: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum PublishSignedTransferPackageResponse {
+    
+    case swapCompleted
+    case paymentSent(payment: Payment
+    )
+}
+
+
+#if compiler(>=6)
+extension PublishSignedTransferPackageResponse: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublishSignedTransferPackageResponse: FfiConverterRustBuffer {
+    typealias SwiftType = PublishSignedTransferPackageResponse
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublishSignedTransferPackageResponse {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .swapCompleted
+        
+        case 2: return .paymentSent(payment: try FfiConverterTypePayment.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PublishSignedTransferPackageResponse, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .swapCompleted:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .paymentSent(payment):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypePayment.write(payment, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublishSignedTransferPackageResponse_lift(_ buf: RustBuffer) throws -> PublishSignedTransferPackageResponse {
+    return try FfiConverterTypePublishSignedTransferPackageResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublishSignedTransferPackageResponse_lower(_ value: PublishSignedTransferPackageResponse) -> RustBuffer {
+    return FfiConverterTypePublishSignedTransferPackageResponse.lower(value)
+}
+
+
+extension PublishSignedTransferPackageResponse: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ReceivePaymentMethod {
     
     case sparkAddress
@@ -37291,6 +38158,276 @@ extension TokenTransactionType: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum TransferSignature {
+    
+    case transfer(signed: ExternalPreparedTransfer
+    )
+    case token(signed: ExternalPreparedTokenTransaction
+    )
+}
+
+
+#if compiler(>=6)
+extension TransferSignature: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransferSignature: FfiConverterRustBuffer {
+    typealias SwiftType = TransferSignature
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransferSignature {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .transfer(signed: try FfiConverterTypeExternalPreparedTransfer.read(from: &buf)
+        )
+        
+        case 2: return .token(signed: try FfiConverterTypeExternalPreparedTokenTransaction.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TransferSignature, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .transfer(signed):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeExternalPreparedTransfer.write(signed, into: &buf)
+            
+        
+        case let .token(signed):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeExternalPreparedTokenTransaction.write(signed, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransferSignature_lift(_ buf: RustBuffer) throws -> TransferSignature {
+    return try FfiConverterTypeTransferSignature.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransferSignature_lower(_ value: TransferSignature) -> RustBuffer {
+    return FfiConverterTypeTransferSignature.lower(value)
+}
+
+
+extension TransferSignature: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum TransferTarget {
+    
+    case spark(address: String, sparkInvoice: String?
+    )
+    case lightning(bolt11: String, lnurlPay: LnurlPayContext?, feePolicy: FeePolicy, completionTimeoutSecs: UInt32?
+    )
+    case coopExit(address: String, feeQuote: SendOnchainFeeQuote, confirmationSpeed: OnchainConfirmationSpeed
+    )
+}
+
+
+#if compiler(>=6)
+extension TransferTarget: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransferTarget: FfiConverterRustBuffer {
+    typealias SwiftType = TransferTarget
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransferTarget {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .spark(address: try FfiConverterString.read(from: &buf), sparkInvoice: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 2: return .lightning(bolt11: try FfiConverterString.read(from: &buf), lnurlPay: try FfiConverterOptionTypeLnurlPayContext.read(from: &buf), feePolicy: try FfiConverterTypeFeePolicy.read(from: &buf), completionTimeoutSecs: try FfiConverterOptionUInt32.read(from: &buf)
+        )
+        
+        case 3: return .coopExit(address: try FfiConverterString.read(from: &buf), feeQuote: try FfiConverterTypeSendOnchainFeeQuote.read(from: &buf), confirmationSpeed: try FfiConverterTypeOnchainConfirmationSpeed.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TransferTarget, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .spark(address,sparkInvoice):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(address, into: &buf)
+            FfiConverterOptionString.write(sparkInvoice, into: &buf)
+            
+        
+        case let .lightning(bolt11,lnurlPay,feePolicy,completionTimeoutSecs):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(bolt11, into: &buf)
+            FfiConverterOptionTypeLnurlPayContext.write(lnurlPay, into: &buf)
+            FfiConverterTypeFeePolicy.write(feePolicy, into: &buf)
+            FfiConverterOptionUInt32.write(completionTimeoutSecs, into: &buf)
+            
+        
+        case let .coopExit(address,feeQuote,confirmationSpeed):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(address, into: &buf)
+            FfiConverterTypeSendOnchainFeeQuote.write(feeQuote, into: &buf)
+            FfiConverterTypeOnchainConfirmationSpeed.write(confirmationSpeed, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransferTarget_lift(_ buf: RustBuffer) throws -> TransferTarget {
+    return try FfiConverterTypeTransferTarget.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransferTarget_lower(_ value: TransferTarget) -> RustBuffer {
+    return FfiConverterTypeTransferTarget.lower(value)
+}
+
+
+extension TransferTarget: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum UnsignedTransferPackage {
+    
+    case swap(prepareTransfer: ExternalPrepareTransferRequest, targetAmounts: [UInt64], amountSat: UInt64, feeSat: UInt64
+    )
+    case transfer(prepareTransfer: ExternalPrepareTransferRequest, amountSat: UInt64, feeSat: UInt64, target: TransferTarget
+    )
+    case token(prepareTokenTransaction: ExternalPrepareTokenTransactionRequest, tokenContext: Data, tokenIdentifier: String, amount: U128, fee: U128, 
+        /**
+         * When set, this package re-shapes the wallet's token outputs instead of
+         * sending a payment. Publishing it returns `SwapCompleted`: rebuild the
+         * original send from the same prepare response and submit again.
+         */isSwap: Bool
+    )
+}
+
+
+#if compiler(>=6)
+extension UnsignedTransferPackage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUnsignedTransferPackage: FfiConverterRustBuffer {
+    typealias SwiftType = UnsignedTransferPackage
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnsignedTransferPackage {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .swap(prepareTransfer: try FfiConverterTypeExternalPrepareTransferRequest.read(from: &buf), targetAmounts: try FfiConverterSequenceUInt64.read(from: &buf), amountSat: try FfiConverterUInt64.read(from: &buf), feeSat: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 2: return .transfer(prepareTransfer: try FfiConverterTypeExternalPrepareTransferRequest.read(from: &buf), amountSat: try FfiConverterUInt64.read(from: &buf), feeSat: try FfiConverterUInt64.read(from: &buf), target: try FfiConverterTypeTransferTarget.read(from: &buf)
+        )
+        
+        case 3: return .token(prepareTokenTransaction: try FfiConverterTypeExternalPrepareTokenTransactionRequest.read(from: &buf), tokenContext: try FfiConverterData.read(from: &buf), tokenIdentifier: try FfiConverterString.read(from: &buf), amount: try FfiConverterTypeu128.read(from: &buf), fee: try FfiConverterTypeu128.read(from: &buf), isSwap: try FfiConverterBool.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: UnsignedTransferPackage, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .swap(prepareTransfer,targetAmounts,amountSat,feeSat):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeExternalPrepareTransferRequest.write(prepareTransfer, into: &buf)
+            FfiConverterSequenceUInt64.write(targetAmounts, into: &buf)
+            FfiConverterUInt64.write(amountSat, into: &buf)
+            FfiConverterUInt64.write(feeSat, into: &buf)
+            
+        
+        case let .transfer(prepareTransfer,amountSat,feeSat,target):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeExternalPrepareTransferRequest.write(prepareTransfer, into: &buf)
+            FfiConverterUInt64.write(amountSat, into: &buf)
+            FfiConverterUInt64.write(feeSat, into: &buf)
+            FfiConverterTypeTransferTarget.write(target, into: &buf)
+            
+        
+        case let .token(prepareTokenTransaction,tokenContext,tokenIdentifier,amount,fee,isSwap):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeExternalPrepareTokenTransactionRequest.write(prepareTokenTransaction, into: &buf)
+            FfiConverterData.write(tokenContext, into: &buf)
+            FfiConverterString.write(tokenIdentifier, into: &buf)
+            FfiConverterTypeu128.write(amount, into: &buf)
+            FfiConverterTypeu128.write(fee, into: &buf)
+            FfiConverterBool.write(isSwap, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnsignedTransferPackage_lift(_ buf: RustBuffer) throws -> UnsignedTransferPackage {
+    return try FfiConverterTypeUnsignedTransferPackage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnsignedTransferPackage_lower(_ value: UnsignedTransferPackage) -> RustBuffer {
+    return FfiConverterTypeUnsignedTransferPackage.lower(value)
+}
+
+
+extension UnsignedTransferPackage: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum UpdateDepositPayload {
     
     case claimError(error: DepositClaimError
@@ -38022,6 +39159,30 @@ fileprivate struct FfiConverterOptionTypeLightningAddressInfo: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeLnurlPayContext: FfiConverterRustBuffer {
+    typealias SwiftType = LnurlPayContext?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeLnurlPayContext.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeLnurlPayContext.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeLnurlPayInfo: FfiConverterRustBuffer {
     typealias SwiftType = LnurlPayInfo?
 
@@ -38494,6 +39655,30 @@ fileprivate struct FfiConverterOptionTypeAssetFilter: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeAssetFilter.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeBuildTransferPackageOptions: FfiConverterRustBuffer {
+    typealias SwiftType = BuildTransferPackageOptions?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBuildTransferPackageOptions.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBuildTransferPackageOptions.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -39072,6 +40257,31 @@ fileprivate struct FfiConverterOptionTypeu128: FfiConverterRustBuffer {
         case 1: return try FfiConverterTypeu128.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceUInt64: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt64]
+
+    public static func write(_ value: [UInt64], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterUInt64.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UInt64] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UInt64]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterUInt64.read(from: &buf))
+        }
+        return seq
     }
 }
 
@@ -40764,6 +41974,32 @@ public func defaultServerConfig(network: Network) -> Config  {
 })
 }
 /**
+ * The session store `backend` provides for `identity` on `network` (its own
+ * persistence: `PostgreSQL`/`MySQL` when the backend is DB-backed, else an
+ * in-memory store).
+ *
+ * Returned so it can be wrapped in a decorating [`SessionStore`] and passed to
+ * [`SdkBuilder::with_session_store`](crate::SdkBuilder::with_session_store),
+ * keeping the backend's persistence. A typical use is at-rest encryption (the
+ * SDK does not encrypt tokens itself): wrap it in a store that encrypts on
+ * write and decrypts on read. `identity` is the wallet identity public key
+ * bytes (the same value the SDK derives from the signer).
+ */
+public func defaultSessionStore(backend: StorageBackend, network: Network, identity: Data)async throws  -> SessionStore  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_func_default_session_store(FfiConverterTypeStorageBackend_lower(backend),FfiConverterTypeNetwork_lower(network),FfiConverterData.lower(identity)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_pointer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_pointer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeSessionStore_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+/**
  * File-based `SQLite` storage rooted at `storage_dir` — the default for
  * mobile and desktop apps. Each tenant gets its own database file under the
  * directory.
@@ -40920,6 +42156,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_default_server_config() != 40188) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_func_default_session_store() != 24904) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_func_default_storage() != 56226) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -40963,6 +42202,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_authorize_lightning_address_transfer() != 15257) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_build_unsigned_lnurl_pay_package() != 23822) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_build_unsigned_transfer_package() != 60228) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_buy_bitcoin() != 34179) {
@@ -41055,6 +42300,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_send_payment() != 34185) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_publish_signed_lnurl_pay_package() != 48698) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_publish_signed_transfer_package() != 59188) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_receive_payment() != 36984) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -41133,43 +42384,46 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_get_public_key_for_leaf() != 39015) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_get_static_deposit_public_key() != 11994) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_is_remote() != 63049) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_authentication_challenge() != 57313) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_get_static_deposit_public_key() != 54380) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_message() != 56093) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_authentication_challenge() != 53611) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_frost() != 44871) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_message() != 1815) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_transfer() != 42596) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_frost() != 41995) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_claim() != 109) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_transfer() != 7663) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_lightning_receive() != 49812) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_claim() != 40463) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_static_deposit() != 119) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_lightning_receive() != 22362) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_start_static_deposit_refund() != 22509) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_static_deposit() != 44945) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_static_deposit_refund() != 28885) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_start_static_deposit_refund() != 15575) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_spark_invoice() != 11535) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_static_deposit_refund() != 3082) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_token_transaction() != 58955) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_spark_invoice() != 33) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_static_deposit_claim() != 64724) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_token_transaction() != 33122) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_static_deposit_claim() != 14601) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_fiatservice_fetch_fiat_currencies() != 19092) {
@@ -41254,6 +42508,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_rest_chain_service() != 63155) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_session_store() != 32818) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_shared_context() != 64829) {
