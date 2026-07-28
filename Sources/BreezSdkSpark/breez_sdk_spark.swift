@@ -5409,8 +5409,7 @@ public protocol PasskeyClientProtocol: AnyObject, Sendable {
     
     /**
      * Single-CTA onboarding: silent sign-in, falling through to
-     * registration when no credential exists on the device. The returned
-     * [`ConnectFlow`] tells the caller which path ran.
+     * registration when no credential exists on the device.
      *
      * The silent sign-in pins `prefer_immediately_available_credentials =
      * true` regardless of [`SignInRequest`]: the fallback depends on the OS
@@ -5419,11 +5418,12 @@ public protocol PasskeyClientProtocol: AnyObject, Sendable {
      * register path; every other error (`Cancel`, `Timeout`, ...) propagates
      * unchanged.
      *
-     * Mobile-only: meant for iOS 18+ / Android 9+ where
-     * `preferImmediatelyAvailableCredentials` is honored. The web
-     * equivalent (`mediation: 'immediate'`) is not yet stable
-     * cross-browser, so this is not surfaced on WASM; web hosts call
-     * [`Self::sign_in`] and catch `CredentialNotFound` themselves.
+     * On WASM the silent sign-in maps to `WebAuthn` `uiMode: 'immediate'`
+     * where the browser advertises it. Web hosts gate on the browser's
+     * immediate-mediation capability (the WASM client surfaces it):
+     * without it the probe shows the standard picker and a dismiss is a
+     * cancel, not `CredentialNotFound`, so it never reaches register.
+     * Present an explicit create / sign-in choice there instead.
      */
     func connectWithPasskey(request: ConnectWithPasskeyRequest) async throws  -> ConnectWithPasskeyResponse
     
@@ -5557,8 +5557,7 @@ open func checkAvailability()async throws  -> PasskeyAvailability  {
     
     /**
      * Single-CTA onboarding: silent sign-in, falling through to
-     * registration when no credential exists on the device. The returned
-     * [`ConnectFlow`] tells the caller which path ran.
+     * registration when no credential exists on the device.
      *
      * The silent sign-in pins `prefer_immediately_available_credentials =
      * true` regardless of [`SignInRequest`]: the fallback depends on the OS
@@ -5567,11 +5566,12 @@ open func checkAvailability()async throws  -> PasskeyAvailability  {
      * register path; every other error (`Cancel`, `Timeout`, ...) propagates
      * unchanged.
      *
-     * Mobile-only: meant for iOS 18+ / Android 9+ where
-     * `preferImmediatelyAvailableCredentials` is honored. The web
-     * equivalent (`mediation: 'immediate'`) is not yet stable
-     * cross-browser, so this is not surfaced on WASM; web hosts call
-     * [`Self::sign_in`] and catch `CredentialNotFound` themselves.
+     * On WASM the silent sign-in maps to `WebAuthn` `uiMode: 'immediate'`
+     * where the browser advertises it. Web hosts gate on the browser's
+     * immediate-mediation capability (the WASM client surfaces it):
+     * without it the probe shows the standard picker and a dismiss is a
+     * cancel, not `CredentialNotFound`, so it never reaches register.
+     * Present an explicit create / sign-in choice there instead.
      */
 open func connectWithPasskey(request: ConnectWithPasskeyRequest)async throws  -> ConnectWithPasskeyResponse  {
     return
@@ -13854,10 +13854,11 @@ public struct ConnectWithPasskeyRequest {
      */
     public var label: String?
     /**
-     * Optional credential IDs to restrict the silent sign-in
-     * attempt to (reauthentication path). See
-     * [`SignInRequest::allow_credentials`]. Ignored on the fallback
-     * registration path.
+     * Optional credential IDs to restrict the sign-in attempt to
+     * (reauthentication path). A non-empty list runs the modal sign-in
+     * rather than the immediate probe (a pin means a credential is already
+     * known). See [`SignInRequest::allow_credentials`]. Ignored on the
+     * fallback registration path.
      */
     public var allowCredentials: [Data]?
     /**
@@ -13877,10 +13878,11 @@ public struct ConnectWithPasskeyRequest {
          * fast-fails, for the fallback registration.
          */label: String? = nil, 
         /**
-         * Optional credential IDs to restrict the silent sign-in
-         * attempt to (reauthentication path). See
-         * [`SignInRequest::allow_credentials`]. Ignored on the fallback
-         * registration path.
+         * Optional credential IDs to restrict the sign-in attempt to
+         * (reauthentication path). A non-empty list runs the modal sign-in
+         * rather than the immediate probe (a pin means a credential is already
+         * known). See [`SignInRequest::allow_credentials`]. Ignored on the
+         * fallback registration path.
          */allowCredentials: [Data]? = nil, 
         /**
          * Optional already-registered credential IDs to surface
@@ -13965,16 +13967,24 @@ public func FfiConverterTypeConnectWithPasskeyRequest_lower(_ value: ConnectWith
  * registered, when the provider surfaces it. The register path also
  * populates the attestation fields (`aaguid`, `backup_eligible`); the
  * sign-in path sets only `credential_id`.
+ *
+ * `labels` is the user's discovered label set when `request.label` was
+ * `None` (the returning-user multi-wallet case): `wallet` is the default
+ * label, and a host showing more than one entry lets the user pick
+ * another via [`PasskeyClient::sign_in`]. Empty on the register path (a
+ * new user has no other labels) and when a specific label was requested.
  */
 public struct ConnectWithPasskeyResponse {
     public var wallet: Wallet
     public var credential: PasskeyCredential?
+    public var labels: [String]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(wallet: Wallet, credential: PasskeyCredential?) {
+    public init(wallet: Wallet, credential: PasskeyCredential?, labels: [String]) {
         self.wallet = wallet
         self.credential = credential
+        self.labels = labels
     }
 }
 
@@ -13991,12 +14001,16 @@ extension ConnectWithPasskeyResponse: Equatable, Hashable {
         if lhs.credential != rhs.credential {
             return false
         }
+        if lhs.labels != rhs.labels {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(wallet)
         hasher.combine(credential)
+        hasher.combine(labels)
     }
 }
 
@@ -14010,13 +14024,15 @@ public struct FfiConverterTypeConnectWithPasskeyResponse: FfiConverterRustBuffer
         return
             try ConnectWithPasskeyResponse(
                 wallet: FfiConverterTypeWallet.read(from: &buf), 
-                credential: FfiConverterOptionTypePasskeyCredential.read(from: &buf)
+                credential: FfiConverterOptionTypePasskeyCredential.read(from: &buf), 
+                labels: FfiConverterSequenceString.read(from: &buf)
         )
     }
 
     public static func write(_ value: ConnectWithPasskeyResponse, into buf: inout [UInt8]) {
         FfiConverterTypeWallet.write(value.wallet, into: &buf)
         FfiConverterOptionTypePasskeyCredential.write(value.credential, into: &buf)
+        FfiConverterSequenceString.write(value.labels, into: &buf)
     }
 }
 
@@ -42435,7 +42451,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_passkeyclient_check_availability() != 35189) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_passkeyclient_connect_with_passkey() != 47815) {
+    if (uniffi_breez_sdk_spark_checksum_method_passkeyclient_connect_with_passkey() != 32814) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_passkeyclient_labels() != 35849) {
