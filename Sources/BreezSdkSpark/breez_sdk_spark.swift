@@ -574,9 +574,19 @@ public protocol BitcoinChainService: AnyObject, Sendable {
     
     func getAddressUtxos(address: String) async throws  -> [Utxo]
     
+    /**
+     * Every output ever paid to `address`, spent or not, unlike
+     * [`get_address_utxos`](Self::get_address_utxos) which omits spent ones.
+     * Recovers an output's outpoint and value after it has been spent, so a
+     * swept refund can still be distinguished from one never broadcast.
+     */
+    func getAddressTxos(address: String) async throws  -> [Utxo]
+    
     func getTransactionStatus(txid: String) async throws  -> TxStatus
     
     func getTransactionHex(txid: String) async throws  -> String
+    
+    func getOutspend(txid: String, vout: UInt32) async throws  -> Outspend
     
     func broadcastTransaction(tx: String) async throws 
     
@@ -652,6 +662,29 @@ open func getAddressUtxos(address: String)async throws  -> [Utxo]  {
         )
 }
     
+    /**
+     * Every output ever paid to `address`, spent or not, unlike
+     * [`get_address_utxos`](Self::get_address_utxos) which omits spent ones.
+     * Recovers an output's outpoint and value after it has been spent, so a
+     * swept refund can still be distinguished from one never broadcast.
+     */
+open func getAddressTxos(address: String)async throws  -> [Utxo]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_bitcoinchainservice_get_address_txos(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(address)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeUtxo.lift,
+            errorHandler: FfiConverterTypeChainServiceError_lift
+        )
+}
+    
 open func getTransactionStatus(txid: String)async throws  -> TxStatus  {
     return
         try  await uniffiRustCallAsync(
@@ -682,6 +715,23 @@ open func getTransactionHex(txid: String)async throws  -> String  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeChainServiceError_lift
+        )
+}
+    
+open func getOutspend(txid: String, vout: UInt32)async throws  -> Outspend  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_bitcoinchainservice_get_outspend(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(txid),FfiConverterUInt32.lower(vout)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeOutspend_lift,
             errorHandler: FfiConverterTypeChainServiceError_lift
         )
 }
@@ -746,6 +796,49 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.getAddressUtxos(
+                     address: try FfiConverterString.lift(address)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: [Utxo]) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterSequenceTypeUtxo.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeChainServiceError_lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        getAddressTxos: { (
+            uniffiHandle: UInt64,
+            address: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> [Utxo] in
+                guard let uniffiObj = try? FfiConverterTypeBitcoinChainService.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.getAddressTxos(
                      address: try FfiConverterString.lift(address)
                 )
             }
@@ -841,6 +934,51 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
                         returnValue: FfiConverterString.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeChainServiceError_lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        getOutspend: { (
+            uniffiHandle: UInt64,
+            txid: RustBuffer,
+            vout: UInt32,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> Outspend in
+                guard let uniffiObj = try? FfiConverterTypeBitcoinChainService.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.getOutspend(
+                     txid: try FfiConverterString.lift(txid),
+                     vout: try FfiConverterUInt32.lift(vout)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: Outspend) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterTypeOutspend_lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -1290,6 +1428,13 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     
     func prepareSendPayment(request: PrepareSendPaymentRequest) async throws  -> PrepareSendPaymentResponse
     
+    /**
+     * Quotes a unilateral exit without any funding UTXOs: selects which leaves
+     * would exit, computes the exact fee for the given funding kind, and reports
+     * how much to fund.
+     */
+    func prepareUnilateralExit(request: PrepareUnilateralExitRequest) async throws  -> PrepareUnilateralExitResponse
+    
     func publishSignedLnurlPayPackage(request: PublishSignedLnurlPayPackageRequest) async throws  -> PublishSignedLnurlPayResponse
     
     func publishSignedTransferPackage(request: PublishSignedTransferPackageRequest) async throws  -> PublishSignedTransferPackageResponse
@@ -1304,17 +1449,18 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     func refundDeposit(request: RefundDepositRequest) async throws  -> RefundDepositResponse
     
     /**
-     * Runs one pass of the pending-conversion refunder.
+     * Runs one full pass of the pending-conversion refunder and returns how
+     * many conversions were refunded, skipped (held back by a safety window),
+     * or failed.
      *
-     * Iterates over payments whose conversions failed and have a refund
-     * pending, then attempts to refund each one. This is the same logic the
-     * SDK runs internally on a periodic schedule when
-     * `background_tasks_enabled` is `true`. When background tasks are
-     * disabled the periodic refunder does not run, and this method is the
-     * explicit entry point for driving the pass; when background tasks are
-     * enabled, it can be called to force an immediate refund pass.
+     * The pass has two parts: refunding locally-marked failed conversions, and
+     * reconciling against Flashnet's clawback-eligible listing to catch
+     * conversions with no local marker (e.g. a storage write that never
+     * landed). The SDK's periodic background schedule runs only the local
+     * part; the reconcile runs at SDK init and on each call to this method, so
+     * this is the explicit entry point for driving a full pass on demand.
      */
-    func refundPendingConversions() async throws 
+    func refundPendingConversions() async throws  -> RefundPendingConversionsResponse
     
     func registerLightningAddress(request: RegisterLightningAddressRequest) async throws  -> LightningAddressInfo
     
@@ -1361,6 +1507,20 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
      * Synchronizes the wallet with the Spark network
      */
     func syncWallet(request: SyncWalletRequest) async throws  -> SyncWalletResponse
+    
+    /**
+     * Builds and signs a complete unilateral exit from a `prepare_unilateral_exit`
+     * quote and the actual funding UTXOs, returning the full transaction set in
+     * topological broadcast order without broadcasting. Broadcast it over time,
+     * respecting each transaction's `depends_on` and `csv_timelock_blocks`.
+     *
+     * It resolves on-chain state first (see [`resolve_exit_observations`]): an
+     * already-confirmed fan-out or CPFP node is not rebuilt, and a leaf refund
+     * already on-chain (recognized by the leaf's refund address, so any refund
+     * variant counts) is swept directly. Re-running after partial progress
+     * therefore resumes rather than restarts.
+     */
+    func unilateralExit(request: UnilateralExitRequest, signer: CpfpSigner) async throws  -> UnilateralExitResponse
     
     /**
      * Unregisters a previously registered webhook.
@@ -2235,6 +2395,28 @@ open func prepareSendPayment(request: PrepareSendPaymentRequest)async throws  ->
         )
 }
     
+    /**
+     * Quotes a unilateral exit without any funding UTXOs: selects which leaves
+     * would exit, computes the exact fee for the given funding kind, and reports
+     * how much to fund.
+     */
+open func prepareUnilateralExit(request: PrepareUnilateralExitRequest)async throws  -> PrepareUnilateralExitResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_prepare_unilateral_exit(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePrepareUnilateralExitRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePrepareUnilateralExitResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
 open func publishSignedLnurlPayPackage(request: PublishSignedLnurlPayPackageRequest)async throws  -> PublishSignedLnurlPayResponse  {
     return
         try  await uniffiRustCallAsync(
@@ -2324,17 +2506,18 @@ open func refundDeposit(request: RefundDepositRequest)async throws  -> RefundDep
 }
     
     /**
-     * Runs one pass of the pending-conversion refunder.
+     * Runs one full pass of the pending-conversion refunder and returns how
+     * many conversions were refunded, skipped (held back by a safety window),
+     * or failed.
      *
-     * Iterates over payments whose conversions failed and have a refund
-     * pending, then attempts to refund each one. This is the same logic the
-     * SDK runs internally on a periodic schedule when
-     * `background_tasks_enabled` is `true`. When background tasks are
-     * disabled the periodic refunder does not run, and this method is the
-     * explicit entry point for driving the pass; when background tasks are
-     * enabled, it can be called to force an immediate refund pass.
+     * The pass has two parts: refunding locally-marked failed conversions, and
+     * reconciling against Flashnet's clawback-eligible listing to catch
+     * conversions with no local marker (e.g. a storage write that never
+     * landed). The SDK's periodic background schedule runs only the local
+     * part; the reconcile runs at SDK init and on each call to this method, so
+     * this is the explicit entry point for driving a full pass on demand.
      */
-open func refundPendingConversions()async throws   {
+open func refundPendingConversions()async throws  -> RefundPendingConversionsResponse  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2343,10 +2526,10 @@ open func refundPendingConversions()async throws   {
                     
                 )
             },
-            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
-            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
-            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
-            liftFunc: { $0 },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRefundPendingConversionsResponse_lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
@@ -2489,6 +2672,35 @@ open func syncWallet(request: SyncWalletRequest)async throws  -> SyncWalletRespo
 }
     
     /**
+     * Builds and signs a complete unilateral exit from a `prepare_unilateral_exit`
+     * quote and the actual funding UTXOs, returning the full transaction set in
+     * topological broadcast order without broadcasting. Broadcast it over time,
+     * respecting each transaction's `depends_on` and `csv_timelock_blocks`.
+     *
+     * It resolves on-chain state first (see [`resolve_exit_observations`]): an
+     * already-confirmed fan-out or CPFP node is not rebuilt, and a leaf refund
+     * already on-chain (recognized by the leaf's refund address, so any refund
+     * variant counts) is swept directly. Re-running after partial progress
+     * therefore resumes rather than restarts.
+     */
+open func unilateralExit(request: UnilateralExitRequest, signer: CpfpSigner)async throws  -> UnilateralExitResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_unilateral_exit(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeUnilateralExitRequest_lower(request),FfiConverterTypeCpfpSigner_lower(signer)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnilateralExitResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
      * Unregisters a previously registered webhook.
      *
      * After unregistering, the Spark service provider will no longer send
@@ -2616,6 +2828,220 @@ public func FfiConverterTypeBreezSdk_lift(_ pointer: UnsafeMutableRawPointer) th
 #endif
 public func FfiConverterTypeBreezSdk_lower(_ value: BreezSdk) -> UnsafeMutableRawPointer {
     return FfiConverterTypeBreezSdk.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Signer for external UTXO inputs in CPFP fee-bumping transactions.
+ *
+ * Signs the non-finalized inputs of a PSBT (serialized as bytes) and returns the
+ * signed PSBT (also serialized as bytes).
+ */
+public protocol CpfpSigner: AnyObject, Sendable {
+    
+    func signPsbt(psbtBytes: Data) async throws  -> Data
+    
+}
+/**
+ * Signer for external UTXO inputs in CPFP fee-bumping transactions.
+ *
+ * Signs the non-finalized inputs of a PSBT (serialized as bytes) and returns the
+ * signed PSBT (also serialized as bytes).
+ */
+open class CpfpSignerImpl: CpfpSigner, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_cpfpsigner(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_breez_sdk_spark_fn_free_cpfpsigner(pointer, $0) }
+    }
+
+    
+
+    
+open func signPsbt(psbtBytes: Data)async throws  -> Data  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_cpfpsigner_sign_psbt(
+                    self.uniffiClonePointer(),
+                    FfiConverterData.lower(psbtBytes)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterData.lift,
+            errorHandler: FfiConverterTypeSignerError_lift
+        )
+}
+    
+
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceCpfpSigner {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceCpfpSigner] = [UniffiVTableCallbackInterfaceCpfpSigner(
+        signPsbt: { (
+            uniffiHandle: UInt64,
+            psbtBytes: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> Data in
+                guard let uniffiObj = try? FfiConverterTypeCpfpSigner.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.signPsbt(
+                     psbtBytes: try FfiConverterData.lift(psbtBytes)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: Data) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterData.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeSignerError_lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterTypeCpfpSigner.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface CpfpSigner: handle missing in uniffiFree")
+            }
+        }
+    )]
+}
+
+private func uniffiCallbackInitCpfpSigner() {
+    uniffi_breez_sdk_spark_fn_init_callback_vtable_cpfpsigner(UniffiCallbackInterfaceCpfpSigner.vtable)
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCpfpSigner: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<CpfpSigner>()
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = CpfpSigner
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> CpfpSigner {
+        return CpfpSignerImpl(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: CpfpSigner) -> UnsafeMutableRawPointer {
+        guard let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: handleMap.insert(obj: value))) else {
+            fatalError("Cast to UnsafeMutableRawPointer failed")
+        }
+        return ptr
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CpfpSigner {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: CpfpSigner, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCpfpSigner_lift(_ pointer: UnsafeMutableRawPointer) throws -> CpfpSigner {
+    return try FfiConverterTypeCpfpSigner.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCpfpSigner_lower(_ value: CpfpSigner) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeCpfpSigner.lower(value)
 }
 
 
@@ -3934,6 +4360,12 @@ public protocol ExternalSparkSigner: AnyObject, Sendable {
     func signMessage(message: Data) async throws  -> EcdsaSignatureBytes
     
     /**
+     * Schnorr-sign `sighash` to spend a tree leaf's P2TR refund output as a
+     * BIP341 key-path spend (empty script tree).
+     */
+    func signLeafRefundSpend(leafId: ExternalTreeNodeId, sighash: Data) async throws  -> SchnorrSignatureBytes
+    
+    /**
      * Produce FROST shares for a batch of jobs.
      */
     func signFrost(jobs: [ExternalFrostJob]) async throws  -> [ExternalFrostShareResult]
@@ -4148,6 +4580,27 @@ open func signMessage(message: Data)async throws  -> EcdsaSignatureBytes  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeEcdsaSignatureBytes_lift,
+            errorHandler: FfiConverterTypeSignerError_lift
+        )
+}
+    
+    /**
+     * Schnorr-sign `sighash` to spend a tree leaf's P2TR refund output as a
+     * BIP341 key-path spend (empty script tree).
+     */
+open func signLeafRefundSpend(leafId: ExternalTreeNodeId, sighash: Data)async throws  -> SchnorrSignatureBytes  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_externalsparksigner_sign_leaf_refund_spend(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeExternalTreeNodeId_lower(leafId),FfiConverterData.lower(sighash)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSchnorrSignatureBytes_lift,
             errorHandler: FfiConverterTypeSignerError_lift
         )
 }
@@ -4579,6 +5032,51 @@ fileprivate struct UniffiCallbackInterfaceExternalSparkSigner {
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
                         returnValue: FfiConverterTypeEcdsaSignatureBytes_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeSignerError_lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        signLeafRefundSpend: { (
+            uniffiHandle: UInt64,
+            leafId: RustBuffer,
+            sighash: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> SchnorrSignatureBytes in
+                guard let uniffiObj = try? FfiConverterTypeExternalSparkSigner.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.signLeafRefundSpend(
+                     leafId: try FfiConverterTypeExternalTreeNodeId_lift(leafId),
+                     sighash: try FfiConverterData.lift(sighash)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: SchnorrSignatureBytes) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterTypeSchnorrSignatureBytes_lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -23466,6 +23964,91 @@ public func FfiConverterTypePaymentRequestSource_lower(_ value: PaymentRequestSo
 
 
 /**
+ * How much to fund one branch of the exit to avoid a fan-out.
+ */
+public struct PerBranchFunding {
+    /**
+     * The leaf whose branch this funds.
+     */
+    public var leafId: String
+    /**
+     * Fund a UTXO of at least this many satoshis for this branch.
+     */
+    public var fundingSat: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The leaf whose branch this funds.
+         */leafId: String, 
+        /**
+         * Fund a UTXO of at least this many satoshis for this branch.
+         */fundingSat: UInt64) {
+        self.leafId = leafId
+        self.fundingSat = fundingSat
+    }
+}
+
+#if compiler(>=6)
+extension PerBranchFunding: Sendable {}
+#endif
+
+
+extension PerBranchFunding: Equatable, Hashable {
+    public static func ==(lhs: PerBranchFunding, rhs: PerBranchFunding) -> Bool {
+        if lhs.leafId != rhs.leafId {
+            return false
+        }
+        if lhs.fundingSat != rhs.fundingSat {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(leafId)
+        hasher.combine(fundingSat)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePerBranchFunding: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PerBranchFunding {
+        return
+            try PerBranchFunding(
+                leafId: FfiConverterString.read(from: &buf), 
+                fundingSat: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PerBranchFunding, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.leafId, into: &buf)
+        FfiConverterUInt64.write(value.fundingSat, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePerBranchFunding_lift(_ buf: RustBuffer) throws -> PerBranchFunding {
+    return try FfiConverterTypePerBranchFunding.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePerBranchFunding_lower(_ value: PerBranchFunding) -> RustBuffer {
+    return FfiConverterTypePerBranchFunding.lower(value)
+}
+
+
+/**
  * Configuration for `PostgreSQL` storage connection pool.
  */
 public struct PostgresStorageConfig {
@@ -24219,6 +24802,279 @@ public func FfiConverterTypePrepareSendPaymentResponse_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypePrepareSendPaymentResponse_lower(_ value: PrepareSendPaymentResponse) -> RustBuffer {
     return FfiConverterTypePrepareSendPaymentResponse.lower(value)
+}
+
+
+/**
+ * Request for `prepare_unilateral_exit`, the exit quote.
+ */
+public struct PrepareUnilateralExitRequest {
+    /**
+     * Target fee rate in sat/vByte, applied to every CPFP child, the fan-out,
+     * and the sweep.
+     */
+    public var feeRateSatPerVbyte: UInt64
+    public var fundingKind: CpfpFundingKind
+    /**
+     * The Bitcoin address the swept funds are sent to.
+     */
+    public var destination: String
+    public var selection: ExitLeafSelection
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Target fee rate in sat/vByte, applied to every CPFP child, the fan-out,
+         * and the sweep.
+         */feeRateSatPerVbyte: UInt64, fundingKind: CpfpFundingKind, 
+        /**
+         * The Bitcoin address the swept funds are sent to.
+         */destination: String, selection: ExitLeafSelection) {
+        self.feeRateSatPerVbyte = feeRateSatPerVbyte
+        self.fundingKind = fundingKind
+        self.destination = destination
+        self.selection = selection
+    }
+}
+
+#if compiler(>=6)
+extension PrepareUnilateralExitRequest: Sendable {}
+#endif
+
+
+extension PrepareUnilateralExitRequest: Equatable, Hashable {
+    public static func ==(lhs: PrepareUnilateralExitRequest, rhs: PrepareUnilateralExitRequest) -> Bool {
+        if lhs.feeRateSatPerVbyte != rhs.feeRateSatPerVbyte {
+            return false
+        }
+        if lhs.fundingKind != rhs.fundingKind {
+            return false
+        }
+        if lhs.destination != rhs.destination {
+            return false
+        }
+        if lhs.selection != rhs.selection {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(feeRateSatPerVbyte)
+        hasher.combine(fundingKind)
+        hasher.combine(destination)
+        hasher.combine(selection)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePrepareUnilateralExitRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrepareUnilateralExitRequest {
+        return
+            try PrepareUnilateralExitRequest(
+                feeRateSatPerVbyte: FfiConverterUInt64.read(from: &buf), 
+                fundingKind: FfiConverterTypeCpfpFundingKind.read(from: &buf), 
+                destination: FfiConverterString.read(from: &buf), 
+                selection: FfiConverterTypeExitLeafSelection.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PrepareUnilateralExitRequest, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.feeRateSatPerVbyte, into: &buf)
+        FfiConverterTypeCpfpFundingKind.write(value.fundingKind, into: &buf)
+        FfiConverterString.write(value.destination, into: &buf)
+        FfiConverterTypeExitLeafSelection.write(value.selection, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrepareUnilateralExitRequest_lift(_ buf: RustBuffer) throws -> PrepareUnilateralExitRequest {
+    return try FfiConverterTypePrepareUnilateralExitRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrepareUnilateralExitRequest_lower(_ value: PrepareUnilateralExitRequest) -> RustBuffer {
+    return FfiConverterTypePrepareUnilateralExitRequest.lower(value)
+}
+
+
+/**
+ * Response from `prepare_unilateral_exit`: which leaves would exit, the exact
+ * fee at the requested rate, and how much to fund.
+ */
+public struct PrepareUnilateralExitResponse {
+    public var leaves: [UnilateralExitLeaf]
+    /**
+     * Total value of the selected leaves, in satoshis.
+     */
+    public var recoverableValueSat: UInt64
+    /**
+     * Total on-chain fee when funding with a single UTXO (fanned out across
+     * branches), in satoshis. Exact for the given funding kind; nodes the
+     * operators report on-chain are assumed already paid, so a partially-exited
+     * tree quotes a lower fee than a fresh one.
+     */
+    public var totalFeeSat: UInt64
+    /**
+     * The part of `total_fee_sat` paid for the fan-out transaction. Funding one
+     * UTXO per branch (`per_branch_funding`) avoids it. Zero for a single
+     * branch (no fan-out).
+     */
+    public var fanoutFeeSat: UInt64
+    /**
+     * Fund a single UTXO of at least this many satoshis to exit with a fan-out.
+     */
+    public var singleUtxoFundingSat: UInt64
+    /**
+     * To skip the fan-out, fund one UTXO per branch of at least the given
+     * amount (one entry per selected leaf).
+     */
+    public var perBranchFunding: [PerBranchFunding]
+    /**
+     * The fee rate this quote was computed at, in sat/vByte.
+     */
+    public var feeRateSatPerVbyte: UInt64
+    public var destination: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(leaves: [UnilateralExitLeaf], 
+        /**
+         * Total value of the selected leaves, in satoshis.
+         */recoverableValueSat: UInt64, 
+        /**
+         * Total on-chain fee when funding with a single UTXO (fanned out across
+         * branches), in satoshis. Exact for the given funding kind; nodes the
+         * operators report on-chain are assumed already paid, so a partially-exited
+         * tree quotes a lower fee than a fresh one.
+         */totalFeeSat: UInt64, 
+        /**
+         * The part of `total_fee_sat` paid for the fan-out transaction. Funding one
+         * UTXO per branch (`per_branch_funding`) avoids it. Zero for a single
+         * branch (no fan-out).
+         */fanoutFeeSat: UInt64, 
+        /**
+         * Fund a single UTXO of at least this many satoshis to exit with a fan-out.
+         */singleUtxoFundingSat: UInt64, 
+        /**
+         * To skip the fan-out, fund one UTXO per branch of at least the given
+         * amount (one entry per selected leaf).
+         */perBranchFunding: [PerBranchFunding], 
+        /**
+         * The fee rate this quote was computed at, in sat/vByte.
+         */feeRateSatPerVbyte: UInt64, destination: String) {
+        self.leaves = leaves
+        self.recoverableValueSat = recoverableValueSat
+        self.totalFeeSat = totalFeeSat
+        self.fanoutFeeSat = fanoutFeeSat
+        self.singleUtxoFundingSat = singleUtxoFundingSat
+        self.perBranchFunding = perBranchFunding
+        self.feeRateSatPerVbyte = feeRateSatPerVbyte
+        self.destination = destination
+    }
+}
+
+#if compiler(>=6)
+extension PrepareUnilateralExitResponse: Sendable {}
+#endif
+
+
+extension PrepareUnilateralExitResponse: Equatable, Hashable {
+    public static func ==(lhs: PrepareUnilateralExitResponse, rhs: PrepareUnilateralExitResponse) -> Bool {
+        if lhs.leaves != rhs.leaves {
+            return false
+        }
+        if lhs.recoverableValueSat != rhs.recoverableValueSat {
+            return false
+        }
+        if lhs.totalFeeSat != rhs.totalFeeSat {
+            return false
+        }
+        if lhs.fanoutFeeSat != rhs.fanoutFeeSat {
+            return false
+        }
+        if lhs.singleUtxoFundingSat != rhs.singleUtxoFundingSat {
+            return false
+        }
+        if lhs.perBranchFunding != rhs.perBranchFunding {
+            return false
+        }
+        if lhs.feeRateSatPerVbyte != rhs.feeRateSatPerVbyte {
+            return false
+        }
+        if lhs.destination != rhs.destination {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(leaves)
+        hasher.combine(recoverableValueSat)
+        hasher.combine(totalFeeSat)
+        hasher.combine(fanoutFeeSat)
+        hasher.combine(singleUtxoFundingSat)
+        hasher.combine(perBranchFunding)
+        hasher.combine(feeRateSatPerVbyte)
+        hasher.combine(destination)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePrepareUnilateralExitResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrepareUnilateralExitResponse {
+        return
+            try PrepareUnilateralExitResponse(
+                leaves: FfiConverterSequenceTypeUnilateralExitLeaf.read(from: &buf), 
+                recoverableValueSat: FfiConverterUInt64.read(from: &buf), 
+                totalFeeSat: FfiConverterUInt64.read(from: &buf), 
+                fanoutFeeSat: FfiConverterUInt64.read(from: &buf), 
+                singleUtxoFundingSat: FfiConverterUInt64.read(from: &buf), 
+                perBranchFunding: FfiConverterSequenceTypePerBranchFunding.read(from: &buf), 
+                feeRateSatPerVbyte: FfiConverterUInt64.read(from: &buf), 
+                destination: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PrepareUnilateralExitResponse, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeUnilateralExitLeaf.write(value.leaves, into: &buf)
+        FfiConverterUInt64.write(value.recoverableValueSat, into: &buf)
+        FfiConverterUInt64.write(value.totalFeeSat, into: &buf)
+        FfiConverterUInt64.write(value.fanoutFeeSat, into: &buf)
+        FfiConverterUInt64.write(value.singleUtxoFundingSat, into: &buf)
+        FfiConverterSequenceTypePerBranchFunding.write(value.perBranchFunding, into: &buf)
+        FfiConverterUInt64.write(value.feeRateSatPerVbyte, into: &buf)
+        FfiConverterString.write(value.destination, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrepareUnilateralExitResponse_lift(_ buf: RustBuffer) throws -> PrepareUnilateralExitResponse {
+    return try FfiConverterTypePrepareUnilateralExitResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrepareUnilateralExitResponse_lower(_ value: PrepareUnilateralExitResponse) -> RustBuffer {
+    return FfiConverterTypePrepareUnilateralExitResponse.lower(value)
 }
 
 
@@ -25274,6 +26130,109 @@ public func FfiConverterTypeRefundDepositResponse_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypeRefundDepositResponse_lower(_ value: RefundDepositResponse) -> RustBuffer {
     return FfiConverterTypeRefundDepositResponse.lower(value)
+}
+
+
+/**
+ * Response from refunding pending conversions.
+ */
+public struct RefundPendingConversionsResponse {
+    /**
+     * Conversions successfully refunded this pass.
+     */
+    public var refunded: UInt32
+    /**
+     * Conversions intentionally deferred (eligible but held back by a
+     * safety window). The next pass will retry them.
+     */
+    public var skipped: UInt32
+    /**
+     * Conversions whose clawback did not complete this pass (rejected or
+     * errored; funds not returned). The next pass will retry them.
+     */
+    public var failed: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Conversions successfully refunded this pass.
+         */refunded: UInt32, 
+        /**
+         * Conversions intentionally deferred (eligible but held back by a
+         * safety window). The next pass will retry them.
+         */skipped: UInt32, 
+        /**
+         * Conversions whose clawback did not complete this pass (rejected or
+         * errored; funds not returned). The next pass will retry them.
+         */failed: UInt32) {
+        self.refunded = refunded
+        self.skipped = skipped
+        self.failed = failed
+    }
+}
+
+#if compiler(>=6)
+extension RefundPendingConversionsResponse: Sendable {}
+#endif
+
+
+extension RefundPendingConversionsResponse: Equatable, Hashable {
+    public static func ==(lhs: RefundPendingConversionsResponse, rhs: RefundPendingConversionsResponse) -> Bool {
+        if lhs.refunded != rhs.refunded {
+            return false
+        }
+        if lhs.skipped != rhs.skipped {
+            return false
+        }
+        if lhs.failed != rhs.failed {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(refunded)
+        hasher.combine(skipped)
+        hasher.combine(failed)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRefundPendingConversionsResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RefundPendingConversionsResponse {
+        return
+            try RefundPendingConversionsResponse(
+                refunded: FfiConverterUInt32.read(from: &buf), 
+                skipped: FfiConverterUInt32.read(from: &buf), 
+                failed: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RefundPendingConversionsResponse, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.refunded, into: &buf)
+        FfiConverterUInt32.write(value.skipped, into: &buf)
+        FfiConverterUInt32.write(value.failed, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRefundPendingConversionsResponse_lift(_ buf: RustBuffer) throws -> RefundPendingConversionsResponse {
+    return try FfiConverterTypeRefundPendingConversionsResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRefundPendingConversionsResponse_lower(_ value: RefundPendingConversionsResponse) -> RustBuffer {
+    return FfiConverterTypeRefundPendingConversionsResponse.lower(value)
 }
 
 
@@ -29961,6 +30920,444 @@ public func FfiConverterTypeUnfreezeIssuerTokenResponse_lower(_ value: UnfreezeI
 
 
 /**
+ * A leaf selected for exit, with its value.
+ */
+public struct UnilateralExitLeaf {
+    public var leafId: String
+    /**
+     * The leaf's value in satoshis.
+     */
+    public var value: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(leafId: String, 
+        /**
+         * The leaf's value in satoshis.
+         */value: UInt64) {
+        self.leafId = leafId
+        self.value = value
+    }
+}
+
+#if compiler(>=6)
+extension UnilateralExitLeaf: Sendable {}
+#endif
+
+
+extension UnilateralExitLeaf: Equatable, Hashable {
+    public static func ==(lhs: UnilateralExitLeaf, rhs: UnilateralExitLeaf) -> Bool {
+        if lhs.leafId != rhs.leafId {
+            return false
+        }
+        if lhs.value != rhs.value {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(leafId)
+        hasher.combine(value)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUnilateralExitLeaf: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnilateralExitLeaf {
+        return
+            try UnilateralExitLeaf(
+                leafId: FfiConverterString.read(from: &buf), 
+                value: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UnilateralExitLeaf, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.leafId, into: &buf)
+        FfiConverterUInt64.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnilateralExitLeaf_lift(_ buf: RustBuffer) throws -> UnilateralExitLeaf {
+    return try FfiConverterTypeUnilateralExitLeaf.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnilateralExitLeaf_lower(_ value: UnilateralExitLeaf) -> RustBuffer {
+    return FfiConverterTypeUnilateralExitLeaf.lower(value)
+}
+
+
+/**
+ * Request for `unilateral_exit`: a `prepare_unilateral_exit` quote plus the
+ * funding UTXOs that pay its fees. The signer is passed separately (it is not a
+ * plain data value).
+ */
+public struct UnilateralExitRequest {
+    /**
+     * The quote returned by `prepare_unilateral_exit`, naming the leaves to exit.
+     */
+    public var prepared: PrepareUnilateralExitResponse
+    /**
+     * The funding UTXOs that pay the exit's on-chain fees, meeting the quote's
+     * `single_utxo_funding_sat` (one UTXO) or `per_branch_funding` (one per branch).
+     */
+    public var fundingInputs: [CpfpInput]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The quote returned by `prepare_unilateral_exit`, naming the leaves to exit.
+         */prepared: PrepareUnilateralExitResponse, 
+        /**
+         * The funding UTXOs that pay the exit's on-chain fees, meeting the quote's
+         * `single_utxo_funding_sat` (one UTXO) or `per_branch_funding` (one per branch).
+         */fundingInputs: [CpfpInput]) {
+        self.prepared = prepared
+        self.fundingInputs = fundingInputs
+    }
+}
+
+#if compiler(>=6)
+extension UnilateralExitRequest: Sendable {}
+#endif
+
+
+extension UnilateralExitRequest: Equatable, Hashable {
+    public static func ==(lhs: UnilateralExitRequest, rhs: UnilateralExitRequest) -> Bool {
+        if lhs.prepared != rhs.prepared {
+            return false
+        }
+        if lhs.fundingInputs != rhs.fundingInputs {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(prepared)
+        hasher.combine(fundingInputs)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUnilateralExitRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnilateralExitRequest {
+        return
+            try UnilateralExitRequest(
+                prepared: FfiConverterTypePrepareUnilateralExitResponse.read(from: &buf), 
+                fundingInputs: FfiConverterSequenceTypeCpfpInput.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UnilateralExitRequest, into buf: inout [UInt8]) {
+        FfiConverterTypePrepareUnilateralExitResponse.write(value.prepared, into: &buf)
+        FfiConverterSequenceTypeCpfpInput.write(value.fundingInputs, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnilateralExitRequest_lift(_ buf: RustBuffer) throws -> UnilateralExitRequest {
+    return try FfiConverterTypeUnilateralExitRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnilateralExitRequest_lower(_ value: UnilateralExitRequest) -> RustBuffer {
+    return FfiConverterTypeUnilateralExitRequest.lower(value)
+}
+
+
+/**
+ * Result of `unilateral_exit`: a cost summary plus the complete, signed exit
+ * path.
+ */
+public struct UnilateralExitResponse {
+    /**
+     * Total value of the selected leaves, in satoshis.
+     */
+    public var recoverableValueSat: UInt64
+    /**
+     * The actual total on-chain fee the returned transactions pay at the
+     * requested rate, in satoshis. A resumed or partially-confirmed exit pays
+     * less because already-confirmed steps are not rebuilt.
+     */
+    public var totalFeeSat: UInt64
+    public var leaves: [UnilateralExitLeaf]
+    /**
+     * The full signed transaction set, in valid topological (broadcast) order
+     * with shared ancestors appearing once and the sweep last.
+     */
+    public var transactions: [UnilateralExitTransaction]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Total value of the selected leaves, in satoshis.
+         */recoverableValueSat: UInt64, 
+        /**
+         * The actual total on-chain fee the returned transactions pay at the
+         * requested rate, in satoshis. A resumed or partially-confirmed exit pays
+         * less because already-confirmed steps are not rebuilt.
+         */totalFeeSat: UInt64, leaves: [UnilateralExitLeaf], 
+        /**
+         * The full signed transaction set, in valid topological (broadcast) order
+         * with shared ancestors appearing once and the sweep last.
+         */transactions: [UnilateralExitTransaction]) {
+        self.recoverableValueSat = recoverableValueSat
+        self.totalFeeSat = totalFeeSat
+        self.leaves = leaves
+        self.transactions = transactions
+    }
+}
+
+#if compiler(>=6)
+extension UnilateralExitResponse: Sendable {}
+#endif
+
+
+extension UnilateralExitResponse: Equatable, Hashable {
+    public static func ==(lhs: UnilateralExitResponse, rhs: UnilateralExitResponse) -> Bool {
+        if lhs.recoverableValueSat != rhs.recoverableValueSat {
+            return false
+        }
+        if lhs.totalFeeSat != rhs.totalFeeSat {
+            return false
+        }
+        if lhs.leaves != rhs.leaves {
+            return false
+        }
+        if lhs.transactions != rhs.transactions {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(recoverableValueSat)
+        hasher.combine(totalFeeSat)
+        hasher.combine(leaves)
+        hasher.combine(transactions)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUnilateralExitResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnilateralExitResponse {
+        return
+            try UnilateralExitResponse(
+                recoverableValueSat: FfiConverterUInt64.read(from: &buf), 
+                totalFeeSat: FfiConverterUInt64.read(from: &buf), 
+                leaves: FfiConverterSequenceTypeUnilateralExitLeaf.read(from: &buf), 
+                transactions: FfiConverterSequenceTypeUnilateralExitTransaction.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UnilateralExitResponse, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.recoverableValueSat, into: &buf)
+        FfiConverterUInt64.write(value.totalFeeSat, into: &buf)
+        FfiConverterSequenceTypeUnilateralExitLeaf.write(value.leaves, into: &buf)
+        FfiConverterSequenceTypeUnilateralExitTransaction.write(value.transactions, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnilateralExitResponse_lift(_ buf: RustBuffer) throws -> UnilateralExitResponse {
+    return try FfiConverterTypeUnilateralExitResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnilateralExitResponse_lower(_ value: UnilateralExitResponse) -> RustBuffer {
+    return FfiConverterTypeUnilateralExitResponse.lower(value)
+}
+
+
+/**
+ * One transaction in the unilateral exit path, with everything needed to
+ * order and broadcast it.
+ */
+public struct UnilateralExitTransaction {
+    public var kind: UnilateralExitTxKind
+    /**
+     * The tree node this transaction belongs to. Unset for the fan-out and the
+     * sweep.
+     */
+    public var nodeId: String?
+    public var txid: String
+    public var txHex: String
+    /**
+     * The signed CPFP child to broadcast alongside `tx_hex` as a package.
+     * Unset for the fan-out and the sweep (no anchor to bump) and for a
+     * `Confirmed` step (its CPFP is already on-chain).
+     */
+    public var cpfpTxHex: String?
+    /**
+     * Relative CSV timelock, in blocks, that must mature on the spent input
+     * before this transaction can confirm. Unset when there is no timelock.
+     */
+    public var csvTimelockBlocks: UInt32?
+    /**
+     * Txids of other entries in this list that must be confirmed before this
+     * one can be broadcast.
+     */
+    public var dependsOn: [String]
+    public var status: ConfirmationStatus
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: UnilateralExitTxKind, 
+        /**
+         * The tree node this transaction belongs to. Unset for the fan-out and the
+         * sweep.
+         */nodeId: String?, txid: String, txHex: String, 
+        /**
+         * The signed CPFP child to broadcast alongside `tx_hex` as a package.
+         * Unset for the fan-out and the sweep (no anchor to bump) and for a
+         * `Confirmed` step (its CPFP is already on-chain).
+         */cpfpTxHex: String?, 
+        /**
+         * Relative CSV timelock, in blocks, that must mature on the spent input
+         * before this transaction can confirm. Unset when there is no timelock.
+         */csvTimelockBlocks: UInt32?, 
+        /**
+         * Txids of other entries in this list that must be confirmed before this
+         * one can be broadcast.
+         */dependsOn: [String], status: ConfirmationStatus) {
+        self.kind = kind
+        self.nodeId = nodeId
+        self.txid = txid
+        self.txHex = txHex
+        self.cpfpTxHex = cpfpTxHex
+        self.csvTimelockBlocks = csvTimelockBlocks
+        self.dependsOn = dependsOn
+        self.status = status
+    }
+}
+
+#if compiler(>=6)
+extension UnilateralExitTransaction: Sendable {}
+#endif
+
+
+extension UnilateralExitTransaction: Equatable, Hashable {
+    public static func ==(lhs: UnilateralExitTransaction, rhs: UnilateralExitTransaction) -> Bool {
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.nodeId != rhs.nodeId {
+            return false
+        }
+        if lhs.txid != rhs.txid {
+            return false
+        }
+        if lhs.txHex != rhs.txHex {
+            return false
+        }
+        if lhs.cpfpTxHex != rhs.cpfpTxHex {
+            return false
+        }
+        if lhs.csvTimelockBlocks != rhs.csvTimelockBlocks {
+            return false
+        }
+        if lhs.dependsOn != rhs.dependsOn {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(kind)
+        hasher.combine(nodeId)
+        hasher.combine(txid)
+        hasher.combine(txHex)
+        hasher.combine(cpfpTxHex)
+        hasher.combine(csvTimelockBlocks)
+        hasher.combine(dependsOn)
+        hasher.combine(status)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUnilateralExitTransaction: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnilateralExitTransaction {
+        return
+            try UnilateralExitTransaction(
+                kind: FfiConverterTypeUnilateralExitTxKind.read(from: &buf), 
+                nodeId: FfiConverterOptionString.read(from: &buf), 
+                txid: FfiConverterString.read(from: &buf), 
+                txHex: FfiConverterString.read(from: &buf), 
+                cpfpTxHex: FfiConverterOptionString.read(from: &buf), 
+                csvTimelockBlocks: FfiConverterOptionUInt32.read(from: &buf), 
+                dependsOn: FfiConverterSequenceString.read(from: &buf), 
+                status: FfiConverterTypeConfirmationStatus.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UnilateralExitTransaction, into buf: inout [UInt8]) {
+        FfiConverterTypeUnilateralExitTxKind.write(value.kind, into: &buf)
+        FfiConverterOptionString.write(value.nodeId, into: &buf)
+        FfiConverterString.write(value.txid, into: &buf)
+        FfiConverterString.write(value.txHex, into: &buf)
+        FfiConverterOptionString.write(value.cpfpTxHex, into: &buf)
+        FfiConverterOptionUInt32.write(value.csvTimelockBlocks, into: &buf)
+        FfiConverterSequenceString.write(value.dependsOn, into: &buf)
+        FfiConverterTypeConfirmationStatus.write(value.status, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnilateralExitTransaction_lift(_ buf: RustBuffer) throws -> UnilateralExitTransaction {
+    return try FfiConverterTypeUnilateralExitTransaction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnilateralExitTransaction_lower(_ value: UnilateralExitTransaction) -> RustBuffer {
+    return FfiConverterTypeUnilateralExitTransaction.lower(value)
+}
+
+
+/**
  * Request to unregister an existing webhook.
  */
 public struct UnregisterWebhookRequest {
@@ -30202,15 +31599,31 @@ public struct UpdateUserSettingsRequest {
      * Update the active stable balance token. `None` means no change.
      */
     public var stableBalanceActiveLabel: StableBalanceActiveLabel?
+    /**
+     * Designate or remove the wallet's master identity, a second public key
+     * the Spark operators accept as a reader of this wallet's balance and
+     * history while `spark_private_mode_enabled` is set. The master identity
+     * can only read: payments still require the owner's keys. `None` means no
+     * change.
+     */
+    public var sparkMasterIdentityPublicKey: SparkMasterIdentityPublicKey?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(sparkPrivateModeEnabled: Bool?, 
         /**
          * Update the active stable balance token. `None` means no change.
-         */stableBalanceActiveLabel: StableBalanceActiveLabel? = nil) {
+         */stableBalanceActiveLabel: StableBalanceActiveLabel? = nil, 
+        /**
+         * Designate or remove the wallet's master identity, a second public key
+         * the Spark operators accept as a reader of this wallet's balance and
+         * history while `spark_private_mode_enabled` is set. The master identity
+         * can only read: payments still require the owner's keys. `None` means no
+         * change.
+         */sparkMasterIdentityPublicKey: SparkMasterIdentityPublicKey? = nil) {
         self.sparkPrivateModeEnabled = sparkPrivateModeEnabled
         self.stableBalanceActiveLabel = stableBalanceActiveLabel
+        self.sparkMasterIdentityPublicKey = sparkMasterIdentityPublicKey
     }
 }
 
@@ -30227,12 +31640,16 @@ extension UpdateUserSettingsRequest: Equatable, Hashable {
         if lhs.stableBalanceActiveLabel != rhs.stableBalanceActiveLabel {
             return false
         }
+        if lhs.sparkMasterIdentityPublicKey != rhs.sparkMasterIdentityPublicKey {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(sparkPrivateModeEnabled)
         hasher.combine(stableBalanceActiveLabel)
+        hasher.combine(sparkMasterIdentityPublicKey)
     }
 }
 
@@ -30246,13 +31663,15 @@ public struct FfiConverterTypeUpdateUserSettingsRequest: FfiConverterRustBuffer 
         return
             try UpdateUserSettingsRequest(
                 sparkPrivateModeEnabled: FfiConverterOptionBool.read(from: &buf), 
-                stableBalanceActiveLabel: FfiConverterOptionTypeStableBalanceActiveLabel.read(from: &buf)
+                stableBalanceActiveLabel: FfiConverterOptionTypeStableBalanceActiveLabel.read(from: &buf), 
+                sparkMasterIdentityPublicKey: FfiConverterOptionTypeSparkMasterIdentityPublicKey.read(from: &buf)
         )
     }
 
     public static func write(_ value: UpdateUserSettingsRequest, into buf: inout [UInt8]) {
         FfiConverterOptionBool.write(value.sparkPrivateModeEnabled, into: &buf)
         FfiConverterOptionTypeStableBalanceActiveLabel.write(value.stableBalanceActiveLabel, into: &buf)
+        FfiConverterOptionTypeSparkMasterIdentityPublicKey.write(value.sparkMasterIdentityPublicKey, into: &buf)
     }
 }
 
@@ -30378,15 +31797,25 @@ public struct UserSettings {
      * The label of the currently active stable balance token, or `None` if deactivated.
      */
     public var stableBalanceActiveLabel: String?
+    /**
+     * The hex encoded public key designated as this wallet's master identity
+     * key, or `None` if none is designated.
+     */
+    public var sparkMasterIdentityPublicKey: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(sparkPrivateModeEnabled: Bool, 
         /**
          * The label of the currently active stable balance token, or `None` if deactivated.
-         */stableBalanceActiveLabel: String?) {
+         */stableBalanceActiveLabel: String?, 
+        /**
+         * The hex encoded public key designated as this wallet's master identity
+         * key, or `None` if none is designated.
+         */sparkMasterIdentityPublicKey: String?) {
         self.sparkPrivateModeEnabled = sparkPrivateModeEnabled
         self.stableBalanceActiveLabel = stableBalanceActiveLabel
+        self.sparkMasterIdentityPublicKey = sparkMasterIdentityPublicKey
     }
 }
 
@@ -30403,12 +31832,16 @@ extension UserSettings: Equatable, Hashable {
         if lhs.stableBalanceActiveLabel != rhs.stableBalanceActiveLabel {
             return false
         }
+        if lhs.sparkMasterIdentityPublicKey != rhs.sparkMasterIdentityPublicKey {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(sparkPrivateModeEnabled)
         hasher.combine(stableBalanceActiveLabel)
+        hasher.combine(sparkMasterIdentityPublicKey)
     }
 }
 
@@ -30422,13 +31855,15 @@ public struct FfiConverterTypeUserSettings: FfiConverterRustBuffer {
         return
             try UserSettings(
                 sparkPrivateModeEnabled: FfiConverterBool.read(from: &buf), 
-                stableBalanceActiveLabel: FfiConverterOptionString.read(from: &buf)
+                stableBalanceActiveLabel: FfiConverterOptionString.read(from: &buf), 
+                sparkMasterIdentityPublicKey: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: UserSettings, into buf: inout [UInt8]) {
         FfiConverterBool.write(value.sparkPrivateModeEnabled, into: &buf)
         FfiConverterOptionString.write(value.stableBalanceActiveLabel, into: &buf)
+        FfiConverterOptionString.write(value.sparkMasterIdentityPublicKey, into: &buf)
     }
 }
 
@@ -31693,6 +33128,96 @@ extension ChainServiceError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Whether a transaction in the exit path is already on-chain.
+ */
+
+public enum ConfirmationStatus {
+    
+    /**
+     * This transaction is confirmed in a block. It needs no action.
+     */
+    case confirmed
+    /**
+     * This transaction is not yet confirmed. Mempool state is not consulted.
+     */
+    case unconfirmed
+    /**
+     * The on-chain status could not be determined (the chain service errored).
+     * Broadcasting may fail if a conflicting transaction already landed.
+     */
+    case unverified
+}
+
+
+#if compiler(>=6)
+extension ConfirmationStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConfirmationStatus: FfiConverterRustBuffer {
+    typealias SwiftType = ConfirmationStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConfirmationStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .confirmed
+        
+        case 2: return .unconfirmed
+        
+        case 3: return .unverified
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ConfirmationStatus, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .confirmed:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .unconfirmed:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .unverified:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConfirmationStatus_lift(_ buf: RustBuffer) throws -> ConfirmationStatus {
+    return try FfiConverterTypeConfirmationStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConfirmationStatus_lower(_ value: ConfirmationStatus) -> RustBuffer {
+    return FfiConverterTypeConfirmationStatus.lower(value)
+}
+
+
+extension ConfirmationStatus: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * The chain or network that a [`ConversionSide`] lives on.
  */
 
@@ -32535,6 +34060,220 @@ extension ConversionType: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * The kind of UTXO that will fund an exit's fees.
+ */
+
+public enum CpfpFundingKind {
+    
+    /**
+     * Fees paid from P2WPKH (native segwit v0) UTXOs.
+     */
+    case p2wpkh
+    /**
+     * Fees paid from P2TR (taproot, key-path) UTXOs.
+     */
+    case p2tr
+    /**
+     * Fees paid from a custom witness-program script (legacy scripts are
+     * rejected). `script_pubkey_hex` (the funding scriptPubKey) sizes the
+     * fan-out output and dust; `signed_input_weight` (weight units) is an upper
+     * bound on the input's signed weight, so the quote stays exact or slightly
+     * conservative.
+     */
+    case custom(scriptPubkeyHex: String, signedInputWeight: UInt64
+    )
+}
+
+
+#if compiler(>=6)
+extension CpfpFundingKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCpfpFundingKind: FfiConverterRustBuffer {
+    typealias SwiftType = CpfpFundingKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CpfpFundingKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .p2wpkh
+        
+        case 2: return .p2tr
+        
+        case 3: return .custom(scriptPubkeyHex: try FfiConverterString.read(from: &buf), signedInputWeight: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CpfpFundingKind, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .p2wpkh:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .p2tr:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .custom(scriptPubkeyHex,signedInputWeight):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(scriptPubkeyHex, into: &buf)
+            FfiConverterUInt64.write(signedInputWeight, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCpfpFundingKind_lift(_ buf: RustBuffer) throws -> CpfpFundingKind {
+    return try FfiConverterTypeCpfpFundingKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCpfpFundingKind_lower(_ value: CpfpFundingKind) -> RustBuffer {
+    return FfiConverterTypeCpfpFundingKind.lower(value)
+}
+
+
+extension CpfpFundingKind: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * A funding UTXO that pays the on-chain fees of a unilateral exit.
+ */
+
+public enum CpfpInput {
+    
+    /**
+     * A P2WPKH (native segwit v0) UTXO controlled by `pubkey` (33-byte
+     * compressed, hex).
+     */
+    case p2wpkh(txid: String, vout: UInt32, value: UInt64, pubkey: String
+    )
+    /**
+     * A P2TR (taproot, key-path) UTXO. `pubkey` (x-only or compressed, hex) is
+     * the **internal** (untweaked, BIP86 key-path) public key whose secret signs
+     * the input, not the tweaked on-chain output key. The SDK applies the BIP86
+     * taproot tweak itself to derive the funding scriptPubKey, so passing the
+     * already-tweaked output key here produces a scriptPubKey that does not match
+     * the UTXO and the built transaction is rejected at broadcast.
+     */
+    case p2tr(txid: String, vout: UInt32, value: UInt64, pubkey: String
+    )
+    /**
+     * Any witness-program script, signed via a custom `CpfpSigner`. Legacy
+     * (non-SegWit) scripts are rejected. `signed_input_weight` (weight units)
+     * is an upper bound on the input's signed weight, so the fee stays exact,
+     * or slightly conservative if the real signature is shorter.
+     */
+    case custom(txid: String, vout: UInt32, value: UInt64, scriptPubkeyHex: String, signedInputWeight: UInt64
+    )
+}
+
+
+#if compiler(>=6)
+extension CpfpInput: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCpfpInput: FfiConverterRustBuffer {
+    typealias SwiftType = CpfpInput
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CpfpInput {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .p2wpkh(txid: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf), value: try FfiConverterUInt64.read(from: &buf), pubkey: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .p2tr(txid: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf), value: try FfiConverterUInt64.read(from: &buf), pubkey: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .custom(txid: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf), value: try FfiConverterUInt64.read(from: &buf), scriptPubkeyHex: try FfiConverterString.read(from: &buf), signedInputWeight: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CpfpInput, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .p2wpkh(txid,vout,value,pubkey):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(txid, into: &buf)
+            FfiConverterUInt32.write(vout, into: &buf)
+            FfiConverterUInt64.write(value, into: &buf)
+            FfiConverterString.write(pubkey, into: &buf)
+            
+        
+        case let .p2tr(txid,vout,value,pubkey):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(txid, into: &buf)
+            FfiConverterUInt32.write(vout, into: &buf)
+            FfiConverterUInt64.write(value, into: &buf)
+            FfiConverterString.write(pubkey, into: &buf)
+            
+        
+        case let .custom(txid,vout,value,scriptPubkeyHex,signedInputWeight):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(txid, into: &buf)
+            FfiConverterUInt32.write(vout, into: &buf)
+            FfiConverterUInt64.write(value, into: &buf)
+            FfiConverterString.write(scriptPubkeyHex, into: &buf)
+            FfiConverterUInt64.write(signedInputWeight, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCpfpInput_lift(_ buf: RustBuffer) throws -> CpfpInput {
+    return try FfiConverterTypeCpfpInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCpfpInput_lower(_ value: CpfpInput) -> RustBuffer {
+    return FfiConverterTypeCpfpInput.lower(value)
+}
+
+
+extension CpfpInput: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum CrossChainAddressFamily {
     
@@ -33295,6 +35034,93 @@ public func FfiConverterTypeErrorKind_lower(_ value: ErrorKind) -> RustBuffer {
 
 
 extension ErrorKind: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Which leaves to exit.
+ */
+
+public enum ExitLeafSelection {
+    
+    /**
+     * Exit every leaf whose value exceeds its own marginal exit cost (its tree
+     * and refund CPFP fees plus its sweep input). This per-leaf test does not
+     * include the shared fan-out fee, so funding many leaves from a single UTXO
+     * adds `fanout_fee_sat` on top: compare `recoverable_value_sat` with
+     * `total_fee_sat`, or fund one UTXO per branch to avoid the fan-out. Leaves
+     * that fail the per-leaf test are skipped.
+     */
+    case auto
+    /**
+     * Exit exactly these leaves, regardless of profitability.
+     */
+    case specific(leafIds: [String]
+    )
+}
+
+
+#if compiler(>=6)
+extension ExitLeafSelection: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExitLeafSelection: FfiConverterRustBuffer {
+    typealias SwiftType = ExitLeafSelection
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExitLeafSelection {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .auto
+        
+        case 2: return .specific(leafIds: try FfiConverterSequenceString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ExitLeafSelection, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .auto:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .specific(leafIds):
+            writeInt(&buf, Int32(2))
+            FfiConverterSequenceString.write(leafIds, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExitLeafSelection_lift(_ buf: RustBuffer) throws -> ExitLeafSelection {
+    return try FfiConverterTypeExitLeafSelection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExitLeafSelection_lower(_ value: ExitLeafSelection) -> RustBuffer {
+    return FfiConverterTypeExitLeafSelection.lower(value)
+}
+
+
+extension ExitLeafSelection: Equatable, Hashable {}
 
 
 
@@ -34508,6 +36334,88 @@ public func FfiConverterTypeOptimizationOutcome_lower(_ value: OptimizationOutco
 
 
 extension OptimizationOutcome: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * The spend status of a transaction output.
+ */
+
+public enum Outspend {
+    
+    case unspent
+    /**
+     * The output is spent by input `vin` of transaction `txid`; `status` is
+     * that spending transaction's confirmation status.
+     */
+    case spent(txid: String, vin: UInt32, status: TxStatus
+    )
+}
+
+
+#if compiler(>=6)
+extension Outspend: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOutspend: FfiConverterRustBuffer {
+    typealias SwiftType = Outspend
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Outspend {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .unspent
+        
+        case 2: return .spent(txid: try FfiConverterString.read(from: &buf), vin: try FfiConverterUInt32.read(from: &buf), status: try FfiConverterTypeTxStatus.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Outspend, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .unspent:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .spent(txid,vin,status):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(txid, into: &buf)
+            FfiConverterUInt32.write(vin, into: &buf)
+            FfiConverterTypeTxStatus.write(status, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOutspend_lift(_ buf: RustBuffer) throws -> Outspend {
+    return try FfiConverterTypeOutspend.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOutspend_lower(_ value: Outspend) -> RustBuffer {
+    return FfiConverterTypeOutspend.lower(value)
+}
+
+
+extension Outspend: Equatable, Hashable {}
 
 
 
@@ -36202,6 +38110,17 @@ public enum SdkError: Swift.Error {
      * higher-priority operation (typically a payment).
      */
     case OptimizationCancelled
+    /**
+     * The provided CPFP funding is too low to cover the exit's on-chain fees.
+     */
+    case InsufficientCpfpFunds(requiredSat: UInt64
+    )
+    /**
+     * A provided funding UTXO was already spent on-chain by a transaction that
+     * is not the expected fan-out, so it cannot fund this exit.
+     */
+    case FundingUtxoConflict(txid: String, vout: UInt32
+    )
     case Generic(String
     )
 }
@@ -36258,7 +38177,14 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             )
         case 12: return .OptimizationAlreadyRunning
         case 13: return .OptimizationCancelled
-        case 14: return .Generic(
+        case 14: return .InsufficientCpfpFunds(
+            requiredSat: try FfiConverterUInt64.read(from: &buf)
+            )
+        case 15: return .FundingUtxoConflict(
+            txid: try FfiConverterString.read(from: &buf), 
+            vout: try FfiConverterUInt32.read(from: &buf)
+            )
+        case 16: return .Generic(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -36340,8 +38266,19 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(13))
         
         
-        case let .Generic(v1):
+        case let .InsufficientCpfpFunds(requiredSat):
             writeInt(&buf, Int32(14))
+            FfiConverterUInt64.write(requiredSat, into: &buf)
+            
+        
+        case let .FundingUtxoConflict(txid,vout):
+            writeInt(&buf, Int32(15))
+            FfiConverterString.write(txid, into: &buf)
+            FfiConverterUInt32.write(vout, into: &buf)
+            
+        
+        case let .Generic(v1):
+            writeInt(&buf, Int32(16))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -37597,6 +39534,91 @@ extension SparkHtlcStatus: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Specifies how to update the wallet's Spark master identity public key.
+ */
+
+public enum SparkMasterIdentityPublicKey {
+    
+    /**
+     * Designate the holder of this public key as the wallet's master
+     * identity, replacing any previously designated key. Must be hex encoded
+     * in the 33-byte compressed form.
+     */
+    case set(publicKey: String
+    )
+    /**
+     * Remove the designated master identity, leaving the owner as the only
+     * party able to read the wallet under private mode.
+     */
+    case unset
+}
+
+
+#if compiler(>=6)
+extension SparkMasterIdentityPublicKey: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSparkMasterIdentityPublicKey: FfiConverterRustBuffer {
+    typealias SwiftType = SparkMasterIdentityPublicKey
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SparkMasterIdentityPublicKey {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .set(publicKey: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .unset
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SparkMasterIdentityPublicKey, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .set(publicKey):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(publicKey, into: &buf)
+            
+        
+        case .unset:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkMasterIdentityPublicKey_lift(_ buf: RustBuffer) throws -> SparkMasterIdentityPublicKey {
+    return try FfiConverterTypeSparkMasterIdentityPublicKey.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSparkMasterIdentityPublicKey_lower(_ value: SparkMasterIdentityPublicKey) -> RustBuffer {
+    return FfiConverterTypeSparkMasterIdentityPublicKey.lower(value)
+}
+
+
+extension SparkMasterIdentityPublicKey: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Specifies how to update the active stable balance token.
  */
 
@@ -38333,6 +40355,106 @@ public func FfiConverterTypeTransferTarget_lower(_ value: TransferTarget) -> Rus
 
 
 extension TransferTarget: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * The role of a transaction in the exit path.
+ */
+
+public enum UnilateralExitTxKind {
+    
+    /**
+     * Splits the caller's funding into one output per branch. Present only
+     * when the funding couldn't be matched one-to-one to branches.
+     */
+    case fanOut
+    /**
+     * A tree node transaction (root, intermediate, or leaf node).
+     */
+    case node
+    /**
+     * A leaf's refund transaction.
+     */
+    case refund
+    /**
+     * The final transaction sweeping all refund outputs to the destination.
+     */
+    case sweep
+}
+
+
+#if compiler(>=6)
+extension UnilateralExitTxKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUnilateralExitTxKind: FfiConverterRustBuffer {
+    typealias SwiftType = UnilateralExitTxKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnilateralExitTxKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .fanOut
+        
+        case 2: return .node
+        
+        case 3: return .refund
+        
+        case 4: return .sweep
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: UnilateralExitTxKind, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .fanOut:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .node:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .refund:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .sweep:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnilateralExitTxKind_lift(_ buf: RustBuffer) throws -> UnilateralExitTxKind {
+    return try FfiConverterTypeUnilateralExitTxKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnilateralExitTxKind_lower(_ value: UnilateralExitTxKind) -> RustBuffer {
+    return FfiConverterTypeUnilateralExitTxKind.lower(value)
+}
+
+
+extension UnilateralExitTxKind: Equatable, Hashable {}
 
 
 
@@ -39943,6 +42065,30 @@ fileprivate struct FfiConverterOptionTypeSendPaymentOptions: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeSparkMasterIdentityPublicKey: FfiConverterRustBuffer {
+    typealias SwiftType = SparkMasterIdentityPublicKey?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSparkMasterIdentityPublicKey.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSparkMasterIdentityPublicKey.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeStableBalanceActiveLabel: FfiConverterRustBuffer {
     typealias SwiftType = StableBalanceActiveLabel?
 
@@ -41004,6 +43150,31 @@ fileprivate struct FfiConverterSequenceTypePaymentIdUpdate: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypePerBranchFunding: FfiConverterRustBuffer {
+    typealias SwiftType = [PerBranchFunding]
+
+    public static func write(_ value: [PerBranchFunding], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePerBranchFunding.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PerBranchFunding] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PerBranchFunding]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePerBranchFunding.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeProvisionalPayment: FfiConverterRustBuffer {
     typealias SwiftType = [ProvisionalPayment]
 
@@ -41204,6 +43375,56 @@ fileprivate struct FfiConverterSequenceTypeTokenMetadata: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeUnilateralExitLeaf: FfiConverterRustBuffer {
+    typealias SwiftType = [UnilateralExitLeaf]
+
+    public static func write(_ value: [UnilateralExitLeaf], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeUnilateralExitLeaf.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UnilateralExitLeaf] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UnilateralExitLeaf]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeUnilateralExitLeaf.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeUnilateralExitTransaction: FfiConverterRustBuffer {
+    typealias SwiftType = [UnilateralExitTransaction]
+
+    public static func write(_ value: [UnilateralExitTransaction], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeUnilateralExitTransaction.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UnilateralExitTransaction] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UnilateralExitTransaction]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeUnilateralExitTransaction.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeUtxo: FfiConverterRustBuffer {
     typealias SwiftType = [Utxo]
 
@@ -41246,6 +43467,31 @@ fileprivate struct FfiConverterSequenceTypeWebhook: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeWebhook.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCpfpInput: FfiConverterRustBuffer {
+    typealias SwiftType = [CpfpInput]
+
+    public static func write(_ value: [CpfpInput], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCpfpInput.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CpfpInput] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CpfpInput]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCpfpInput.read(from: &buf))
         }
         return seq
     }
@@ -42123,6 +44369,17 @@ public func postgresStorage(config: PostgresStorageConfig)throws  -> StorageBack
     )
 })
 }
+/**
+ * A CPFP signer backed by a single private key. Signs P2WPKH and P2TR key-path
+ * inputs only; taproot script-path spends are not supported.
+ */
+public func singleKeyCpfpSigner(secretKeyBytes: Data)throws  -> CpfpSigner  {
+    return try  FfiConverterTypeCpfpSigner_lift(try rustCallWithError(FfiConverterTypeSignerError_lift) {
+    uniffi_breez_sdk_spark_fn_func_single_key_cpfp_signer(
+        FfiConverterData.lower(secretKeyBytes),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -42196,19 +44453,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_postgres_storage() != 6170) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_func_single_key_cpfp_signer() != 28762) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_address_utxos() != 20959) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_transaction_status() != 23018) {
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_address_txos() != 10702) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_transaction_hex() != 59376) {
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_transaction_status() != 53546) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_broadcast_transaction() != 65179) {
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_transaction_hex() != 16866) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_recommended_fees() != 43230) {
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_outspend() != 42521) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_broadcast_transaction() != 13500) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_recommended_fees() != 50885) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_add_contact() != 26497) {
@@ -42316,6 +44582,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_send_payment() != 34185) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_unilateral_exit() != 36492) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_publish_signed_lnurl_pay_package() != 48698) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -42331,7 +44600,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_refund_deposit() != 33646) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_refund_pending_conversions() != 24173) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_refund_pending_conversions() != 11342) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_register_lightning_address() != 530) {
@@ -42352,6 +44621,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_sync_wallet() != 30368) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_unilateral_exit() != 23033) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_unregister_webhook() != 34100) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -42359,6 +44631,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_update_user_settings() != 1721) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_cpfpsigner_sign_psbt() != 20736) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_externalbreezsigner_derive_public_key() != 26700) {
@@ -42412,34 +44687,37 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_message() != 1815) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_frost() != 41995) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_leaf_refund_spend() != 62629) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_transfer() != 7663) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_frost() != 58732) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_claim() != 40463) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_transfer() != 29829) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_lightning_receive() != 22362) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_claim() != 17684) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_static_deposit() != 44945) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_lightning_receive() != 25306) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_start_static_deposit_refund() != 15575) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_static_deposit() != 3348) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_static_deposit_refund() != 3082) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_start_static_deposit_refund() != 22709) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_spark_invoice() != 33) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_static_deposit_refund() != 52719) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_token_transaction() != 33122) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_spark_invoice() != 39737) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_static_deposit_claim() != 14601) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_token_transaction() != 12801) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_static_deposit_claim() != 53174) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_fiatservice_fetch_fiat_currencies() != 19092) {
@@ -42678,6 +44956,7 @@ private let initializationResult: InitializationResult = {
     }
 
     uniffiCallbackInitBitcoinChainService()
+    uniffiCallbackInitCpfpSigner()
     uniffiCallbackInitExternalBreezSigner()
     uniffiCallbackInitExternalSigningSigner()
     uniffiCallbackInitExternalSparkSigner()
