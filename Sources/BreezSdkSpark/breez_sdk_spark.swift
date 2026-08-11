@@ -1200,6 +1200,15 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
      */
     func authorizeLightningAddressTransfer(request: AuthorizeTransferRequest) async throws  -> TransferAuthorization
     
+    /**
+     * Builds the unsigned package for the batch prepared by
+     * [`BreezSdk::prepare_send_batch`], for signing outside the SDK.
+     *
+     * Publish the signed package with
+     * [`BreezSdk::publish_signed_transfer_package`], which returns every payment.
+     */
+    func buildUnsignedBatchPackage(request: BuildUnsignedBatchPackageRequest) async throws  -> UnsignedTransferPackage
+    
     func buildUnsignedLnurlPayPackage(request: BuildUnsignedLnurlPayPackageRequest) async throws  -> UnsignedTransferPackage
     
     func buildUnsignedTransferPackage(request: BuildUnsignedTransferPackageRequest) async throws  -> UnsignedTransferPackage
@@ -1426,6 +1435,22 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     
     func prepareLnurlPay(request: PrepareLnurlPayRequest) async throws  -> PrepareLnurlPayResponse
     
+    /**
+     * Prepares a send to several payees, all paid by one transaction.
+     *
+     * Each recipient is a Spark address or a Spark invoice, and one batch may
+     * span several tokens. The response resolves every invoice into the asset
+     * and amount it requests, and reports what the batch debits per asset.
+     *
+     * A batch pays tokens: sending sats to several payees at once is not
+     * supported yet, so a recipient that resolves to sats is rejected.
+     *
+     * A batch that pays a Spark invoice is limited to a single token: the
+     * operators reject a transaction that carries an invoice and pays more
+     * than one. Send those as one batch per token.
+     */
+    func prepareSendBatch(request: PrepareSendBatchRequest) async throws  -> PrepareSendBatchResponse
+    
     func prepareSendPayment(request: PrepareSendPaymentRequest) async throws  -> PrepareSendPaymentResponse
     
     /**
@@ -1493,6 +1518,18 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
      * `true` if the listener was found and removed, `false` otherwise
      */
     func removeEventListener(id: String) async  -> Bool
+    
+    /**
+     * Sends the batch prepared by [`BreezSdk::prepare_send_batch`], returning
+     * one payment per recipient in recipient order.
+     *
+     * Retrying after a failure that leaves the outcome unknown may pay twice:
+     * a token transfer has no idempotency key, since the operator can only be
+     * asked about a transaction by a hash that is computed while broadcasting.
+     * Look for the batch with a `Token` payment details filter on the
+     * transaction hash before sending it again.
+     */
+    func sendBatch(request: SendBatchRequest) async throws  -> SendBatchResponse
     
     func sendPayment(request: SendPaymentRequest) async throws  -> SendPaymentResponse
     
@@ -1693,6 +1730,30 @@ open func authorizeLightningAddressTransfer(request: AuthorizeTransferRequest)as
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeTransferAuthorization_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
+     * Builds the unsigned package for the batch prepared by
+     * [`BreezSdk::prepare_send_batch`], for signing outside the SDK.
+     *
+     * Publish the signed package with
+     * [`BreezSdk::publish_signed_transfer_package`], which returns every payment.
+     */
+open func buildUnsignedBatchPackage(request: BuildUnsignedBatchPackageRequest)async throws  -> UnsignedTransferPackage  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_build_unsigned_batch_package(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeBuildUnsignedBatchPackageRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnsignedTransferPackage_lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
@@ -2378,6 +2439,37 @@ open func prepareLnurlPay(request: PrepareLnurlPayRequest)async throws  -> Prepa
         )
 }
     
+    /**
+     * Prepares a send to several payees, all paid by one transaction.
+     *
+     * Each recipient is a Spark address or a Spark invoice, and one batch may
+     * span several tokens. The response resolves every invoice into the asset
+     * and amount it requests, and reports what the batch debits per asset.
+     *
+     * A batch pays tokens: sending sats to several payees at once is not
+     * supported yet, so a recipient that resolves to sats is rejected.
+     *
+     * A batch that pays a Spark invoice is limited to a single token: the
+     * operators reject a transaction that carries an invoice and pays more
+     * than one. Send those as one batch per token.
+     */
+open func prepareSendBatch(request: PrepareSendBatchRequest)async throws  -> PrepareSendBatchResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_prepare_send_batch(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePrepareSendBatchRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePrepareSendBatchResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
 open func prepareSendPayment(request: PrepareSendPaymentRequest)async throws  -> PrepareSendPaymentResponse  {
     return
         try  await uniffiRustCallAsync(
@@ -2609,6 +2701,33 @@ open func removeEventListener(id: String)async  -> Bool  {
             liftFunc: FfiConverterBool.lift,
             errorHandler: nil
             
+        )
+}
+    
+    /**
+     * Sends the batch prepared by [`BreezSdk::prepare_send_batch`], returning
+     * one payment per recipient in recipient order.
+     *
+     * Retrying after a failure that leaves the outcome unknown may pay twice:
+     * a token transfer has no idempotency key, since the operator can only be
+     * asked about a transaction by a hash that is computed while broadcasting.
+     * Look for the batch with a `Token` payment details filter on the
+     * transaction hash before sending it again.
+     */
+open func sendBatch(request: SendBatchRequest)async throws  -> SendBatchResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_send_batch(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSendBatchRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSendBatchResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
         )
 }
     
@@ -5932,10 +6051,12 @@ public protocol PasskeyClientProtocol: AnyObject, Sendable {
     func labels()  -> PasskeyLabels
     
     /**
-     * First-time setup. Drives [`PrfProvider::create_passkey`] (one
-     * ceremony) followed by the wallet-derivation flow that backs
-     * [`Passkey::setup_wallet`] (one ceremony, dual-salt where
-     * supported). The label is always published on success.
+     * First-time setup. Drives [`PrfProvider::create_passkey`], which
+     * returns the seeds inline where the platform evaluates PRF during
+     * the create ceremony; otherwise the wallet-derivation flow behind
+     * [`Passkey::setup_wallet`] runs as a second ceremony. The label is
+     * validated before anything is created, and published in the
+     * background: it may still be in flight when this returns `Ok`.
      */
     func register(request: RegisterRequest) async throws  -> RegisterResponse
     
@@ -6100,10 +6221,12 @@ open func labels() -> PasskeyLabels  {
 }
     
     /**
-     * First-time setup. Drives [`PrfProvider::create_passkey`] (one
-     * ceremony) followed by the wallet-derivation flow that backs
-     * [`Passkey::setup_wallet`] (one ceremony, dual-salt where
-     * supported). The label is always published on success.
+     * First-time setup. Drives [`PrfProvider::create_passkey`], which
+     * returns the seeds inline where the platform evaluates PRF during
+     * the create ceremony; otherwise the wallet-derivation flow behind
+     * [`Passkey::setup_wallet`] runs as a second ceremony. The label is
+     * validated before anything is created, and published in the
+     * background: it may still be in flight when this returns `Ok`.
      */
 open func register(request: RegisterRequest)async throws  -> RegisterResponse  {
     return
@@ -6696,17 +6819,31 @@ public protocol PrfProvider: AnyObject, Sendable {
     func isSupported() async throws  -> Bool
     
     /**
-     * Explicit registration. Platform passkey providers override this to
-     * drive the OS create ceremony and surface the credential metadata
-     * hosts need for `exclude_credentials` bookkeeping. CLI / hardware
-     * providers register lazily in [`Self::derive_seeds`] and inherit the
-     * default `PrfNotSupported`.
+     * Explicit registration: drive the OS create ceremony, and where the
+     * platform supports it, evaluate PRF for `salts` in the same
+     * ceremony. Platform passkey providers override this to surface the
+     * credential metadata hosts need for `exclude_credentials`
+     * bookkeeping. CLI / hardware providers register lazily in
+     * [`Self::derive_seeds`] and inherit the default `PrfNotSupported`.
      *
      * `exclude_credentials` lists already-registered IDs and surfaces
      * duplicates as `CredentialAlreadyExists`. The `user.id` is always
      * provider-minted and returned on `PasskeyCredential.user_id`.
+     *
+     * Returning seeds removes the assertion that would otherwise follow
+     * a create, and with it the window where the new credential exists
+     * but the platform cannot yet resolve it. Return `seeds: None` for
+     * anything short of one output per salt (some authenticators drop
+     * `prf.eval.second`): a partial result is not usable, and the caller
+     * falls back to [`Self::derive_seeds`]. Empty `salts` means the
+     * caller wants the credential only.
+     *
+     * Seeds returned here must equal what [`Self::derive_seeds`] would
+     * return for the same salts. The wallet is derived from them either
+     * way, so a mismatch means register and sign-in land on different
+     * wallets, and the one register created is unreachable.
      */
-    func createPasskey(excludeCredentials: [Data]) async throws  -> PasskeyCredential
+    func createPasskey(excludeCredentials: [Data], salts: [String]) async throws  -> CreatePasskeyOutput
     
     /**
      * Advisory check against the platform's out-of-band verification
@@ -6839,29 +6976,43 @@ open func isSupported()async throws  -> Bool  {
 }
     
     /**
-     * Explicit registration. Platform passkey providers override this to
-     * drive the OS create ceremony and surface the credential metadata
-     * hosts need for `exclude_credentials` bookkeeping. CLI / hardware
-     * providers register lazily in [`Self::derive_seeds`] and inherit the
-     * default `PrfNotSupported`.
+     * Explicit registration: drive the OS create ceremony, and where the
+     * platform supports it, evaluate PRF for `salts` in the same
+     * ceremony. Platform passkey providers override this to surface the
+     * credential metadata hosts need for `exclude_credentials`
+     * bookkeeping. CLI / hardware providers register lazily in
+     * [`Self::derive_seeds`] and inherit the default `PrfNotSupported`.
      *
      * `exclude_credentials` lists already-registered IDs and surfaces
      * duplicates as `CredentialAlreadyExists`. The `user.id` is always
      * provider-minted and returned on `PasskeyCredential.user_id`.
+     *
+     * Returning seeds removes the assertion that would otherwise follow
+     * a create, and with it the window where the new credential exists
+     * but the platform cannot yet resolve it. Return `seeds: None` for
+     * anything short of one output per salt (some authenticators drop
+     * `prf.eval.second`): a partial result is not usable, and the caller
+     * falls back to [`Self::derive_seeds`]. Empty `salts` means the
+     * caller wants the credential only.
+     *
+     * Seeds returned here must equal what [`Self::derive_seeds`] would
+     * return for the same salts. The wallet is derived from them either
+     * way, so a mismatch means register and sign-in land on different
+     * wallets, and the one register created is unreachable.
      */
-open func createPasskey(excludeCredentials: [Data])async throws  -> PasskeyCredential  {
+open func createPasskey(excludeCredentials: [Data], salts: [String])async throws  -> CreatePasskeyOutput  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_breez_sdk_spark_fn_method_prfprovider_create_passkey(
                     self.uniffiClonePointer(),
-                    FfiConverterSequenceData.lower(excludeCredentials)
+                    FfiConverterSequenceData.lower(excludeCredentials),FfiConverterSequenceString.lower(salts)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePasskeyCredential_lift,
+            liftFunc: FfiConverterTypeCreatePasskeyOutput_lift,
             errorHandler: FfiConverterTypePrfProviderError_lift
         )
 }
@@ -6997,25 +7148,27 @@ fileprivate struct UniffiCallbackInterfacePrfProvider {
         createPasskey: { (
             uniffiHandle: UInt64,
             excludeCredentials: RustBuffer,
+            salts: RustBuffer,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
             uniffiCallbackData: UInt64,
             uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () async throws -> PasskeyCredential in
+                () async throws -> CreatePasskeyOutput in
                 guard let uniffiObj = try? FfiConverterTypePrfProvider.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.createPasskey(
-                     excludeCredentials: try FfiConverterSequenceData.lift(excludeCredentials)
+                     excludeCredentials: try FfiConverterSequenceData.lift(excludeCredentials),
+                     salts: try FfiConverterSequenceString.lift(salts)
                 )
             }
 
-            let uniffiHandleSuccess = { (returnValue: PasskeyCredential) in
+            let uniffiHandleSuccess = { (returnValue: CreatePasskeyOutput) in
                 uniffiFutureCallback(
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
-                        returnValue: FfiConverterTypePasskeyCredential_lower(returnValue),
+                        returnValue: FfiConverterTypeCreatePasskeyOutput_lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -11902,6 +12055,194 @@ public func FfiConverterTypeAuthorizeTransferRequest_lower(_ value: AuthorizeTra
 }
 
 
+/**
+ * A single payee in a batch send.
+ */
+public struct BatchRecipient {
+    /**
+     * Spark address or Spark invoice identifying the payee.
+     */
+    public var paymentRequest: String
+    /**
+     * Amount to send, in the base units of the asset being sent. Required
+     * unless `payment_request` is an invoice that carries its own amount.
+     */
+    public var amount: U128?
+    /**
+     * Token to send. Unset means sats, which a batch cannot send yet, so a
+     * plain address needs this set. An invoice that names a token does not.
+     */
+    public var tokenIdentifier: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Spark address or Spark invoice identifying the payee.
+         */paymentRequest: String, 
+        /**
+         * Amount to send, in the base units of the asset being sent. Required
+         * unless `payment_request` is an invoice that carries its own amount.
+         */amount: U128? = nil, 
+        /**
+         * Token to send. Unset means sats, which a batch cannot send yet, so a
+         * plain address needs this set. An invoice that names a token does not.
+         */tokenIdentifier: String? = nil) {
+        self.paymentRequest = paymentRequest
+        self.amount = amount
+        self.tokenIdentifier = tokenIdentifier
+    }
+}
+
+#if compiler(>=6)
+extension BatchRecipient: Sendable {}
+#endif
+
+
+extension BatchRecipient: Equatable, Hashable {
+    public static func ==(lhs: BatchRecipient, rhs: BatchRecipient) -> Bool {
+        if lhs.paymentRequest != rhs.paymentRequest {
+            return false
+        }
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        if lhs.tokenIdentifier != rhs.tokenIdentifier {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(paymentRequest)
+        hasher.combine(amount)
+        hasher.combine(tokenIdentifier)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBatchRecipient: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BatchRecipient {
+        return
+            try BatchRecipient(
+                paymentRequest: FfiConverterString.read(from: &buf), 
+                amount: FfiConverterOptionTypeu128.read(from: &buf), 
+                tokenIdentifier: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BatchRecipient, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.paymentRequest, into: &buf)
+        FfiConverterOptionTypeu128.write(value.amount, into: &buf)
+        FfiConverterOptionString.write(value.tokenIdentifier, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBatchRecipient_lift(_ buf: RustBuffer) throws -> BatchRecipient {
+    return try FfiConverterTypeBatchRecipient.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBatchRecipient_lower(_ value: BatchRecipient) -> RustBuffer {
+    return FfiConverterTypeBatchRecipient.lower(value)
+}
+
+
+/**
+ * What a batch debits for one asset.
+ */
+public struct BatchTotal {
+    /**
+     * The token debited. Unset means sats, which a batch cannot send yet.
+     */
+    public var tokenIdentifier: String?
+    /**
+     * Amount in the asset's base units.
+     */
+    public var amount: U128
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The token debited. Unset means sats, which a batch cannot send yet.
+         */tokenIdentifier: String?, 
+        /**
+         * Amount in the asset's base units.
+         */amount: U128) {
+        self.tokenIdentifier = tokenIdentifier
+        self.amount = amount
+    }
+}
+
+#if compiler(>=6)
+extension BatchTotal: Sendable {}
+#endif
+
+
+extension BatchTotal: Equatable, Hashable {
+    public static func ==(lhs: BatchTotal, rhs: BatchTotal) -> Bool {
+        if lhs.tokenIdentifier != rhs.tokenIdentifier {
+            return false
+        }
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(tokenIdentifier)
+        hasher.combine(amount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBatchTotal: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BatchTotal {
+        return
+            try BatchTotal(
+                tokenIdentifier: FfiConverterOptionString.read(from: &buf), 
+                amount: FfiConverterTypeu128.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BatchTotal, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.tokenIdentifier, into: &buf)
+        FfiConverterTypeu128.write(value.amount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBatchTotal_lift(_ buf: RustBuffer) throws -> BatchTotal {
+    return try FfiConverterTypeBatchTotal.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBatchTotal_lower(_ value: BatchTotal) -> RustBuffer {
+    return FfiConverterTypeBatchTotal.lower(value)
+}
+
+
 public struct Bip21Details {
     public var amountSat: UInt64?
     public var assetId: String?
@@ -13028,6 +13369,68 @@ public func FfiConverterTypeBolt12OfferDetails_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeBolt12OfferDetails_lower(_ value: Bolt12OfferDetails) -> RustBuffer {
     return FfiConverterTypeBolt12OfferDetails.lower(value)
+}
+
+
+public struct BuildUnsignedBatchPackageRequest {
+    public var prepareResponse: PrepareSendBatchResponse
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(prepareResponse: PrepareSendBatchResponse) {
+        self.prepareResponse = prepareResponse
+    }
+}
+
+#if compiler(>=6)
+extension BuildUnsignedBatchPackageRequest: Sendable {}
+#endif
+
+
+extension BuildUnsignedBatchPackageRequest: Equatable, Hashable {
+    public static func ==(lhs: BuildUnsignedBatchPackageRequest, rhs: BuildUnsignedBatchPackageRequest) -> Bool {
+        if lhs.prepareResponse != rhs.prepareResponse {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(prepareResponse)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBuildUnsignedBatchPackageRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BuildUnsignedBatchPackageRequest {
+        return
+            try BuildUnsignedBatchPackageRequest(
+                prepareResponse: FfiConverterTypePrepareSendBatchResponse.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BuildUnsignedBatchPackageRequest, into buf: inout [UInt8]) {
+        FfiConverterTypePrepareSendBatchResponse.write(value.prepareResponse, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuildUnsignedBatchPackageRequest_lift(_ buf: RustBuffer) throws -> BuildUnsignedBatchPackageRequest {
+    return try FfiConverterTypeBuildUnsignedBatchPackageRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuildUnsignedBatchPackageRequest_lower(_ value: BuildUnsignedBatchPackageRequest) -> RustBuffer {
+    return FfiConverterTypeBuildUnsignedBatchPackageRequest.lower(value)
 }
 
 
@@ -15596,6 +15999,92 @@ public func FfiConverterTypeCreateIssuerTokenRequest_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeCreateIssuerTokenRequest_lower(_ value: CreateIssuerTokenRequest) -> RustBuffer {
     return FfiConverterTypeCreateIssuerTokenRequest.lower(value)
+}
+
+
+/**
+ * A newly created credential, plus the PRF outputs when the platform
+ * evaluated them during the create ceremony itself.
+ *
+ * `seeds` present means no assertion is needed: the caller skips the
+ * second ceremony, and with it the window in which a credential exists
+ * but is not yet resolvable. Absent means the platform returned no PRF
+ * results at create (or dropped one of a pair), so the caller derives
+ * through [`super::PrfProvider::derive_seeds`] as before.
+ */
+public struct CreatePasskeyOutput {
+    public var credential: PasskeyCredential
+    /**
+     * One output per requested salt, in request order.
+     */
+    public var seeds: [Data]?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(credential: PasskeyCredential, 
+        /**
+         * One output per requested salt, in request order.
+         */seeds: [Data]?) {
+        self.credential = credential
+        self.seeds = seeds
+    }
+}
+
+#if compiler(>=6)
+extension CreatePasskeyOutput: Sendable {}
+#endif
+
+
+extension CreatePasskeyOutput: Equatable, Hashable {
+    public static func ==(lhs: CreatePasskeyOutput, rhs: CreatePasskeyOutput) -> Bool {
+        if lhs.credential != rhs.credential {
+            return false
+        }
+        if lhs.seeds != rhs.seeds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(credential)
+        hasher.combine(seeds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreatePasskeyOutput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreatePasskeyOutput {
+        return
+            try CreatePasskeyOutput(
+                credential: FfiConverterTypePasskeyCredential.read(from: &buf), 
+                seeds: FfiConverterOptionSequenceData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreatePasskeyOutput, into buf: inout [UInt8]) {
+        FfiConverterTypePasskeyCredential.write(value.credential, into: &buf)
+        FfiConverterOptionSequenceData.write(value.seeds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreatePasskeyOutput_lift(_ buf: RustBuffer) throws -> CreatePasskeyOutput {
+    return try FfiConverterTypeCreatePasskeyOutput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreatePasskeyOutput_lower(_ value: CreatePasskeyOutput) -> RustBuffer {
+    return FfiConverterTypeCreatePasskeyOutput.lower(value)
 }
 
 
@@ -24539,6 +25028,162 @@ public func FfiConverterTypePrepareLnurlPayResponse_lower(_ value: PrepareLnurlP
 }
 
 
+public struct PrepareSendBatchRequest {
+    /**
+     * The payees, all paid by one transaction. They may span several tokens,
+     * and may mix Spark addresses with Spark invoices. Once a Spark invoice is
+     * among them, every recipient must be paid in the same token.
+     */
+    public var recipients: [BatchRecipient]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The payees, all paid by one transaction. They may span several tokens,
+         * and may mix Spark addresses with Spark invoices. Once a Spark invoice is
+         * among them, every recipient must be paid in the same token.
+         */recipients: [BatchRecipient]) {
+        self.recipients = recipients
+    }
+}
+
+#if compiler(>=6)
+extension PrepareSendBatchRequest: Sendable {}
+#endif
+
+
+extension PrepareSendBatchRequest: Equatable, Hashable {
+    public static func ==(lhs: PrepareSendBatchRequest, rhs: PrepareSendBatchRequest) -> Bool {
+        if lhs.recipients != rhs.recipients {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(recipients)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePrepareSendBatchRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrepareSendBatchRequest {
+        return
+            try PrepareSendBatchRequest(
+                recipients: FfiConverterSequenceTypeBatchRecipient.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PrepareSendBatchRequest, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeBatchRecipient.write(value.recipients, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrepareSendBatchRequest_lift(_ buf: RustBuffer) throws -> PrepareSendBatchRequest {
+    return try FfiConverterTypePrepareSendBatchRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrepareSendBatchRequest_lower(_ value: PrepareSendBatchRequest) -> RustBuffer {
+    return FfiConverterTypePrepareSendBatchRequest.lower(value)
+}
+
+
+public struct PrepareSendBatchResponse {
+    /**
+     * The payees in the order they were requested, which is the order their
+     * payments come back in.
+     */
+    public var recipients: [ResolvedBatchRecipient]
+    /**
+     * What the batch debits, one entry per distinct asset.
+     */
+    public var totals: [BatchTotal]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The payees in the order they were requested, which is the order their
+         * payments come back in.
+         */recipients: [ResolvedBatchRecipient], 
+        /**
+         * What the batch debits, one entry per distinct asset.
+         */totals: [BatchTotal]) {
+        self.recipients = recipients
+        self.totals = totals
+    }
+}
+
+#if compiler(>=6)
+extension PrepareSendBatchResponse: Sendable {}
+#endif
+
+
+extension PrepareSendBatchResponse: Equatable, Hashable {
+    public static func ==(lhs: PrepareSendBatchResponse, rhs: PrepareSendBatchResponse) -> Bool {
+        if lhs.recipients != rhs.recipients {
+            return false
+        }
+        if lhs.totals != rhs.totals {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(recipients)
+        hasher.combine(totals)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePrepareSendBatchResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrepareSendBatchResponse {
+        return
+            try PrepareSendBatchResponse(
+                recipients: FfiConverterSequenceTypeResolvedBatchRecipient.read(from: &buf), 
+                totals: FfiConverterSequenceTypeBatchTotal.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PrepareSendBatchResponse, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeResolvedBatchRecipient.write(value.recipients, into: &buf)
+        FfiConverterSequenceTypeBatchTotal.write(value.totals, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrepareSendBatchResponse_lift(_ buf: RustBuffer) throws -> PrepareSendBatchResponse {
+    return try FfiConverterTypePrepareSendBatchResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrepareSendBatchResponse_lower(_ value: PrepareSendBatchResponse) -> RustBuffer {
+    return FfiConverterTypePrepareSendBatchResponse.lower(value)
+}
+
+
 public struct PrepareSendPaymentRequest {
     public var paymentRequest: PaymentRequest
     /**
@@ -26666,6 +27311,101 @@ public func FfiConverterTypeRegisterWebhookResponse_lower(_ value: RegisterWebho
 }
 
 
+/**
+ * A recipient after prepare has resolved the asset and amount it is owed.
+ */
+public struct ResolvedBatchRecipient {
+    public var destination: BatchDestination
+    /**
+     * Amount in the base units of the asset this recipient is paid in.
+     */
+    public var amount: U128
+    /**
+     * The token this recipient is paid in. Unset means sats, which a batch
+     * cannot send yet.
+     */
+    public var tokenIdentifier: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(destination: BatchDestination, 
+        /**
+         * Amount in the base units of the asset this recipient is paid in.
+         */amount: U128, 
+        /**
+         * The token this recipient is paid in. Unset means sats, which a batch
+         * cannot send yet.
+         */tokenIdentifier: String?) {
+        self.destination = destination
+        self.amount = amount
+        self.tokenIdentifier = tokenIdentifier
+    }
+}
+
+#if compiler(>=6)
+extension ResolvedBatchRecipient: Sendable {}
+#endif
+
+
+extension ResolvedBatchRecipient: Equatable, Hashable {
+    public static func ==(lhs: ResolvedBatchRecipient, rhs: ResolvedBatchRecipient) -> Bool {
+        if lhs.destination != rhs.destination {
+            return false
+        }
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        if lhs.tokenIdentifier != rhs.tokenIdentifier {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(destination)
+        hasher.combine(amount)
+        hasher.combine(tokenIdentifier)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeResolvedBatchRecipient: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ResolvedBatchRecipient {
+        return
+            try ResolvedBatchRecipient(
+                destination: FfiConverterTypeBatchDestination.read(from: &buf), 
+                amount: FfiConverterTypeu128.read(from: &buf), 
+                tokenIdentifier: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ResolvedBatchRecipient, into buf: inout [UInt8]) {
+        FfiConverterTypeBatchDestination.write(value.destination, into: &buf)
+        FfiConverterTypeu128.write(value.amount, into: &buf)
+        FfiConverterOptionString.write(value.tokenIdentifier, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeResolvedBatchRecipient_lift(_ buf: RustBuffer) throws -> ResolvedBatchRecipient {
+    return try FfiConverterTypeResolvedBatchRecipient.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeResolvedBatchRecipient_lower(_ value: ResolvedBatchRecipient) -> RustBuffer {
+    return FfiConverterTypeResolvedBatchRecipient.lower(value)
+}
+
+
 public struct RestResponse {
     public var status: UInt16
     public var body: String
@@ -26977,6 +27717,138 @@ public func FfiConverterTypeSecretBytes_lift(_ buf: RustBuffer) throws -> Secret
 #endif
 public func FfiConverterTypeSecretBytes_lower(_ value: SecretBytes) -> RustBuffer {
     return FfiConverterTypeSecretBytes.lower(value)
+}
+
+
+public struct SendBatchRequest {
+    public var prepareResponse: PrepareSendBatchResponse
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(prepareResponse: PrepareSendBatchResponse) {
+        self.prepareResponse = prepareResponse
+    }
+}
+
+#if compiler(>=6)
+extension SendBatchRequest: Sendable {}
+#endif
+
+
+extension SendBatchRequest: Equatable, Hashable {
+    public static func ==(lhs: SendBatchRequest, rhs: SendBatchRequest) -> Bool {
+        if lhs.prepareResponse != rhs.prepareResponse {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(prepareResponse)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendBatchRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendBatchRequest {
+        return
+            try SendBatchRequest(
+                prepareResponse: FfiConverterTypePrepareSendBatchResponse.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SendBatchRequest, into buf: inout [UInt8]) {
+        FfiConverterTypePrepareSendBatchResponse.write(value.prepareResponse, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendBatchRequest_lift(_ buf: RustBuffer) throws -> SendBatchRequest {
+    return try FfiConverterTypeSendBatchRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendBatchRequest_lower(_ value: SendBatchRequest) -> RustBuffer {
+    return FfiConverterTypeSendBatchRequest.lower(value)
+}
+
+
+public struct SendBatchResponse {
+    /**
+     * One payment per recipient, in recipient order, all sharing a transaction
+     * hash.
+     */
+    public var payments: [Payment]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * One payment per recipient, in recipient order, all sharing a transaction
+         * hash.
+         */payments: [Payment]) {
+        self.payments = payments
+    }
+}
+
+#if compiler(>=6)
+extension SendBatchResponse: Sendable {}
+#endif
+
+
+extension SendBatchResponse: Equatable, Hashable {
+    public static func ==(lhs: SendBatchResponse, rhs: SendBatchResponse) -> Bool {
+        if lhs.payments != rhs.payments {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(payments)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendBatchResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendBatchResponse {
+        return
+            try SendBatchResponse(
+                payments: FfiConverterSequenceTypePayment.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SendBatchResponse, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypePayment.write(value.payments, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendBatchResponse_lift(_ buf: RustBuffer) throws -> SendBatchResponse {
+    return try FfiConverterTypeSendBatchResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendBatchResponse_lower(_ value: SendBatchResponse) -> RustBuffer {
+    return FfiConverterTypeSendBatchResponse.lower(value)
 }
 
 
@@ -32679,6 +33551,85 @@ extension AutoOptimizationEvent: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Where a batch recipient is paid, once prepare has decoded its payment request.
+ */
+
+public enum BatchDestination {
+    
+    case sparkAddress(address: String
+    )
+    case sparkInvoice(invoiceDetails: SparkInvoiceDetails
+    )
+}
+
+
+#if compiler(>=6)
+extension BatchDestination: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBatchDestination: FfiConverterRustBuffer {
+    typealias SwiftType = BatchDestination
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BatchDestination {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .sparkAddress(address: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .sparkInvoice(invoiceDetails: try FfiConverterTypeSparkInvoiceDetails.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BatchDestination, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .sparkAddress(address):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(address, into: &buf)
+            
+        
+        case let .sparkInvoice(invoiceDetails):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeSparkInvoiceDetails.write(invoiceDetails, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBatchDestination_lift(_ buf: RustBuffer) throws -> BatchDestination {
+    return try FfiConverterTypeBatchDestination.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBatchDestination_lower(_ value: BatchDestination) -> RustBuffer {
+    return FfiConverterTypeBatchDestination.lower(value)
+}
+
+
+extension BatchDestination: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum BitcoinNetwork {
     
@@ -36568,6 +37519,19 @@ public enum PasskeyError: Swift.Error {
     )
     case InvalidSalt(String
     )
+    /**
+     * Registration created the credential, then the derive that
+     * followed it failed. The passkey exists on the device: recover by
+     * signing in pinned to `credential_id`. Registering again would
+     * leave this one behind, owning a wallet nothing points to.
+     *
+     * Only wraps a [`PrfProviderError`], so hosts unwrap once and keep
+     * the arms they already have. Failures that are not the
+     * authenticator's (mnemonic, key derivation, invalid PRF output)
+     * propagate as their own variant, unwrapped.
+     */
+    case CreatedButNotDerived(credentialId: Data, source: PrfProviderError
+    )
     case Generic(String
     )
 }
@@ -36610,7 +37574,11 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
         case 8: return .InvalidSalt(
             try FfiConverterString.read(from: &buf)
             )
-        case 9: return .Generic(
+        case 9: return .CreatedButNotDerived(
+            credentialId: try FfiConverterData.read(from: &buf), 
+            source: try FfiConverterTypePrfProviderError.read(from: &buf)
+            )
+        case 10: return .Generic(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -36665,8 +37633,14 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .Generic(v1):
+        case let .CreatedButNotDerived(credentialId,source):
             writeInt(&buf, Int32(9))
+            FfiConverterData.write(credentialId, into: &buf)
+            FfiConverterTypePrfProviderError.write(source, into: &buf)
+            
+        
+        case let .Generic(v1):
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -37868,6 +38842,12 @@ public enum PublishSignedTransferPackageResponse {
     case swapCompleted
     case paymentSent(payment: Payment
     )
+    /**
+     * Returned for a batch package: one payment per recipient, in recipient
+     * order.
+     */
+    case paymentsSent(payments: [Payment]
+    )
 }
 
 
@@ -37890,6 +38870,9 @@ public struct FfiConverterTypePublishSignedTransferPackageResponse: FfiConverter
         case 2: return .paymentSent(payment: try FfiConverterTypePayment.read(from: &buf)
         )
         
+        case 3: return .paymentsSent(payments: try FfiConverterSequenceTypePayment.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -37905,6 +38888,11 @@ public struct FfiConverterTypePublishSignedTransferPackageResponse: FfiConverter
         case let .paymentSent(payment):
             writeInt(&buf, Int32(2))
             FfiConverterTypePayment.write(payment, into: &buf)
+            
+        
+        case let .paymentsSent(payments):
+            writeInt(&buf, Int32(3))
+            FfiConverterSequenceTypePayment.write(payments, into: &buf)
             
         }
     }
@@ -38072,7 +39060,12 @@ public enum SdkError: Swift.Error {
     
     case SparkError(String
     )
-    case InsufficientFunds
+    case InsufficientFunds(
+        /**
+         * The token that cannot cover the payment. Unset when the shortfall is
+         * in sats or when no single token can be named.
+         */tokenIdentifier: String?
+    )
     case InvalidUuid(String
     )
     /**
@@ -38142,7 +39135,9 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
         case 1: return .SparkError(
             try FfiConverterString.read(from: &buf)
             )
-        case 2: return .InsufficientFunds
+        case 2: return .InsufficientFunds(
+            tokenIdentifier: try FfiConverterOptionString.read(from: &buf)
+            )
         case 3: return .InvalidUuid(
             try FfiConverterString.read(from: &buf)
             )
@@ -38204,9 +39199,10 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case .InsufficientFunds:
+        case let .InsufficientFunds(tokenIdentifier):
             writeInt(&buf, Int32(2))
-        
+            FfiConverterOptionString.write(tokenIdentifier, into: &buf)
+            
         
         case let .InvalidUuid(v1):
             writeInt(&buf, Int32(3))
@@ -40477,6 +41473,21 @@ public enum UnsignedTransferPackage {
          * original send from the same prepare response and submit again.
          */isSwap: Bool
     )
+    /**
+     * One token transaction paying several recipients. Publishing it returns
+     * `PaymentsSent` with one payment per recipient.
+     */
+    case tokenBatch(prepareTokenTransaction: ExternalPrepareTokenTransactionRequest, tokenContext: Data, 
+        /**
+         * What the batch debits, per token. A batch spanning tokens has no
+         * single amount to report.
+         */totals: [BatchTotal], 
+        /**
+         * When set, this package re-shapes the wallet's token outputs instead of
+         * sending a payment. Publishing it returns `SwapCompleted`: rebuild the
+         * original send from the same prepare response and submit again.
+         */isSwap: Bool
+    )
 }
 
 
@@ -40501,6 +41512,9 @@ public struct FfiConverterTypeUnsignedTransferPackage: FfiConverterRustBuffer {
         )
         
         case 3: return .token(prepareTokenTransaction: try FfiConverterTypeExternalPrepareTokenTransactionRequest.read(from: &buf), tokenContext: try FfiConverterData.read(from: &buf), tokenIdentifier: try FfiConverterString.read(from: &buf), amount: try FfiConverterTypeu128.read(from: &buf), fee: try FfiConverterTypeu128.read(from: &buf), isSwap: try FfiConverterBool.read(from: &buf)
+        )
+        
+        case 4: return .tokenBatch(prepareTokenTransaction: try FfiConverterTypeExternalPrepareTokenTransactionRequest.read(from: &buf), tokenContext: try FfiConverterData.read(from: &buf), totals: try FfiConverterSequenceTypeBatchTotal.read(from: &buf), isSwap: try FfiConverterBool.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -40534,6 +41548,14 @@ public struct FfiConverterTypeUnsignedTransferPackage: FfiConverterRustBuffer {
             FfiConverterString.write(tokenIdentifier, into: &buf)
             FfiConverterTypeu128.write(amount, into: &buf)
             FfiConverterTypeu128.write(fee, into: &buf)
+            FfiConverterBool.write(isSwap, into: &buf)
+            
+        
+        case let .tokenBatch(prepareTokenTransaction,tokenContext,totals,isSwap):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeExternalPrepareTokenTransactionRequest.write(prepareTokenTransaction, into: &buf)
+            FfiConverterData.write(tokenContext, into: &buf)
+            FfiConverterSequenceTypeBatchTotal.write(totals, into: &buf)
             FfiConverterBool.write(isSwap, into: &buf)
             
         }
@@ -42500,6 +43522,56 @@ fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeBatchRecipient: FfiConverterRustBuffer {
+    typealias SwiftType = [BatchRecipient]
+
+    public static func write(_ value: [BatchRecipient], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBatchRecipient.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BatchRecipient] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BatchRecipient]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBatchRecipient.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeBatchTotal: FfiConverterRustBuffer {
+    typealias SwiftType = [BatchTotal]
+
+    public static func write(_ value: [BatchTotal], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBatchTotal.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BatchTotal] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BatchTotal]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBatchTotal.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeBip21Extra: FfiConverterRustBuffer {
     typealias SwiftType = [Bip21Extra]
 
@@ -43242,6 +44314,31 @@ fileprivate struct FfiConverterSequenceTypeRecord: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeResolvedBatchRecipient: FfiConverterRustBuffer {
+    typealias SwiftType = [ResolvedBatchRecipient]
+
+    public static func write(_ value: [ResolvedBatchRecipient], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeResolvedBatchRecipient.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ResolvedBatchRecipient] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ResolvedBatchRecipient]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeResolvedBatchRecipient.read(from: &buf))
         }
         return seq
     }
@@ -44486,6 +45583,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_authorize_lightning_address_transfer() != 15257) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_build_unsigned_batch_package() != 52999) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_build_unsigned_lnurl_pay_package() != 23822) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -44579,6 +45679,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_lnurl_pay() != 37691) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_send_batch() != 59347) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_send_payment() != 34185) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -44610,6 +45713,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_remove_event_listener() != 41066) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_send_batch() != 34563) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_send_payment() != 54349) {
@@ -44735,7 +45841,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_passkeyclient_labels() != 35849) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_passkeyclient_register() != 18330) {
+    if (uniffi_breez_sdk_spark_checksum_method_passkeyclient_register() != 27748) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_passkeyclient_sign_in() != 42245) {
@@ -44759,7 +45865,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_prfprovider_is_supported() != 46331) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_prfprovider_create_passkey() != 1967) {
+    if (uniffi_breez_sdk_spark_checksum_method_prfprovider_create_passkey() != 61235) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_prfprovider_check_domain_association() != 18713) {
