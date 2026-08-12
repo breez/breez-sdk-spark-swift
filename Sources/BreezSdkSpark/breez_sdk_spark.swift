@@ -26787,8 +26787,8 @@ public struct RefundPendingConversionsResponse {
      */
     public var refunded: UInt32
     /**
-     * Conversions intentionally deferred (eligible but held back by a
-     * safety window). The next pass will retry them.
+     * Conversions not clawed back this pass: held back by a safety window, or
+     * found to have executed after all. Only the former are retried.
      */
     public var skipped: UInt32
     /**
@@ -26804,8 +26804,8 @@ public struct RefundPendingConversionsResponse {
          * Conversions successfully refunded this pass.
          */refunded: UInt32, 
         /**
-         * Conversions intentionally deferred (eligible but held back by a
-         * safety window). The next pass will retry them.
+         * Conversions not clawed back this pass: held back by a safety window, or
+         * found to have executed after all. Only the former are retried.
          */skipped: UInt32, 
         /**
          * Conversions whose clawback did not complete this pass (rejected or
@@ -34395,7 +34395,11 @@ public enum ConversionInfo {
          */purpose: ConversionPurpose?, 
         /**
          * The reason the conversion amount was adjusted, if applicable.
-         */amountAdjustment: AmountAdjustmentReason?
+         */amountAdjustment: AmountAdjustmentReason?, 
+        /**
+         * How the swap departed from the signed terms, if it did. Set on a
+         * conversion that completed without delivering what was signed for.
+         */degradation: SwapDegradation?
     )
     /**
      * Orchestra cross-chain conversion via the Flashnet orchestration API.
@@ -34539,7 +34543,7 @@ public struct FfiConverterTypeConversionInfo: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .amm(poolId: try FfiConverterString.read(from: &buf), conversionId: try FfiConverterString.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), fee: try FfiConverterOptionTypeu128.read(from: &buf), purpose: try FfiConverterOptionTypeConversionPurpose.read(from: &buf), amountAdjustment: try FfiConverterOptionTypeAmountAdjustmentReason.read(from: &buf)
+        case 1: return .amm(poolId: try FfiConverterString.read(from: &buf), conversionId: try FfiConverterString.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), fee: try FfiConverterOptionTypeu128.read(from: &buf), purpose: try FfiConverterOptionTypeConversionPurpose.read(from: &buf), amountAdjustment: try FfiConverterOptionTypeAmountAdjustmentReason.read(from: &buf), degradation: try FfiConverterOptionTypeSwapDegradation.read(from: &buf)
         )
         
         case 2: return .orchestra(orderId: try FfiConverterString.read(from: &buf), quoteId: try FfiConverterString.read(from: &buf), readToken: try FfiConverterOptionString.read(from: &buf), chain: try FfiConverterString.read(from: &buf), chainId: try FfiConverterOptionString.read(from: &buf), asset: try FfiConverterString.read(from: &buf), recipientAddress: try FfiConverterString.read(from: &buf), assetAmountIn: try FfiConverterOptionTypeu128.read(from: &buf), estimatedOut: try FfiConverterTypeu128.read(from: &buf), deliveredAmount: try FfiConverterOptionTypeu128.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), feeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAsset: try FfiConverterOptionString.read(from: &buf), assetDecimals: try FfiConverterUInt32.read(from: &buf), assetContract: try FfiConverterOptionString.read(from: &buf)
@@ -34556,7 +34560,7 @@ public struct FfiConverterTypeConversionInfo: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .amm(poolId,conversionId,status,fee,purpose,amountAdjustment):
+        case let .amm(poolId,conversionId,status,fee,purpose,amountAdjustment,degradation):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(poolId, into: &buf)
             FfiConverterString.write(conversionId, into: &buf)
@@ -34564,6 +34568,7 @@ public struct FfiConverterTypeConversionInfo: FfiConverterRustBuffer {
             FfiConverterOptionTypeu128.write(fee, into: &buf)
             FfiConverterOptionTypeConversionPurpose.write(purpose, into: &buf)
             FfiConverterOptionTypeAmountAdjustmentReason.write(amountAdjustment, into: &buf)
+            FfiConverterOptionTypeSwapDegradation.write(degradation, into: &buf)
             
         
         case let .orchestra(orderId,quoteId,readToken,chain,chainId,asset,recipientAddress,assetAmountIn,estimatedOut,deliveredAmount,status,feeAmount,serviceFeeAmount,serviceFeeAsset,assetDecimals,assetContract):
@@ -41114,6 +41119,99 @@ extension SuccessActionProcessed: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * How an executed swap departed from the terms the client signed.
+ *
+ * The input is spent either way, so the conversion completes rather than being
+ * refunded. This records that it did not deliver what was signed for.
+ */
+
+public enum SwapDegradation {
+    
+    /**
+     * Delivered less than the minimum the intent signed.
+     */
+    case belowMinimum
+    /**
+     * Delivered an asset other than the one the intent named.
+     */
+    case unexpectedAsset
+    /**
+     * Accepted without naming the amount, the asset, or the transfer carrying
+     * it.
+     */
+    case missingInfo
+}
+
+
+#if compiler(>=6)
+extension SwapDegradation: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSwapDegradation: FfiConverterRustBuffer {
+    typealias SwiftType = SwapDegradation
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwapDegradation {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .belowMinimum
+        
+        case 2: return .unexpectedAsset
+        
+        case 3: return .missingInfo
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SwapDegradation, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .belowMinimum:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .unexpectedAsset:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .missingInfo:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwapDegradation_lift(_ buf: RustBuffer) throws -> SwapDegradation {
+    return try FfiConverterTypeSwapDegradation.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwapDegradation_lower(_ value: SwapDegradation) -> RustBuffer {
+    return FfiConverterTypeSwapDegradation.lower(value)
+}
+
+
+extension SwapDegradation: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum TokenTransactionType {
     
@@ -43175,6 +43273,30 @@ fileprivate struct FfiConverterOptionTypeSuccessActionProcessed: FfiConverterRus
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeSuccessActionProcessed.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeSwapDegradation: FfiConverterRustBuffer {
+    typealias SwiftType = SwapDegradation?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSwapDegradation.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSwapDegradation.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
