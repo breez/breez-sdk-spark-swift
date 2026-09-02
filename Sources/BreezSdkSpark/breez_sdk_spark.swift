@@ -584,6 +584,13 @@ public protocol BitcoinChainService: AnyObject, Sendable {
     
     func getTransactionStatus(txid: String) async throws  -> TxStatus
     
+    /**
+     * Height of the chain tip. Paired with a transaction's
+     * [`TxStatus::block_height`] it gives that transaction's confirmation count,
+     * which no single call reports.
+     */
+    func tipHeight() async throws  -> UInt32
+    
     func getTransactionHex(txid: String) async throws  -> String
     
     func getOutspend(txid: String, vout: UInt32) async throws  -> Outspend
@@ -698,6 +705,28 @@ open func getTransactionStatus(txid: String)async throws  -> TxStatus  {
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeTxStatus_lift,
+            errorHandler: FfiConverterTypeChainServiceError_lift
+        )
+}
+    
+    /**
+     * Height of the chain tip. Paired with a transaction's
+     * [`TxStatus::block_height`] it gives that transaction's confirmation count,
+     * which no single call reports.
+     */
+open func tipHeight()async throws  -> UInt32  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_bitcoinchainservice_tip_height(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_u32,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_u32,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_u32,
+            liftFunc: FfiConverterUInt32.lift,
             errorHandler: FfiConverterTypeChainServiceError_lift
         )
 }
@@ -900,6 +929,47 @@ fileprivate struct UniffiCallbackInterfaceBitcoinChainService {
                     uniffiCallbackData,
                     UniffiForeignFutureStructRustBuffer(
                         returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeChainServiceError_lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        tipHeight: { (
+            uniffiHandle: UInt64,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteU32,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> UInt32 in
+                guard let uniffiObj = try? FfiConverterTypeBitcoinChainService.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.tipHeight(
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UInt32) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructU32(
+                        returnValue: FfiConverterUInt32.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructU32(
+                        returnValue: 0,
                         callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
                     )
                 )
@@ -1299,6 +1369,16 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
      * `UnilateralExitStateChanged` event arrives.
      */
     func exportUnilateralExitState() async throws  -> ExportUnilateralExitStateResponse
+    
+    /**
+     * Quotes both ways of claiming a deposit, so the caller can offer a choice
+     * between claiming ahead of maturity for a spread and waiting for the cheaper
+     * claim at maturity.
+     *
+     * The early quote is requested from the provider on each call rather than read
+     * from cache, so call this when a user is deciding, not on a timer.
+     */
+    func fetchClaimDepositQuote(request: FetchClaimDepositQuoteRequest) async throws  -> FetchClaimDepositQuoteResponse
     
     func fetchConversionLimits(request: FetchConversionLimitsRequest) async throws  -> FetchConversionLimitsResponse
     
@@ -2084,6 +2164,31 @@ open func exportUnilateralExitState()async throws  -> ExportUnilateralExitStateR
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeExportUnilateralExitStateResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
+     * Quotes both ways of claiming a deposit, so the caller can offer a choice
+     * between claiming ahead of maturity for a spread and waiting for the cheaper
+     * claim at maturity.
+     *
+     * The early quote is requested from the provider on each call rather than read
+     * from cache, so call this when a user is deciding, not on a timer.
+     */
+open func fetchClaimDepositQuote(request: FetchClaimDepositQuoteRequest)async throws  -> FetchClaimDepositQuoteResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_fetch_claim_deposit_quote(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeFetchClaimDepositQuoteRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFetchClaimDepositQuoteResponse_lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
@@ -6290,10 +6395,14 @@ open class PasskeyClient: PasskeyClientProtocol, @unchecked Sendable {
     }
     /**
      * Construct with the default Nostr-backed label store.
+     *
+     * Fails when `config` carries a proxy the relay transport cannot
+     * honour, rather than letting a wallet be created whose label can
+     * never be published.
      */
-public convenience init(prfProvider: PrfProvider, breezApiKey: String?, config: PasskeyConfig?) {
+public convenience init(prfProvider: PrfProvider, breezApiKey: String?, config: PasskeyConfig?)throws  {
     let pointer =
-        try! rustCall() {
+        try rustCallWithError(FfiConverterTypePasskeyError_lift) {
     uniffi_breez_sdk_spark_fn_constructor_passkeyclient_new(
         FfiConverterTypePrfProvider_lower(prfProvider),
         FfiConverterOptionString.lower(breezApiKey),
@@ -14082,31 +14191,162 @@ public func FfiConverterTypeCheckMessageResponse_lower(_ value: CheckMessageResp
 }
 
 
-public struct ClaimDepositRequest {
-    public var txid: String
-    public var vout: UInt32
-    public var maxFee: MaxFee?
+/**
+ * What one way of claiming a deposit costs.
+ */
+public struct ClaimDepositQuote {
     /**
-     * Set to request an instant (0-conf) claim instead of waiting for the
-     * deposit to mature, bounding the SSP spread at this many basis points of
-     * the deposit value (100 bps = 1%). When set, the call takes the instant
-     * path and `max_fee` is ignored.
+     * The depth this becomes claimable at, as a total confirmation count on the
+     * deposit tx and not a number still to wait. A deposit already at or past
+     * this depth can be claimed.
      */
-    public var maxInstantFeeBps: UInt32?
+    public var confirmationsRequired: UInt32
+    /**
+     * What reaches the balance.
+     */
+    public var creditAmountSats: UInt64
+    /**
+     * The deposit value less the credit.
+     */
+    public var feeSats: UInt64
+    /**
+     * `fee_sats` as a fee rate over the claim transaction, so it is comparable
+     * with a max fee expressed as a rate.
+     */
+    public var feeRateSatPerVbyte: UInt64
+    /**
+     * The provider would not quote this yet, so the fee is derived from current
+     * on-chain fees and the real one may differ.
+     */
+    public var isEstimate: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(txid: String, vout: UInt32, maxFee: MaxFee? = nil, 
+    public init(
         /**
-         * Set to request an instant (0-conf) claim instead of waiting for the
-         * deposit to mature, bounding the SSP spread at this many basis points of
-         * the deposit value (100 bps = 1%). When set, the call takes the instant
-         * path and `max_fee` is ignored.
-         */maxInstantFeeBps: UInt32? = nil) {
+         * The depth this becomes claimable at, as a total confirmation count on the
+         * deposit tx and not a number still to wait. A deposit already at or past
+         * this depth can be claimed.
+         */confirmationsRequired: UInt32, 
+        /**
+         * What reaches the balance.
+         */creditAmountSats: UInt64, 
+        /**
+         * The deposit value less the credit.
+         */feeSats: UInt64, 
+        /**
+         * `fee_sats` as a fee rate over the claim transaction, so it is comparable
+         * with a max fee expressed as a rate.
+         */feeRateSatPerVbyte: UInt64, 
+        /**
+         * The provider would not quote this yet, so the fee is derived from current
+         * on-chain fees and the real one may differ.
+         */isEstimate: Bool) {
+        self.confirmationsRequired = confirmationsRequired
+        self.creditAmountSats = creditAmountSats
+        self.feeSats = feeSats
+        self.feeRateSatPerVbyte = feeRateSatPerVbyte
+        self.isEstimate = isEstimate
+    }
+}
+
+#if compiler(>=6)
+extension ClaimDepositQuote: Sendable {}
+#endif
+
+
+extension ClaimDepositQuote: Equatable, Hashable {
+    public static func ==(lhs: ClaimDepositQuote, rhs: ClaimDepositQuote) -> Bool {
+        if lhs.confirmationsRequired != rhs.confirmationsRequired {
+            return false
+        }
+        if lhs.creditAmountSats != rhs.creditAmountSats {
+            return false
+        }
+        if lhs.feeSats != rhs.feeSats {
+            return false
+        }
+        if lhs.feeRateSatPerVbyte != rhs.feeRateSatPerVbyte {
+            return false
+        }
+        if lhs.isEstimate != rhs.isEstimate {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(confirmationsRequired)
+        hasher.combine(creditAmountSats)
+        hasher.combine(feeSats)
+        hasher.combine(feeRateSatPerVbyte)
+        hasher.combine(isEstimate)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClaimDepositQuote: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClaimDepositQuote {
+        return
+            try ClaimDepositQuote(
+                confirmationsRequired: FfiConverterUInt32.read(from: &buf), 
+                creditAmountSats: FfiConverterUInt64.read(from: &buf), 
+                feeSats: FfiConverterUInt64.read(from: &buf), 
+                feeRateSatPerVbyte: FfiConverterUInt64.read(from: &buf), 
+                isEstimate: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ClaimDepositQuote, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.confirmationsRequired, into: &buf)
+        FfiConverterUInt64.write(value.creditAmountSats, into: &buf)
+        FfiConverterUInt64.write(value.feeSats, into: &buf)
+        FfiConverterUInt64.write(value.feeRateSatPerVbyte, into: &buf)
+        FfiConverterBool.write(value.isEstimate, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClaimDepositQuote_lift(_ buf: RustBuffer) throws -> ClaimDepositQuote {
+    return try FfiConverterTypeClaimDepositQuote.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClaimDepositQuote_lower(_ value: ClaimDepositQuote) -> RustBuffer {
+    return FfiConverterTypeClaimDepositQuote.lower(value)
+}
+
+
+public struct ClaimDepositRequest {
+    public var txid: String
+    public var vout: UInt32
+    /**
+     * Caps what the claim may cost. A deposit that has not matured is claimed
+     * instantly when the provider's spread fits within this, so the same ceiling
+     * governs both. Falls back to the configured max deposit claim fee.
+     */
+    public var maxFee: MaxFee?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(txid: String, vout: UInt32, 
+        /**
+         * Caps what the claim may cost. A deposit that has not matured is claimed
+         * instantly when the provider's spread fits within this, so the same ceiling
+         * governs both. Falls back to the configured max deposit claim fee.
+         */maxFee: MaxFee? = nil) {
         self.txid = txid
         self.vout = vout
         self.maxFee = maxFee
-        self.maxInstantFeeBps = maxInstantFeeBps
     }
 }
 
@@ -14126,9 +14366,6 @@ extension ClaimDepositRequest: Equatable, Hashable {
         if lhs.maxFee != rhs.maxFee {
             return false
         }
-        if lhs.maxInstantFeeBps != rhs.maxInstantFeeBps {
-            return false
-        }
         return true
     }
 
@@ -14136,7 +14373,6 @@ extension ClaimDepositRequest: Equatable, Hashable {
         hasher.combine(txid)
         hasher.combine(vout)
         hasher.combine(maxFee)
-        hasher.combine(maxInstantFeeBps)
     }
 }
 
@@ -14151,8 +14387,7 @@ public struct FfiConverterTypeClaimDepositRequest: FfiConverterRustBuffer {
             try ClaimDepositRequest(
                 txid: FfiConverterString.read(from: &buf), 
                 vout: FfiConverterUInt32.read(from: &buf), 
-                maxFee: FfiConverterOptionTypeMaxFee.read(from: &buf), 
-                maxInstantFeeBps: FfiConverterOptionUInt32.read(from: &buf)
+                maxFee: FfiConverterOptionTypeMaxFee.read(from: &buf)
         )
     }
 
@@ -14160,7 +14395,6 @@ public struct FfiConverterTypeClaimDepositRequest: FfiConverterRustBuffer {
         FfiConverterString.write(value.txid, into: &buf)
         FfiConverterUInt32.write(value.vout, into: &buf)
         FfiConverterOptionTypeMaxFee.write(value.maxFee, into: &buf)
-        FfiConverterOptionUInt32.write(value.maxInstantFeeBps, into: &buf)
     }
 }
 
@@ -14182,9 +14416,12 @@ public func FfiConverterTypeClaimDepositRequest_lower(_ value: ClaimDepositReque
 
 public struct ClaimDepositResponse {
     /**
-     * The settled claim payment. Present for a standard claim, which completes
-     * synchronously. Absent for an instant claim, whose transfer settles
-     * asynchronously: watch for the payment via events or `list_payments`.
+     * The settled claim payment, present when the deposit was claimed at maturity,
+     * which completes synchronously. Absent when it was claimed before maturity,
+     * whose transfer settles asynchronously: watch for the payment via events or
+     * `list_payments`. Which of the two happens follows from the deposit's maturity
+     * and the fee ceiling, not from anything the caller asks for, so treat the
+     * payment as optional on every claim.
      */
     public var payment: Payment?
 
@@ -14192,9 +14429,12 @@ public struct ClaimDepositResponse {
     // declare one manually.
     public init(
         /**
-         * The settled claim payment. Present for a standard claim, which completes
-         * synchronously. Absent for an instant claim, whose transfer settles
-         * asynchronously: watch for the payment via events or `list_payments`.
+         * The settled claim payment, present when the deposit was claimed at maturity,
+         * which completes synchronously. Absent when it was claimed before maturity,
+         * whose transfer settles asynchronously: watch for the payment via events or
+         * `list_payments`. Which of the two happens follows from the deposit's maturity
+         * and the fee ceiling, not from anything the caller asks for, so treat the
+         * payment as optional on every claim.
          */payment: Payment?) {
         self.payment = payment
     }
@@ -14469,14 +14709,13 @@ public struct Config {
     public var apiKey: String?
     public var network: Network
     public var syncIntervalSecs: UInt32
-    public var maxDepositClaimFee: MaxFee?
     /**
-     * Maximum instant (0-conf) static deposit claim fee, as basis points of the
-     * deposit value (100 bps = 1%), capping the SSP spread for the instant
-     * credit. Opt-in: while unset, no 0-conf claim is attempted. Small deposits,
-     * whose spread is proportionally larger, fall through to the normal claim.
+     * The maximum fee that can be paid to claim an on-chain deposit. It also caps
+     * the provider's spread for crediting a deposit before it matures, so raising
+     * it is what allows deposits to be claimed early. Unset disables claiming
+     * rather than allowing any fee.
      */
-    public var maxInstantDepositClaimFeeBps: UInt32?
+    public var maxDepositClaimFee: MaxFee?
     /**
      * The domain used for receiving through lnurl-pay and lightning address.
      */
@@ -14598,6 +14837,17 @@ public struct Config {
      */
     public var backgroundTasksEnabled: Bool
     /**
+     * Routes the connections the SDK opens through a SOCKS5 proxy.
+     *
+     * Covers HTTP and gRPC alike, and resolves hostnames at the proxy so no
+     * DNS query leaks the destination. `None` (default) connects directly.
+     *
+     * When an [`SdkContext`](crate::SdkContext) is supplied to the builder,
+     * its proxy must match this one: the context owns the shared clients, so
+     * a disagreement would mean part of the traffic bypassed the proxy.
+     */
+    public var proxy: ProxyConfig?
+    /**
      * Configuration for cross-chain sends via Orchestra and Boltz.
      *
      * `Some(_)` enables cross-chain sends (sats to USDT on external chains).
@@ -14610,13 +14860,13 @@ public struct Config {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(apiKey: String?, network: Network, syncIntervalSecs: UInt32, maxDepositClaimFee: MaxFee?, 
+    public init(apiKey: String?, network: Network, syncIntervalSecs: UInt32, 
         /**
-         * Maximum instant (0-conf) static deposit claim fee, as basis points of the
-         * deposit value (100 bps = 1%), capping the SSP spread for the instant
-         * credit. Opt-in: while unset, no 0-conf claim is attempted. Small deposits,
-         * whose spread is proportionally larger, fall through to the normal claim.
-         */maxInstantDepositClaimFeeBps: UInt32?, 
+         * The maximum fee that can be paid to claim an on-chain deposit. It also caps
+         * the provider's spread for crediting a deposit before it matures, so raising
+         * it is what allows deposits to be claimed early. Unset disables claiming
+         * rather than allowing any fee.
+         */maxDepositClaimFee: MaxFee?, 
         /**
          * The domain used for receiving through lnurl-pay and lightning address.
          */lnurlDomain: String?, 
@@ -14725,6 +14975,16 @@ public struct Config {
          * `default_server_config` already sets these compatible values.
          */backgroundTasksEnabled: Bool, 
         /**
+         * Routes the connections the SDK opens through a SOCKS5 proxy.
+         *
+         * Covers HTTP and gRPC alike, and resolves hostnames at the proxy so no
+         * DNS query leaks the destination. `None` (default) connects directly.
+         *
+         * When an [`SdkContext`](crate::SdkContext) is supplied to the builder,
+         * its proxy must match this one: the context owns the shared clients, so
+         * a disagreement would mean part of the traffic bypassed the proxy.
+         */proxy: ProxyConfig?, 
+        /**
          * Configuration for cross-chain sends via Orchestra and Boltz.
          *
          * `Some(_)` enables cross-chain sends (sats to USDT on external chains).
@@ -14737,7 +14997,6 @@ public struct Config {
         self.network = network
         self.syncIntervalSecs = syncIntervalSecs
         self.maxDepositClaimFee = maxDepositClaimFee
-        self.maxInstantDepositClaimFeeBps = maxInstantDepositClaimFeeBps
         self.lnurlDomain = lnurlDomain
         self.preferSparkOverLightning = preferSparkOverLightning
         self.exitChainAutoFetchEnabled = exitChainAutoFetchEnabled
@@ -14751,6 +15010,7 @@ public struct Config {
         self.maxConcurrentClaims = maxConcurrentClaims
         self.sparkConfig = sparkConfig
         self.backgroundTasksEnabled = backgroundTasksEnabled
+        self.proxy = proxy
         self.crossChainConfig = crossChainConfig
     }
 }
@@ -14772,9 +15032,6 @@ extension Config: Equatable, Hashable {
             return false
         }
         if lhs.maxDepositClaimFee != rhs.maxDepositClaimFee {
-            return false
-        }
-        if lhs.maxInstantDepositClaimFeeBps != rhs.maxInstantDepositClaimFeeBps {
             return false
         }
         if lhs.lnurlDomain != rhs.lnurlDomain {
@@ -14816,6 +15073,9 @@ extension Config: Equatable, Hashable {
         if lhs.backgroundTasksEnabled != rhs.backgroundTasksEnabled {
             return false
         }
+        if lhs.proxy != rhs.proxy {
+            return false
+        }
         if lhs.crossChainConfig != rhs.crossChainConfig {
             return false
         }
@@ -14827,7 +15087,6 @@ extension Config: Equatable, Hashable {
         hasher.combine(network)
         hasher.combine(syncIntervalSecs)
         hasher.combine(maxDepositClaimFee)
-        hasher.combine(maxInstantDepositClaimFeeBps)
         hasher.combine(lnurlDomain)
         hasher.combine(preferSparkOverLightning)
         hasher.combine(exitChainAutoFetchEnabled)
@@ -14841,6 +15100,7 @@ extension Config: Equatable, Hashable {
         hasher.combine(maxConcurrentClaims)
         hasher.combine(sparkConfig)
         hasher.combine(backgroundTasksEnabled)
+        hasher.combine(proxy)
         hasher.combine(crossChainConfig)
     }
 }
@@ -14858,7 +15118,6 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
                 network: FfiConverterTypeNetwork.read(from: &buf), 
                 syncIntervalSecs: FfiConverterUInt32.read(from: &buf), 
                 maxDepositClaimFee: FfiConverterOptionTypeMaxFee.read(from: &buf), 
-                maxInstantDepositClaimFeeBps: FfiConverterOptionUInt32.read(from: &buf), 
                 lnurlDomain: FfiConverterOptionString.read(from: &buf), 
                 preferSparkOverLightning: FfiConverterBool.read(from: &buf), 
                 exitChainAutoFetchEnabled: FfiConverterBool.read(from: &buf), 
@@ -14872,6 +15131,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
                 maxConcurrentClaims: FfiConverterUInt32.read(from: &buf), 
                 sparkConfig: FfiConverterOptionTypeSparkConfig.read(from: &buf), 
                 backgroundTasksEnabled: FfiConverterBool.read(from: &buf), 
+                proxy: FfiConverterOptionTypeProxyConfig.read(from: &buf), 
                 crossChainConfig: FfiConverterOptionTypeCrossChainConfig.read(from: &buf)
         )
     }
@@ -14881,7 +15141,6 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterUInt32.write(value.syncIntervalSecs, into: &buf)
         FfiConverterOptionTypeMaxFee.write(value.maxDepositClaimFee, into: &buf)
-        FfiConverterOptionUInt32.write(value.maxInstantDepositClaimFeeBps, into: &buf)
         FfiConverterOptionString.write(value.lnurlDomain, into: &buf)
         FfiConverterBool.write(value.preferSparkOverLightning, into: &buf)
         FfiConverterBool.write(value.exitChainAutoFetchEnabled, into: &buf)
@@ -14895,6 +15154,7 @@ public struct FfiConverterTypeConfig: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.maxConcurrentClaims, into: &buf)
         FfiConverterOptionTypeSparkConfig.write(value.sparkConfig, into: &buf)
         FfiConverterBool.write(value.backgroundTasksEnabled, into: &buf)
+        FfiConverterOptionTypeProxyConfig.write(value.proxy, into: &buf)
         FfiConverterOptionTypeCrossChainConfig.write(value.crossChainConfig, into: &buf)
     }
 }
@@ -16948,6 +17208,11 @@ public struct DepositInfo {
      */
     public var refundTxId: String?
     /**
+     * How far the refund has got towards the network. Unset when no refund has
+     * been created, and on refunds created before this field existed.
+     */
+    public var refundState: RefundState?
+    /**
      * Why the last claim attempt failed. Unset while none has failed.
      */
     public var claimError: DepositClaimError?
@@ -16978,6 +17243,10 @@ public struct DepositInfo {
          * Transaction id of the refund, once one has been created.
          */refundTxId: String?, 
         /**
+         * How far the refund has got towards the network. Unset when no refund has
+         * been created, and on refunds created before this field existed.
+         */refundState: RefundState?, 
+        /**
          * Why the last claim attempt failed. Unset while none has failed.
          */claimError: DepositClaimError?, 
         /**
@@ -16989,6 +17258,7 @@ public struct DepositInfo {
         self.isMature = isMature
         self.refundTx = refundTx
         self.refundTxId = refundTxId
+        self.refundState = refundState
         self.claimError = claimError
         self.instantClaimStatus = instantClaimStatus
     }
@@ -17019,6 +17289,9 @@ extension DepositInfo: Equatable, Hashable {
         if lhs.refundTxId != rhs.refundTxId {
             return false
         }
+        if lhs.refundState != rhs.refundState {
+            return false
+        }
         if lhs.claimError != rhs.claimError {
             return false
         }
@@ -17035,6 +17308,7 @@ extension DepositInfo: Equatable, Hashable {
         hasher.combine(isMature)
         hasher.combine(refundTx)
         hasher.combine(refundTxId)
+        hasher.combine(refundState)
         hasher.combine(claimError)
         hasher.combine(instantClaimStatus)
     }
@@ -17055,6 +17329,7 @@ public struct FfiConverterTypeDepositInfo: FfiConverterRustBuffer {
                 isMature: FfiConverterBool.read(from: &buf), 
                 refundTx: FfiConverterOptionString.read(from: &buf), 
                 refundTxId: FfiConverterOptionString.read(from: &buf), 
+                refundState: FfiConverterOptionTypeRefundState.read(from: &buf), 
                 claimError: FfiConverterOptionTypeDepositClaimError.read(from: &buf), 
                 instantClaimStatus: FfiConverterOptionTypeInstantClaimStatus.read(from: &buf)
         )
@@ -17067,6 +17342,7 @@ public struct FfiConverterTypeDepositInfo: FfiConverterRustBuffer {
         FfiConverterBool.write(value.isMature, into: &buf)
         FfiConverterOptionString.write(value.refundTx, into: &buf)
         FfiConverterOptionString.write(value.refundTxId, into: &buf)
+        FfiConverterOptionTypeRefundState.write(value.refundState, into: &buf)
         FfiConverterOptionTypeDepositClaimError.write(value.claimError, into: &buf)
         FfiConverterOptionTypeInstantClaimStatus.write(value.instantClaimStatus, into: &buf)
     }
@@ -20067,6 +20343,204 @@ public func FfiConverterTypeExternalTreeNodeId_lower(_ value: ExternalTreeNodeId
 }
 
 
+public struct FetchClaimDepositQuoteRequest {
+    public var txid: String
+    public var vout: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(txid: String, vout: UInt32) {
+        self.txid = txid
+        self.vout = vout
+    }
+}
+
+#if compiler(>=6)
+extension FetchClaimDepositQuoteRequest: Sendable {}
+#endif
+
+
+extension FetchClaimDepositQuoteRequest: Equatable, Hashable {
+    public static func ==(lhs: FetchClaimDepositQuoteRequest, rhs: FetchClaimDepositQuoteRequest) -> Bool {
+        if lhs.txid != rhs.txid {
+            return false
+        }
+        if lhs.vout != rhs.vout {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(txid)
+        hasher.combine(vout)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFetchClaimDepositQuoteRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FetchClaimDepositQuoteRequest {
+        return
+            try FetchClaimDepositQuoteRequest(
+                txid: FfiConverterString.read(from: &buf), 
+                vout: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FetchClaimDepositQuoteRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.txid, into: &buf)
+        FfiConverterUInt32.write(value.vout, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFetchClaimDepositQuoteRequest_lift(_ buf: RustBuffer) throws -> FetchClaimDepositQuoteRequest {
+    return try FfiConverterTypeFetchClaimDepositQuoteRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFetchClaimDepositQuoteRequest_lower(_ value: FetchClaimDepositQuoteRequest) -> RustBuffer {
+    return FfiConverterTypeFetchClaimDepositQuoteRequest.lower(value)
+}
+
+
+public struct FetchClaimDepositQuoteResponse {
+    public var amountSats: UInt64
+    /**
+     * Confirmations the deposit has now, 0 while unconfirmed.
+     */
+    public var confirmations: UInt32
+    /**
+     * Claiming ahead of maturity, for a spread. Absent when the provider offers
+     * no such option for this deposit, and when claiming early would not actually
+     * be earlier: a deposit that has already matured, or a plan crediting no
+     * sooner than maturity would, is only ever the more expensive way to wait.
+     *
+     * Also absent when the provider could not be reached for a quote, which is not
+     * distinguished here from having nothing to offer: both mean there is no early
+     * claim to show right now, and the one worth retrying is the transient one.
+     *
+     * Priced regardless of the configured maximum claim fee, which is usually far
+     * below a spread. It is quoted so it can be offered, so claiming it needs a max
+     * fee of at least its `fee_sats`. Below that the claim fails with
+     * `MaxDepositClaimFeeExceeded` and the deposit waits for maturity.
+     */
+    public var instant: ClaimDepositQuote?
+    /**
+     * Claiming once the deposit matures.
+     */
+    public var mature: ClaimDepositQuote
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(amountSats: UInt64, 
+        /**
+         * Confirmations the deposit has now, 0 while unconfirmed.
+         */confirmations: UInt32, 
+        /**
+         * Claiming ahead of maturity, for a spread. Absent when the provider offers
+         * no such option for this deposit, and when claiming early would not actually
+         * be earlier: a deposit that has already matured, or a plan crediting no
+         * sooner than maturity would, is only ever the more expensive way to wait.
+         *
+         * Also absent when the provider could not be reached for a quote, which is not
+         * distinguished here from having nothing to offer: both mean there is no early
+         * claim to show right now, and the one worth retrying is the transient one.
+         *
+         * Priced regardless of the configured maximum claim fee, which is usually far
+         * below a spread. It is quoted so it can be offered, so claiming it needs a max
+         * fee of at least its `fee_sats`. Below that the claim fails with
+         * `MaxDepositClaimFeeExceeded` and the deposit waits for maturity.
+         */instant: ClaimDepositQuote?, 
+        /**
+         * Claiming once the deposit matures.
+         */mature: ClaimDepositQuote) {
+        self.amountSats = amountSats
+        self.confirmations = confirmations
+        self.instant = instant
+        self.mature = mature
+    }
+}
+
+#if compiler(>=6)
+extension FetchClaimDepositQuoteResponse: Sendable {}
+#endif
+
+
+extension FetchClaimDepositQuoteResponse: Equatable, Hashable {
+    public static func ==(lhs: FetchClaimDepositQuoteResponse, rhs: FetchClaimDepositQuoteResponse) -> Bool {
+        if lhs.amountSats != rhs.amountSats {
+            return false
+        }
+        if lhs.confirmations != rhs.confirmations {
+            return false
+        }
+        if lhs.instant != rhs.instant {
+            return false
+        }
+        if lhs.mature != rhs.mature {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(amountSats)
+        hasher.combine(confirmations)
+        hasher.combine(instant)
+        hasher.combine(mature)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFetchClaimDepositQuoteResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FetchClaimDepositQuoteResponse {
+        return
+            try FetchClaimDepositQuoteResponse(
+                amountSats: FfiConverterUInt64.read(from: &buf), 
+                confirmations: FfiConverterUInt32.read(from: &buf), 
+                instant: FfiConverterOptionTypeClaimDepositQuote.read(from: &buf), 
+                mature: FfiConverterTypeClaimDepositQuote.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FetchClaimDepositQuoteResponse, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.amountSats, into: &buf)
+        FfiConverterUInt32.write(value.confirmations, into: &buf)
+        FfiConverterOptionTypeClaimDepositQuote.write(value.instant, into: &buf)
+        FfiConverterTypeClaimDepositQuote.write(value.mature, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFetchClaimDepositQuoteResponse_lift(_ buf: RustBuffer) throws -> FetchClaimDepositQuoteResponse {
+    return try FfiConverterTypeFetchClaimDepositQuoteResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFetchClaimDepositQuoteResponse_lower(_ value: FetchClaimDepositQuoteResponse) -> RustBuffer {
+    return FfiConverterTypeFetchClaimDepositQuoteResponse.lower(value)
+}
+
+
 public struct FetchConversionLimitsRequest {
     /**
      * The type of conversion, either from or to Bitcoin.
@@ -20741,6 +21215,81 @@ public func FfiConverterTypeGetPaymentResponse_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeGetPaymentResponse_lower(_ value: GetPaymentResponse) -> RustBuffer {
     return FfiConverterTypeGetPaymentResponse.lower(value)
+}
+
+
+/**
+ * Options for [`get_spark_status`].
+ */
+public struct GetSparkStatusRequest {
+    /**
+     * Routes the status request through a SOCKS5 proxy. Pass the same value as
+     * [`Config::proxy`]: this call runs without an SDK instance, so it cannot
+     * pick the setting up on its own.
+     */
+    public var proxy: ProxyConfig?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Routes the status request through a SOCKS5 proxy. Pass the same value as
+         * [`Config::proxy`]: this call runs without an SDK instance, so it cannot
+         * pick the setting up on its own.
+         */proxy: ProxyConfig? = nil) {
+        self.proxy = proxy
+    }
+}
+
+#if compiler(>=6)
+extension GetSparkStatusRequest: Sendable {}
+#endif
+
+
+extension GetSparkStatusRequest: Equatable, Hashable {
+    public static func ==(lhs: GetSparkStatusRequest, rhs: GetSparkStatusRequest) -> Bool {
+        if lhs.proxy != rhs.proxy {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(proxy)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGetSparkStatusRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GetSparkStatusRequest {
+        return
+            try GetSparkStatusRequest(
+                proxy: FfiConverterOptionTypeProxyConfig.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GetSparkStatusRequest, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeProxyConfig.write(value.proxy, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetSparkStatusRequest_lift(_ buf: RustBuffer) throws -> GetSparkStatusRequest {
+    return try FfiConverterTypeGetSparkStatusRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetSparkStatusRequest_lower(_ value: GetSparkStatusRequest) -> RustBuffer {
+    return FfiConverterTypeGetSparkStatusRequest.lower(value)
 }
 
 
@@ -22247,7 +22796,7 @@ public func FfiConverterTypeListUnclaimedDepositsResponse_lower(_ value: ListUnc
 
 
 /**
- * Wrapped in a [`InputType::LnurlAuth`], this is the result of [`parse`](breez_sdk_common::input::parse) when given a LNURL-auth endpoint.
+ * Wrapped in a [`InputType::LnurlAuth`], this is the result of parsing a LNURL-auth endpoint.
  *
  * It represents the endpoint's parameters for the LNURL workflow.
  *
@@ -23292,6 +23841,13 @@ public struct LnurlWithdrawRequestDetails {
      * The maximum amount, in millisats, that this LNURL-withdraw endpoint accepts
      */
     public var maxWithdrawable: UInt64
+    /**
+     * The URL of the LNURL-withdraw endpoint these details were fetched from.
+     * Set when the details come from parsing an input; determines how far the
+     * withdraw flow trusts the endpoint-chosen `callback`. Absent or empty
+     * means no exemption: the callback is held to the public-host rules.
+     */
+    public var url: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -23301,12 +23857,19 @@ public struct LnurlWithdrawRequestDetails {
          */minWithdrawable: UInt64, 
         /**
          * The maximum amount, in millisats, that this LNURL-withdraw endpoint accepts
-         */maxWithdrawable: UInt64) {
+         */maxWithdrawable: UInt64, 
+        /**
+         * The URL of the LNURL-withdraw endpoint these details were fetched from.
+         * Set when the details come from parsing an input; determines how far the
+         * withdraw flow trusts the endpoint-chosen `callback`. Absent or empty
+         * means no exemption: the callback is held to the public-host rules.
+         */url: String = "") {
         self.callback = callback
         self.k1 = k1
         self.defaultDescription = defaultDescription
         self.minWithdrawable = minWithdrawable
         self.maxWithdrawable = maxWithdrawable
+        self.url = url
     }
 }
 
@@ -23332,6 +23895,9 @@ extension LnurlWithdrawRequestDetails: Equatable, Hashable {
         if lhs.maxWithdrawable != rhs.maxWithdrawable {
             return false
         }
+        if lhs.url != rhs.url {
+            return false
+        }
         return true
     }
 
@@ -23341,6 +23907,7 @@ extension LnurlWithdrawRequestDetails: Equatable, Hashable {
         hasher.combine(defaultDescription)
         hasher.combine(minWithdrawable)
         hasher.combine(maxWithdrawable)
+        hasher.combine(url)
     }
 }
 
@@ -23357,7 +23924,8 @@ public struct FfiConverterTypeLnurlWithdrawRequestDetails: FfiConverterRustBuffe
                 k1: FfiConverterString.read(from: &buf), 
                 defaultDescription: FfiConverterString.read(from: &buf), 
                 minWithdrawable: FfiConverterUInt64.read(from: &buf), 
-                maxWithdrawable: FfiConverterUInt64.read(from: &buf)
+                maxWithdrawable: FfiConverterUInt64.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf)
         )
     }
 
@@ -23367,6 +23935,7 @@ public struct FfiConverterTypeLnurlWithdrawRequestDetails: FfiConverterRustBuffe
         FfiConverterString.write(value.defaultDescription, into: &buf)
         FfiConverterUInt64.write(value.minWithdrawable, into: &buf)
         FfiConverterUInt64.write(value.maxWithdrawable, into: &buf)
+        FfiConverterString.write(value.url, into: &buf)
     }
 }
 
@@ -23897,8 +24466,9 @@ public struct MysqlStorageConfig {
     public var recycleTimeoutSecs: UInt64?
     /**
      * Custom CA certificate(s) in PEM format for server verification.
-     * Only used when the connection string requests TLS
-     * (`ssl-mode=verify_ca` or `ssl-mode=verify_identity`).
+     * If unset, Mozilla's root certificate store is used. Applies to every
+     * verifying `ssl-mode` (`preferred`, `required`, `verify_ca`,
+     * `verify_identity`).
      */
     public var rootCaPem: String?
     /**
@@ -23936,8 +24506,9 @@ public struct MysqlStorageConfig {
          */recycleTimeoutSecs: UInt64?, 
         /**
          * Custom CA certificate(s) in PEM format for server verification.
-         * Only used when the connection string requests TLS
-         * (`ssl-mode=verify_ca` or `ssl-mode=verify_identity`).
+         * If unset, Mozilla's root certificate store is used. Applies to every
+         * verifying `ssl-mode` (`preferred`, `required`, `verify_ca`,
+         * `verify_identity`).
          */rootCaPem: String?, 
         /**
          * Whether the SDK should run schema migrations on startup.
@@ -24041,6 +24612,81 @@ public func FfiConverterTypeMysqlStorageConfig_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeMysqlStorageConfig_lower(_ value: MysqlStorageConfig) -> RustBuffer {
     return FfiConverterTypeMysqlStorageConfig.lower(value)
+}
+
+
+/**
+ * Options for [`new_rest_chain_service`].
+ */
+public struct NewRestChainServiceRequest {
+    /**
+     * Routes the chain service through a SOCKS5 proxy. Pass the same value as
+     * [`Config::proxy`](crate::Config::proxy): this service is built outside
+     * the SDK, so it cannot pick the setting up on its own.
+     */
+    public var proxy: ProxyConfig?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Routes the chain service through a SOCKS5 proxy. Pass the same value as
+         * [`Config::proxy`](crate::Config::proxy): this service is built outside
+         * the SDK, so it cannot pick the setting up on its own.
+         */proxy: ProxyConfig? = nil) {
+        self.proxy = proxy
+    }
+}
+
+#if compiler(>=6)
+extension NewRestChainServiceRequest: Sendable {}
+#endif
+
+
+extension NewRestChainServiceRequest: Equatable, Hashable {
+    public static func ==(lhs: NewRestChainServiceRequest, rhs: NewRestChainServiceRequest) -> Bool {
+        if lhs.proxy != rhs.proxy {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(proxy)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNewRestChainServiceRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NewRestChainServiceRequest {
+        return
+            try NewRestChainServiceRequest(
+                proxy: FfiConverterOptionTypeProxyConfig.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NewRestChainServiceRequest, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeProxyConfig.write(value.proxy, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNewRestChainServiceRequest_lift(_ buf: RustBuffer) throws -> NewRestChainServiceRequest {
+    return try FfiConverterTypeNewRestChainServiceRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNewRestChainServiceRequest_lower(_ value: NewRestChainServiceRequest) -> RustBuffer {
+    return FfiConverterTypeNewRestChainServiceRequest.lower(value)
 }
 
 
@@ -24272,6 +24918,17 @@ public struct PasskeyConfig {
      * provider.
      */
     public var providerOptions: PasskeyProviderOptions?
+    /**
+     * Routes the Nostr relay connections that store wallet labels through a
+     * SOCKS5 proxy. Pass the same value as [`Config::proxy`](crate::Config::proxy):
+     * the passkey client is built before the SDK, so it cannot pick the setting
+     * up on its own.
+     *
+     * Relay connections do not support proxy authentication, so a proxy
+     * carrying a username and password is rejected when the client is
+     * built.
+     */
+    public var proxy: ProxyConfig?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -24284,9 +24941,20 @@ public struct PasskeyConfig {
          * Relying Party and user identity for the built-in provider, used
          * on the zero-config path. Ignored when you inject your own
          * provider.
-         */providerOptions: PasskeyProviderOptions? = nil) {
+         */providerOptions: PasskeyProviderOptions? = nil, 
+        /**
+         * Routes the Nostr relay connections that store wallet labels through a
+         * SOCKS5 proxy. Pass the same value as [`Config::proxy`](crate::Config::proxy):
+         * the passkey client is built before the SDK, so it cannot pick the setting
+         * up on its own.
+         *
+         * Relay connections do not support proxy authentication, so a proxy
+         * carrying a username and password is rejected when the client is
+         * built.
+         */proxy: ProxyConfig? = nil) {
         self.defaultLabel = defaultLabel
         self.providerOptions = providerOptions
+        self.proxy = proxy
     }
 }
 
@@ -24303,12 +24971,16 @@ extension PasskeyConfig: Equatable, Hashable {
         if lhs.providerOptions != rhs.providerOptions {
             return false
         }
+        if lhs.proxy != rhs.proxy {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(defaultLabel)
         hasher.combine(providerOptions)
+        hasher.combine(proxy)
     }
 }
 
@@ -24322,13 +24994,15 @@ public struct FfiConverterTypePasskeyConfig: FfiConverterRustBuffer {
         return
             try PasskeyConfig(
                 defaultLabel: FfiConverterOptionString.read(from: &buf), 
-                providerOptions: FfiConverterOptionTypePasskeyProviderOptions.read(from: &buf)
+                providerOptions: FfiConverterOptionTypePasskeyProviderOptions.read(from: &buf), 
+                proxy: FfiConverterOptionTypeProxyConfig.read(from: &buf)
         )
     }
 
     public static func write(_ value: PasskeyConfig, into buf: inout [UInt8]) {
         FfiConverterOptionString.write(value.defaultLabel, into: &buf)
         FfiConverterOptionTypePasskeyProviderOptions.write(value.providerOptions, into: &buf)
+        FfiConverterOptionTypeProxyConfig.write(value.proxy, into: &buf)
     }
 }
 
@@ -25175,8 +25849,8 @@ public struct PostgresStorageConfig {
     public var queueMode: PoolQueueMode
     /**
      * Custom CA certificate(s) in PEM format for server verification.
-     * If `None`, uses Mozilla's root certificate store (via webpki-roots).
-     * Only used with `sslmode=verify-ca` or `sslmode=verify-full`.
+     * If unset, Mozilla's root certificate store is used. Applies to every
+     * verifying `sslmode` (`prefer`, `require`, `verify-ca`, `verify-full`).
      */
     public var rootCaPem: String?
     /**
@@ -25221,8 +25895,8 @@ public struct PostgresStorageConfig {
          */queueMode: PoolQueueMode, 
         /**
          * Custom CA certificate(s) in PEM format for server verification.
-         * If `None`, uses Mozilla's root certificate store (via webpki-roots).
-         * Only used with `sslmode=verify-ca` or `sslmode=verify-full`.
+         * If unset, Mozilla's root certificate store is used. Applies to every
+         * verifying `sslmode` (`prefer`, `require`, `verify-ca`, `verify-full`).
          */rootCaPem: String?, 
         /**
          * Whether the SDK should run schema migrations on startup.
@@ -26726,6 +27400,120 @@ public func FfiConverterTypeProvisionalPayment_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeProvisionalPayment_lower(_ value: ProvisionalPayment) -> RustBuffer {
     return FfiConverterTypeProvisionalPayment.lower(value)
+}
+
+
+/**
+ * A SOCKS5 proxy carrying the connections the SDK opens.
+ *
+ * Hostnames are resolved by the proxy rather than locally, so a DNS query
+ * never discloses which host is being reached. A connection that cannot be
+ * established through the proxy fails: the SDK never falls back to a direct
+ * one.
+ *
+ * Not supported on WASM, where the browser owns connection setup and exposes
+ * no proxy control. In Node, route the SDK by installing a proxy dispatcher
+ * on the global `fetch` instead.
+ */
+public struct ProxyConfig {
+    /**
+     * Proxy host. An IP address, or a name resolvable locally: reaching the
+     * proxy is the one lookup that cannot itself go through the proxy.
+     */
+    public var host: String
+    public var port: UInt16
+    /**
+     * Username for SOCKS5 username/password authentication. Authentication is
+     * only offered when both this and `password` are set.
+     */
+    public var username: String?
+    public var password: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Proxy host. An IP address, or a name resolvable locally: reaching the
+         * proxy is the one lookup that cannot itself go through the proxy.
+         */host: String, port: UInt16, 
+        /**
+         * Username for SOCKS5 username/password authentication. Authentication is
+         * only offered when both this and `password` are set.
+         */username: String? = nil, password: String? = nil) {
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+    }
+}
+
+#if compiler(>=6)
+extension ProxyConfig: Sendable {}
+#endif
+
+
+extension ProxyConfig: Equatable, Hashable {
+    public static func ==(lhs: ProxyConfig, rhs: ProxyConfig) -> Bool {
+        if lhs.host != rhs.host {
+            return false
+        }
+        if lhs.port != rhs.port {
+            return false
+        }
+        if lhs.username != rhs.username {
+            return false
+        }
+        if lhs.password != rhs.password {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(host)
+        hasher.combine(port)
+        hasher.combine(username)
+        hasher.combine(password)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProxyConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProxyConfig {
+        return
+            try ProxyConfig(
+                host: FfiConverterString.read(from: &buf), 
+                port: FfiConverterUInt16.read(from: &buf), 
+                username: FfiConverterOptionString.read(from: &buf), 
+                password: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProxyConfig, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.host, into: &buf)
+        FfiConverterUInt16.write(value.port, into: &buf)
+        FfiConverterOptionString.write(value.username, into: &buf)
+        FfiConverterOptionString.write(value.password, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProxyConfig_lift(_ buf: RustBuffer) throws -> ProxyConfig {
+    return try FfiConverterTypeProxyConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProxyConfig_lower(_ value: ProxyConfig) -> RustBuffer {
+    return FfiConverterTypeProxyConfig.lower(value)
 }
 
 
@@ -28476,6 +29264,12 @@ public struct SdkContextConfig {
      */
     public var connectionsPerOperator: UInt32?
     /**
+     * Routes the connections opened by this context's shared clients through
+     * a SOCKS5 proxy. Must match the `proxy` on the `Config` of every SDK
+     * built from this context.
+     */
+    public var proxy: ProxyConfig?
+    /**
      * Shared storage backend for SDKs built from this context. When set,
      * every SDK built from the context reuses it (and its database
      * connection pool). Construct via
@@ -28506,6 +29300,11 @@ public struct SdkContextConfig {
          * requests across them.
          */connectionsPerOperator: UInt32? = nil, 
         /**
+         * Routes the connections opened by this context's shared clients through
+         * a SOCKS5 proxy. Must match the `proxy` on the `Config` of every SDK
+         * built from this context.
+         */proxy: ProxyConfig? = nil, 
+        /**
          * Shared storage backend for SDKs built from this context. When set,
          * every SDK built from the context reuses it (and its database
          * connection pool). Construct via
@@ -28517,6 +29316,7 @@ public struct SdkContextConfig {
         self.network = network
         self.apiKey = apiKey
         self.connectionsPerOperator = connectionsPerOperator
+        self.proxy = proxy
         self.storage = storage
     }
 }
@@ -28537,6 +29337,7 @@ public struct FfiConverterTypeSdkContextConfig: FfiConverterRustBuffer {
                 network: FfiConverterTypeNetwork.read(from: &buf), 
                 apiKey: FfiConverterOptionString.read(from: &buf), 
                 connectionsPerOperator: FfiConverterOptionUInt32.read(from: &buf), 
+                proxy: FfiConverterOptionTypeProxyConfig.read(from: &buf), 
                 storage: FfiConverterOptionTypeStorageBackend.read(from: &buf)
         )
     }
@@ -28545,6 +29346,7 @@ public struct FfiConverterTypeSdkContextConfig: FfiConverterRustBuffer {
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterOptionString.write(value.apiKey, into: &buf)
         FfiConverterOptionUInt32.write(value.connectionsPerOperator, into: &buf)
+        FfiConverterOptionTypeProxyConfig.write(value.proxy, into: &buf)
         FfiConverterOptionTypeStorageBackend.write(value.storage, into: &buf)
     }
 }
@@ -32219,6 +33021,12 @@ public struct TurnkeyConfig {
      * greater than 0 when set: 0 is rejected at connect.
      */
     public var maxRps: UInt32?
+    /**
+     * Routes Turnkey requests through a SOCKS5 proxy. Pass the same value as
+     * [`Config::proxy`](crate::Config::proxy): the signer is built before the
+     * SDK, so it cannot pick the setting up on its own.
+     */
+    public var proxy: ProxyConfig?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -32272,7 +33080,12 @@ public struct TurnkeyConfig {
          * Unset uses Turnkey's documented per-suborganization cap of 10 RPS; set it
          * to the account's actual limit if a different one is provisioned. Must be
          * greater than 0 when set: 0 is rejected at connect.
-         */maxRps: UInt32? = nil) {
+         */maxRps: UInt32? = nil, 
+        /**
+         * Routes Turnkey requests through a SOCKS5 proxy. Pass the same value as
+         * [`Config::proxy`](crate::Config::proxy): the signer is built before the
+         * SDK, so it cannot pick the setting up on its own.
+         */proxy: ProxyConfig? = nil) {
         self.baseUrl = baseUrl
         self.organizationId = organizationId
         self.apiPublicKey = apiPublicKey
@@ -32283,6 +33096,7 @@ public struct TurnkeyConfig {
         self.identityPublicKey = identityPublicKey
         self.retry = retry
         self.maxRps = maxRps
+        self.proxy = proxy
     }
 }
 
@@ -32323,6 +33137,9 @@ extension TurnkeyConfig: Equatable, Hashable {
         if lhs.maxRps != rhs.maxRps {
             return false
         }
+        if lhs.proxy != rhs.proxy {
+            return false
+        }
         return true
     }
 
@@ -32337,6 +33154,7 @@ extension TurnkeyConfig: Equatable, Hashable {
         hasher.combine(identityPublicKey)
         hasher.combine(retry)
         hasher.combine(maxRps)
+        hasher.combine(proxy)
     }
 }
 
@@ -32358,7 +33176,8 @@ public struct FfiConverterTypeTurnkeyConfig: FfiConverterRustBuffer {
                 accountNumber: FfiConverterOptionUInt32.read(from: &buf), 
                 identityPublicKey: FfiConverterOptionString.read(from: &buf), 
                 retry: FfiConverterOptionTypeTurnkeyRetryConfig.read(from: &buf), 
-                maxRps: FfiConverterOptionUInt32.read(from: &buf)
+                maxRps: FfiConverterOptionUInt32.read(from: &buf), 
+                proxy: FfiConverterOptionTypeProxyConfig.read(from: &buf)
         )
     }
 
@@ -32373,6 +33192,7 @@ public struct FfiConverterTypeTurnkeyConfig: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.identityPublicKey, into: &buf)
         FfiConverterOptionTypeTurnkeyRetryConfig.write(value.retry, into: &buf)
         FfiConverterOptionUInt32.write(value.maxRps, into: &buf)
+        FfiConverterOptionTypeProxyConfig.write(value.proxy, into: &buf)
     }
 }
 
@@ -37676,113 +38496,18 @@ extension InputType: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
- * Why an instant (0-conf) claim was declined.
- */
-
-public enum InstantClaimDeclineReason {
-    
-    /**
-     * The SSP offered no 0-conf fulfillment plan for the deposit.
-     */
-    case noPlan
-    /**
-     * The SSP spread exceeded the ceiling (`max_bps`). The instant claim can be
-     * retried with a higher ceiling. `quoted_bps` / `quoted_sats` are the spread
-     * the SSP quoted at the time.
-     */
-    case feeExceeded(maxBps: UInt32, quotedBps: UInt32, quotedSats: UInt64
-    )
-    /**
-     * The claim submission failed with an unknown outcome.
-     */
-    case submissionFailed
-}
-
-
-#if compiler(>=6)
-extension InstantClaimDeclineReason: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeInstantClaimDeclineReason: FfiConverterRustBuffer {
-    typealias SwiftType = InstantClaimDeclineReason
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> InstantClaimDeclineReason {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .noPlan
-        
-        case 2: return .feeExceeded(maxBps: try FfiConverterUInt32.read(from: &buf), quotedBps: try FfiConverterUInt32.read(from: &buf), quotedSats: try FfiConverterUInt64.read(from: &buf)
-        )
-        
-        case 3: return .submissionFailed
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: InstantClaimDeclineReason, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .noPlan:
-            writeInt(&buf, Int32(1))
-        
-        
-        case let .feeExceeded(maxBps,quotedBps,quotedSats):
-            writeInt(&buf, Int32(2))
-            FfiConverterUInt32.write(maxBps, into: &buf)
-            FfiConverterUInt32.write(quotedBps, into: &buf)
-            FfiConverterUInt64.write(quotedSats, into: &buf)
-            
-        
-        case .submissionFailed:
-            writeInt(&buf, Int32(3))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeInstantClaimDeclineReason_lift(_ buf: RustBuffer) throws -> InstantClaimDeclineReason {
-    return try FfiConverterTypeInstantClaimDeclineReason.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeInstantClaimDeclineReason_lower(_ value: InstantClaimDeclineReason) -> RustBuffer {
-    return FfiConverterTypeInstantClaimDeclineReason.lower(value)
-}
-
-
-extension InstantClaimDeclineReason: Equatable, Hashable {}
-
-
-
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-/**
- * State of an instant (0-conf) claim attempt on a deposit.
+ * State of an instant claim attempt on a deposit.
  */
 
 public enum InstantClaimStatus {
     
     /**
-     * The instant claim was declined. The deposit falls through to the normal
-     * claim once it matures; the background sync may re-attempt an instant claim
-     * only when the reason permits (see [`InstantClaimDeclineReason`]).
+     * The early claim was declined and the deposit falls through to the claim at
+     * maturity. `max_fee_sats` is the ceiling that declined it, unset when the
+     * decline was for a reason no ceiling will fix. `confirmations` is the depth
+     * it was declined at.
      */
-    case declined(reason: InstantClaimDeclineReason
+    case declined(maxFeeSats: UInt64?, confirmations: UInt32
     )
     /**
      * An instant claim was submitted and is settling. The deposit must not be
@@ -37808,7 +38533,7 @@ public struct FfiConverterTypeInstantClaimStatus: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .declined(reason: try FfiConverterTypeInstantClaimDeclineReason.read(from: &buf)
+        case 1: return .declined(maxFeeSats: try FfiConverterOptionUInt64.read(from: &buf), confirmations: try FfiConverterUInt32.read(from: &buf)
         )
         
         case 2: return .submitted(claimId: try FfiConverterString.read(from: &buf)
@@ -37822,9 +38547,10 @@ public struct FfiConverterTypeInstantClaimStatus: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .declined(reason):
+        case let .declined(maxFeeSats,confirmations):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeInstantClaimDeclineReason.write(reason, into: &buf)
+            FfiConverterOptionUInt64.write(maxFeeSats, into: &buf)
+            FfiConverterUInt32.write(confirmations, into: &buf)
             
         
         case let .submitted(claimId):
@@ -38683,6 +39409,13 @@ public enum PasskeyError: Swift.Error {
      */
     case CreatedButNotDerived(credentialId: Data, source: PrfProviderError
     )
+    /**
+     * The client was configured in a way it cannot honour, so no
+     * operation would succeed. Not retryable until the integrator
+     * changes the configuration.
+     */
+    case InvalidConfig(String
+    )
     case Generic(String
     )
 }
@@ -38729,7 +39462,10 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
             credentialId: try FfiConverterData.read(from: &buf), 
             source: try FfiConverterTypePrfProviderError.read(from: &buf)
             )
-        case 10: return .Generic(
+        case 10: return .InvalidConfig(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 11: return .Generic(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -38790,8 +39526,13 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
             FfiConverterTypePrfProviderError.write(source, into: &buf)
             
         
-        case let .Generic(v1):
+        case let .InvalidConfig(v1):
             writeInt(&buf, Int32(10))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .Generic(v1):
+            writeInt(&buf, Int32(11))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -40206,6 +40947,92 @@ extension ReceivePaymentMethod: Equatable, Hashable {}
 
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * State of the deposit refund broadcast.
+ */
+
+public enum RefundState {
+    
+    /**
+     * The refund is signed and stored but has not been seen on the network.
+     * `last_error` carries the reason the most recent broadcast was refused,
+     * unset while none has been refused. A refund whose fee is under the
+     * network's current minimum stays here until it is re-created at a higher
+     * fee.
+     */
+    case broadcastPending(lastError: String?
+    )
+    /**
+     * The refund has been accepted by the network and is waiting to confirm.
+     */
+    case broadcast
+}
+
+
+#if compiler(>=6)
+extension RefundState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRefundState: FfiConverterRustBuffer {
+    typealias SwiftType = RefundState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RefundState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .broadcastPending(lastError: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 2: return .broadcast
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RefundState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .broadcastPending(lastError):
+            writeInt(&buf, Int32(1))
+            FfiConverterOptionString.write(lastError, into: &buf)
+            
+        
+        case .broadcast:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRefundState_lift(_ buf: RustBuffer) throws -> RefundState {
+    return try FfiConverterTypeRefundState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRefundState_lower(_ value: RefundState) -> RustBuffer {
+    return FfiConverterTypeRefundState.lower(value)
+}
+
+
+extension RefundState: Equatable, Hashable {}
+
+
+
+
+
+
 
 /**
  * Error type for the `BreezSdk`
@@ -40244,6 +41071,17 @@ public enum SdkError: Swift.Error {
     case MaxDepositClaimFeeExceeded(tx: String, vout: UInt32, maxFee: Fee?, requiredFeeSats: UInt64, requiredFeeRateSatPerVbyte: UInt64
     )
     case MissingUtxo(tx: String, vout: UInt32
+    )
+    /**
+     * Another claim on this deposit is already running.
+     */
+    case DepositClaimInProgress(tx: String, vout: UInt32
+    )
+    /**
+     * A refund for this deposit is already on the network, and the requested
+     * replacement does not pay enough to displace it.
+     */
+    case RefundReplacementFeeTooLow(pendingFeeSats: UInt64, requiredFeeSats: UInt64
     )
     case LnurlError(String
     )
@@ -40320,22 +41158,30 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             tx: try FfiConverterString.read(from: &buf), 
             vout: try FfiConverterUInt32.read(from: &buf)
             )
-        case 10: return .LnurlError(
+        case 10: return .DepositClaimInProgress(
+            tx: try FfiConverterString.read(from: &buf), 
+            vout: try FfiConverterUInt32.read(from: &buf)
+            )
+        case 11: return .RefundReplacementFeeTooLow(
+            pendingFeeSats: try FfiConverterUInt64.read(from: &buf), 
+            requiredFeeSats: try FfiConverterUInt64.read(from: &buf)
+            )
+        case 12: return .LnurlError(
             try FfiConverterString.read(from: &buf)
             )
-        case 11: return .Signer(
+        case 13: return .Signer(
             try FfiConverterString.read(from: &buf)
             )
-        case 12: return .OptimizationAlreadyRunning
-        case 13: return .OptimizationCancelled
-        case 14: return .InsufficientCpfpFunds(
+        case 14: return .OptimizationAlreadyRunning
+        case 15: return .OptimizationCancelled
+        case 16: return .InsufficientCpfpFunds(
             requiredSat: try FfiConverterUInt64.read(from: &buf)
             )
-        case 15: return .FundingUtxoConflict(
+        case 17: return .FundingUtxoConflict(
             txid: try FfiConverterString.read(from: &buf), 
             vout: try FfiConverterUInt32.read(from: &buf)
             )
-        case 16: return .Generic(
+        case 18: return .Generic(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -40400,37 +41246,49 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             FfiConverterUInt32.write(vout, into: &buf)
             
         
-        case let .LnurlError(v1):
+        case let .DepositClaimInProgress(tx,vout):
             writeInt(&buf, Int32(10))
+            FfiConverterString.write(tx, into: &buf)
+            FfiConverterUInt32.write(vout, into: &buf)
+            
+        
+        case let .RefundReplacementFeeTooLow(pendingFeeSats,requiredFeeSats):
+            writeInt(&buf, Int32(11))
+            FfiConverterUInt64.write(pendingFeeSats, into: &buf)
+            FfiConverterUInt64.write(requiredFeeSats, into: &buf)
+            
+        
+        case let .LnurlError(v1):
+            writeInt(&buf, Int32(12))
             FfiConverterString.write(v1, into: &buf)
             
         
         case let .Signer(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(13))
             FfiConverterString.write(v1, into: &buf)
             
         
         case .OptimizationAlreadyRunning:
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(14))
         
         
         case .OptimizationCancelled:
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(15))
         
         
         case let .InsufficientCpfpFunds(requiredSat):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(16))
             FfiConverterUInt64.write(requiredSat, into: &buf)
             
         
         case let .FundingUtxoConflict(txid,vout):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(17))
             FfiConverterString.write(txid, into: &buf)
             FfiConverterUInt32.write(vout, into: &buf)
             
         
         case let .Generic(v1):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(18))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -42966,9 +43824,17 @@ public enum UpdateDepositPayload {
     
     case claimError(error: DepositClaimError
     )
-    case refund(refundTxid: String, refundTx: String
+    case refund(refundTxid: String, refundTx: String, state: RefundState
     )
     case instantClaim(status: InstantClaimStatus
+    )
+    /**
+     * Moves an existing refund between states without touching the refund
+     * itself or the last claim error. Applies only while `refund_txid` is still
+     * the stored refund, so a state decided against one refund cannot land on a
+     * newer one.
+     */
+    case refundBroadcastState(refundTxid: String, state: RefundState
     )
 }
 
@@ -42990,10 +43856,13 @@ public struct FfiConverterTypeUpdateDepositPayload: FfiConverterRustBuffer {
         case 1: return .claimError(error: try FfiConverterTypeDepositClaimError.read(from: &buf)
         )
         
-        case 2: return .refund(refundTxid: try FfiConverterString.read(from: &buf), refundTx: try FfiConverterString.read(from: &buf)
+        case 2: return .refund(refundTxid: try FfiConverterString.read(from: &buf), refundTx: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRefundState.read(from: &buf)
         )
         
         case 3: return .instantClaim(status: try FfiConverterTypeInstantClaimStatus.read(from: &buf)
+        )
+        
+        case 4: return .refundBroadcastState(refundTxid: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRefundState.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -43009,15 +43878,22 @@ public struct FfiConverterTypeUpdateDepositPayload: FfiConverterRustBuffer {
             FfiConverterTypeDepositClaimError.write(error, into: &buf)
             
         
-        case let .refund(refundTxid,refundTx):
+        case let .refund(refundTxid,refundTx,state):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(refundTxid, into: &buf)
             FfiConverterString.write(refundTx, into: &buf)
+            FfiConverterTypeRefundState.write(state, into: &buf)
             
         
         case let .instantClaim(status):
             writeInt(&buf, Int32(3))
             FfiConverterTypeInstantClaimStatus.write(status, into: &buf)
+            
+        
+        case let .refundBroadcastState(refundTxid,state):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(refundTxid, into: &buf)
+            FfiConverterTypeRefundState.write(state, into: &buf)
             
         }
     }
@@ -43559,6 +44435,30 @@ fileprivate struct FfiConverterOptionTypeStorageBackend: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeClaimDepositQuote: FfiConverterRustBuffer {
+    typealias SwiftType = ClaimDepositQuote?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeClaimDepositQuote.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeClaimDepositQuote.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeConversionDetails: FfiConverterRustBuffer {
     typealias SwiftType = ConversionDetails?
 
@@ -43911,6 +44811,30 @@ fileprivate struct FfiConverterOptionTypePayment: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypePayment.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeProxyConfig: FfiConverterRustBuffer {
+    typealias SwiftType = ProxyConfig?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeProxyConfig.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeProxyConfig.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -44463,6 +45387,30 @@ fileprivate struct FfiConverterOptionTypePaymentDetails: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypePaymentDetails.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeRefundState: FfiConverterRustBuffer {
+    typealias SwiftType = RefundState?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeRefundState.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeRefundState.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -46833,11 +47781,11 @@ public func defaultStorage(storageDir: String) -> StorageBackend  {
  * This function queries the Spark status API and returns the worst status
  * across the Spark Operators and SSP services.
  */
-public func getSparkStatus()async throws  -> SparkStatus  {
+public func getSparkStatus(request: GetSparkStatusRequest)async throws  -> SparkStatus  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_func_get_spark_status(
+                uniffi_breez_sdk_spark_fn_func_get_spark_status(FfiConverterTypeGetSparkStatusRequest_lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
@@ -46875,21 +47823,21 @@ public func mysqlStorage(config: MysqlStorageConfig)throws  -> StorageBackend  {
  * SDK instances. All SDKs sharing the service must use the same `network`.
  *
  * For one-off, non-shared use, prefer
- * [`SdkBuilder::with_rest_chain_service`](crate::SdkBuilder::with_rest_chain_service).
+ * [`SdkBuilder::with_rest_chain_service`](crate::SdkBuilder::with_rest_chain_service),
+ * which builds on the SDK's own client and inherits its proxy automatically.
  */
-public func newRestChainService(url: String, network: Network, apiType: ChainApiType, credentials: Credentials?)async  -> BitcoinChainService  {
+public func newRestChainService(url: String, network: Network, apiType: ChainApiType, credentials: Credentials?, request: NewRestChainServiceRequest)async throws  -> BitcoinChainService  {
     return
-        try!  await uniffiRustCallAsync(
+        try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_breez_sdk_spark_fn_func_new_rest_chain_service(FfiConverterString.lower(url),FfiConverterTypeNetwork_lower(network),FfiConverterTypeChainApiType_lower(apiType),FfiConverterOptionTypeCredentials.lower(credentials)
+                uniffi_breez_sdk_spark_fn_func_new_rest_chain_service(FfiConverterString.lower(url),FfiConverterTypeNetwork_lower(network),FfiConverterTypeChainApiType_lower(apiType),FfiConverterOptionTypeCredentials.lower(credentials),FfiConverterTypeNewRestChainServiceRequest_lower(request)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_pointer,
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_pointer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_pointer,
             liftFunc: FfiConverterTypeBitcoinChainService_lift,
-            errorHandler: nil
-            
+            errorHandler: FfiConverterTypeSdkError_lift
         )
 }
 /**
@@ -46989,7 +47937,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_default_storage() != 56226) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_func_get_spark_status() != 62888) {
+    if (uniffi_breez_sdk_spark_checksum_func_get_spark_status() != 51200) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_init_logging() != 8518) {
@@ -46998,7 +47946,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_mysql_storage() != 49812) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_func_new_rest_chain_service() != 23177) {
+    if (uniffi_breez_sdk_spark_checksum_func_new_rest_chain_service() != 53269) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_new_shared_sdk_context() != 7027) {
@@ -47019,16 +47967,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_transaction_status() != 53546) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_transaction_hex() != 16866) {
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_tip_height() != 5182) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_outspend() != 42521) {
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_transaction_hex() != 35307) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_broadcast_transaction() != 13500) {
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_get_outspend() != 49726) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_recommended_fees() != 50885) {
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_broadcast_transaction() != 54160) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_bitcoinchainservice_recommended_fees() != 31747) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_add_contact() != 26497) {
@@ -47077,6 +48028,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_export_unilateral_exit_state() != 63178) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_fetch_claim_deposit_quote() != 30349) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_fetch_conversion_limits() != 50958) {
@@ -47508,7 +48462,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_tokenissuer_unfreeze_issuer_token() != 65025) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_constructor_passkeyclient_new() != 51278) {
+    if (uniffi_breez_sdk_spark_checksum_constructor_passkeyclient_new() != 2983) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_constructor_sdkbuilder_new() != 65435) {
