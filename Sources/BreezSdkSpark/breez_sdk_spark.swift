@@ -1690,7 +1690,13 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     func signMessage(request: SignMessageRequest) async throws  -> SignMessageResponse
     
     /**
-     * Synchronizes the wallet with the Spark network
+     * Synchronizes the wallet with the Spark network.
+     *
+     * Also collects the data a unilateral exit needs for any leaf still missing
+     * it, and waits for that before returning. This happens regardless of
+     * [`exit_chain_auto_fetch_enabled`](crate::Config::exit_chain_auto_fetch_enabled),
+     * which governs only the automatic collection: syncing is how to run one at
+     * a moment of your choosing with that turned off.
      */
     func syncWallet(request: SyncWalletRequest) async throws  -> SyncWalletResponse
     
@@ -3073,7 +3079,13 @@ open func signMessage(request: SignMessageRequest)async throws  -> SignMessageRe
 }
     
     /**
-     * Synchronizes the wallet with the Spark network
+     * Synchronizes the wallet with the Spark network.
+     *
+     * Also collects the data a unilateral exit needs for any leaf still missing
+     * it, and waits for that before returning. This happens regardless of
+     * [`exit_chain_auto_fetch_enabled`](crate::Config::exit_chain_auto_fetch_enabled),
+     * which governs only the automatic collection: syncing is how to run one at
+     * a moment of your choosing with that turned off.
      */
 open func syncWallet(request: SyncWalletRequest)async throws  -> SyncWalletResponse  {
     return
@@ -4752,7 +4764,7 @@ public protocol ExternalSparkSigner: AnyObject, Sendable {
     func getIdentityPublicKey() async throws  -> PublicKeyBytes
     
     /**
-     * The signing public key for a tree leaf.
+     * The public key of the leaf signing key derived from `leaf_id`.
      */
     func getPublicKeyForLeaf(leafId: ExternalTreeNodeId) async throws  -> PublicKeyBytes
     
@@ -4781,7 +4793,8 @@ public protocol ExternalSparkSigner: AnyObject, Sendable {
     
     /**
      * Schnorr-sign `sighash` to spend a tree leaf's P2TR refund output as a
-     * BIP341 key-path spend (empty script tree).
+     * BIP341 key-path spend (empty script tree), with the leaf signing key
+     * derived from `leaf_id`.
      */
     func signLeafRefundSpend(leafId: ExternalTreeNodeId, sighash: Data) async throws  -> SchnorrSignatureBytes
     
@@ -4912,7 +4925,7 @@ open func getIdentityPublicKey()async throws  -> PublicKeyBytes  {
 }
     
     /**
-     * The signing public key for a tree leaf.
+     * The public key of the leaf signing key derived from `leaf_id`.
      */
 open func getPublicKeyForLeaf(leafId: ExternalTreeNodeId)async throws  -> PublicKeyBytes  {
     return
@@ -5006,7 +5019,8 @@ open func signMessage(message: Data)async throws  -> EcdsaSignatureBytes  {
     
     /**
      * Schnorr-sign `sighash` to spend a tree leaf's P2TR refund output as a
-     * BIP341 key-path spend (empty script tree).
+     * BIP341 key-path spend (empty script tree), with the leaf signing key
+     * derived from `leaf_id`.
      */
 open func signLeafRefundSpend(leafId: ExternalTreeNodeId, sighash: Data)async throws  -> SchnorrSignatureBytes  {
     return
@@ -8137,7 +8151,7 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
      * Sets the account number for key derivation. All wallet keys derive from
      * the seed at `m/8797555'/<account number>'`, so each account number
      * yields an independent wallet from the same seed. Defaults to 0 on
-     * Regtest and 1 on all other networks when unset.
+     * Regtest and Signet, and 1 on Mainnet when unset.
      * Arguments:
      * - `account_number`: The account number in the derivation path.
      */
@@ -8377,7 +8391,7 @@ open func build()async throws  -> BreezSdk  {
      * Sets the account number for key derivation. All wallet keys derive from
      * the seed at `m/8797555'/<account number>'`, so each account number
      * yields an independent wallet from the same seed. Defaults to 0 on
-     * Regtest and 1 on all other networks when unset.
+     * Regtest and Signet, and 1 on Mainnet when unset.
      * Arguments:
      * - `account_number`: The account number in the derivation path.
      */
@@ -9305,6 +9319,18 @@ public protocol Storage: AnyObject, Sendable {
      */
     func updateDeposit(txid: String, vout: UInt32, payload: UpdateDepositPayload) async throws 
     
+    /**
+     * Lists the deposit addresses currently being watched for unconfirmed
+     * deposits, most recently issued first.
+     */
+    func listWatchedDepositAddresses() async throws  -> [WatchedDepositAddress]
+    
+    /**
+     * Applies one change to a watched deposit address. `Watch` inserts or
+     * restarts it, `Seen` marks it, and `Unwatch` removes it.
+     */
+    func updateWatchedDepositAddress(address: String, payload: UpdateWatchedAddressPayload) async throws 
+    
     func setLnurlMetadata(metadata: [SetLnurlMetadataItem]) async throws 
     
     /**
@@ -9758,6 +9784,48 @@ open func updateDeposit(txid: String, vout: UInt32, payload: UpdateDepositPayloa
                 uniffi_breez_sdk_spark_fn_method_storage_update_deposit(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(txid),FfiConverterUInt32.lower(vout),FfiConverterTypeUpdateDepositPayload_lower(payload)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_void,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeStorageError_lift
+        )
+}
+    
+    /**
+     * Lists the deposit addresses currently being watched for unconfirmed
+     * deposits, most recently issued first.
+     */
+open func listWatchedDepositAddresses()async throws  -> [WatchedDepositAddress]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_list_watched_deposit_addresses(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeWatchedDepositAddress.lift,
+            errorHandler: FfiConverterTypeStorageError_lift
+        )
+}
+    
+    /**
+     * Applies one change to a watched deposit address. `Watch` inserts or
+     * restarts it, `Seen` marks it, and `Unwatch` removes it.
+     */
+open func updateWatchedDepositAddress(address: String, payload: UpdateWatchedAddressPayload)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_storage_update_watched_deposit_address(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(address),FfiConverterTypeUpdateWatchedAddressPayload_lower(payload)
                 )
             },
             pollFunc: ffi_breez_sdk_spark_rust_future_poll_void,
@@ -10650,6 +10718,90 @@ fileprivate struct UniffiCallbackInterfaceStorage {
                      txid: try FfiConverterString.lift(txid),
                      vout: try FfiConverterUInt32.lift(vout),
                      payload: try FfiConverterTypeUpdateDepositPayload_lift(payload)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeStorageError_lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        listWatchedDepositAddresses: { (
+            uniffiHandle: UInt64,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> [WatchedDepositAddress] in
+                guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.listWatchedDepositAddresses(
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: [WatchedDepositAddress]) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterSequenceTypeWatchedDepositAddress.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeStorageError_lower
+            )
+            uniffiOutReturn.pointee = uniffiForeignFuture
+        },
+        updateWatchedDepositAddress: { (
+            uniffiHandle: UInt64,
+            address: RustBuffer,
+            payload: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
+        ) in
+            let makeCall = {
+                () async throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeStorage.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.updateWatchedDepositAddress(
+                     address: try FfiConverterString.lift(address),
+                     payload: try FfiConverterTypeUpdateWatchedAddressPayload_lift(payload)
                 )
             }
 
@@ -14511,9 +14663,20 @@ public struct ClaimDepositRequest {
     public var txid: String
     public var vout: UInt32
     /**
-     * Caps what the claim may cost. A deposit that has not matured is claimed
-     * instantly when the provider's spread fits within this, so the same ceiling
-     * governs both. Falls back to the configured max deposit claim fee.
+     * Caps what the claim may cost, and is recorded on the deposit so later
+     * automatic attempts are held to it too.
+     *
+     * Raising it above the quoted spread is what lets a deposit be claimed ahead
+     * of maturity without further input. Lowering it below the spread keeps the
+     * deposit from being claimed early, and does not hold back its claim at
+     * maturity: that one runs under whichever is larger, this or the configured
+     * max deposit claim fee.
+     *
+     * Unset claims under the configured max deposit claim fee and clears any
+     * ceiling previously recorded on the deposit.
+     *
+     * The ceiling is recorded before the claim is attempted, so it stands even
+     * when the attempt is then declined for exceeding it.
      */
     public var maxFee: MaxFee?
 
@@ -14521,9 +14684,20 @@ public struct ClaimDepositRequest {
     // declare one manually.
     public init(txid: String, vout: UInt32, 
         /**
-         * Caps what the claim may cost. A deposit that has not matured is claimed
-         * instantly when the provider's spread fits within this, so the same ceiling
-         * governs both. Falls back to the configured max deposit claim fee.
+         * Caps what the claim may cost, and is recorded on the deposit so later
+         * automatic attempts are held to it too.
+         *
+         * Raising it above the quoted spread is what lets a deposit be claimed ahead
+         * of maturity without further input. Lowering it below the spread keeps the
+         * deposit from being claimed early, and does not hold back its claim at
+         * maturity: that one runs under whichever is larger, this or the configured
+         * max deposit claim fee.
+         *
+         * Unset claims under the configured max deposit claim fee and clears any
+         * ceiling previously recorded on the deposit.
+         *
+         * The ceiling is recorded before the claim is attempted, so it stands even
+         * when the attempt is then declined for exceeding it.
          */maxFee: MaxFee? = nil) {
         self.txid = txid
         self.vout = vout
@@ -14597,27 +14771,21 @@ public func FfiConverterTypeClaimDepositRequest_lower(_ value: ClaimDepositReque
 
 public struct ClaimDepositResponse {
     /**
-     * The settled claim payment, present when the deposit was claimed at maturity,
-     * which completes synchronously. Absent when it was claimed before maturity,
-     * whose transfer settles asynchronously: watch for the payment via events or
-     * `list_payments`. Which of the two happens follows from the deposit's maturity
-     * and the fee ceiling, not from anything the caller asks for, so treat the
-     * payment as optional on every claim.
+     * What the call did. Which outcome occurs follows from the deposit's maturity
+     * and the fee ceiling, not from anything the caller asks for, so handle all
+     * three on every claim.
      */
-    public var payment: Payment?
+    public var outcome: ClaimDepositOutcome
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(
         /**
-         * The settled claim payment, present when the deposit was claimed at maturity,
-         * which completes synchronously. Absent when it was claimed before maturity,
-         * whose transfer settles asynchronously: watch for the payment via events or
-         * `list_payments`. Which of the two happens follows from the deposit's maturity
-         * and the fee ceiling, not from anything the caller asks for, so treat the
-         * payment as optional on every claim.
-         */payment: Payment?) {
-        self.payment = payment
+         * What the call did. Which outcome occurs follows from the deposit's maturity
+         * and the fee ceiling, not from anything the caller asks for, so handle all
+         * three on every claim.
+         */outcome: ClaimDepositOutcome) {
+        self.outcome = outcome
     }
 }
 
@@ -14628,14 +14796,14 @@ extension ClaimDepositResponse: Sendable {}
 
 extension ClaimDepositResponse: Equatable, Hashable {
     public static func ==(lhs: ClaimDepositResponse, rhs: ClaimDepositResponse) -> Bool {
-        if lhs.payment != rhs.payment {
+        if lhs.outcome != rhs.outcome {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(payment)
+        hasher.combine(outcome)
     }
 }
 
@@ -14648,12 +14816,12 @@ public struct FfiConverterTypeClaimDepositResponse: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClaimDepositResponse {
         return
             try ClaimDepositResponse(
-                payment: FfiConverterOptionTypePayment.read(from: &buf)
+                outcome: FfiConverterTypeClaimDepositOutcome.read(from: &buf)
         )
     }
 
     public static func write(_ value: ClaimDepositResponse, into buf: inout [UInt8]) {
-        FfiConverterOptionTypePayment.write(value.payment, into: &buf)
+        FfiConverterTypeClaimDepositOutcome.write(value.outcome, into: &buf)
     }
 }
 
@@ -14909,15 +15077,20 @@ public struct Config {
     public var preferSparkOverLightning: Bool
     /**
      * Whether the data needed to exit a payment unilaterally, without the Spark
-     * operators, is collected as funds arrive. Collection runs in the background,
-     * and a sync waits for a collection pass before returning, so syncing is how
-     * to make that happen at a moment of your choosing. A leaf the operators
-     * cannot complete stays un-exitable until a later attempt succeeds.
+     * operators, is collected automatically as funds arrive. Collection runs in
+     * the background, after an operation rather than during it. A leaf the
+     * operators cannot complete stays un-exitable until a later attempt
+     * succeeds.
      *
-     * Leave this on unless bandwidth matters more than being able to recover funds
-     * when the operators are unreachable. With it off, chains are only collected
-     * when an exit is prepared, which needs the operators reachable at that
-     * moment: a leaf cannot be exited without them until one is collected.
+     * Turn it off when collecting behind every operation costs more than it is
+     * worth, on a busy wallet holding many leaves. `sync_wallet` collects
+     * regardless of this flag, and waits for the pass before returning, so an
+     * explicit sync on a cadence of your choosing is how the data is kept
+     * current with the automatic collection off.
+     *
+     * Only that automatic collection is governed, so this has no effect at all
+     * where none runs: with `background_tasks_enabled` off there is no
+     * background collector, and every sync is an explicit one.
      *
      * Default value is true.
      */
@@ -15058,15 +15231,20 @@ public struct Config {
          */preferSparkOverLightning: Bool, 
         /**
          * Whether the data needed to exit a payment unilaterally, without the Spark
-         * operators, is collected as funds arrive. Collection runs in the background,
-         * and a sync waits for a collection pass before returning, so syncing is how
-         * to make that happen at a moment of your choosing. A leaf the operators
-         * cannot complete stays un-exitable until a later attempt succeeds.
+         * operators, is collected automatically as funds arrive. Collection runs in
+         * the background, after an operation rather than during it. A leaf the
+         * operators cannot complete stays un-exitable until a later attempt
+         * succeeds.
          *
-         * Leave this on unless bandwidth matters more than being able to recover funds
-         * when the operators are unreachable. With it off, chains are only collected
-         * when an exit is prepared, which needs the operators reachable at that
-         * moment: a leaf cannot be exited without them until one is collected.
+         * Turn it off when collecting behind every operation costs more than it is
+         * worth, on a busy wallet holding many leaves. `sync_wallet` collects
+         * regardless of this flag, and waits for the pass before returning, so an
+         * explicit sync on a cadence of your choosing is how the data is kept
+         * current with the automatic collection off.
+         *
+         * Only that automatic collection is governed, so this has no effect at all
+         * where none runs: with `background_tasks_enabled` off there is no
+         * background collector, and every sync is an explicit one.
          *
          * Default value is true.
          */exitChainAutoFetchEnabled: Bool, 
@@ -16937,6 +17115,88 @@ public func FfiConverterTypeCredentials_lower(_ value: Credentials) -> RustBuffe
 }
 
 
+/**
+ * A Spark-side asset a route accepts, with the amount bounds that apply to it.
+ *
+ * Bounds are per asset rather than per route: the same external endpoint can
+ * carry a dust floor when moved as sats and none when moved as a token.
+ */
+public struct CrossChainAcceptedAsset {
+    public var asset: SparkAsset
+    /**
+     * Unset when the provider publishes no bounds for this pairing.
+     */
+    public var limits: CrossChainRouteLimits?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(asset: SparkAsset, 
+        /**
+         * Unset when the provider publishes no bounds for this pairing.
+         */limits: CrossChainRouteLimits?) {
+        self.asset = asset
+        self.limits = limits
+    }
+}
+
+#if compiler(>=6)
+extension CrossChainAcceptedAsset: Sendable {}
+#endif
+
+
+extension CrossChainAcceptedAsset: Equatable, Hashable {
+    public static func ==(lhs: CrossChainAcceptedAsset, rhs: CrossChainAcceptedAsset) -> Bool {
+        if lhs.asset != rhs.asset {
+            return false
+        }
+        if lhs.limits != rhs.limits {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(asset)
+        hasher.combine(limits)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCrossChainAcceptedAsset: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrossChainAcceptedAsset {
+        return
+            try CrossChainAcceptedAsset(
+                asset: FfiConverterTypeSparkAsset.read(from: &buf), 
+                limits: FfiConverterOptionTypeCrossChainRouteLimits.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CrossChainAcceptedAsset, into buf: inout [UInt8]) {
+        FfiConverterTypeSparkAsset.write(value.asset, into: &buf)
+        FfiConverterOptionTypeCrossChainRouteLimits.write(value.limits, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainAcceptedAsset_lift(_ buf: RustBuffer) throws -> CrossChainAcceptedAsset {
+    return try FfiConverterTypeCrossChainAcceptedAsset.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainAcceptedAsset_lower(_ value: CrossChainAcceptedAsset) -> RustBuffer {
+    return FfiConverterTypeCrossChainAcceptedAsset.lower(value)
+}
+
+
 public struct CrossChainAddressDetails {
     public var address: String
     public var addressFamily: CrossChainAddressFamily
@@ -17177,6 +17437,11 @@ public struct CrossChainReceiveInfo {
      */
     public var serviceFeeAsset: String?
     /**
+     * Decimals of `service_fee_asset`, for formatting `service_fee_amount`.
+     * Unset when the fee is in sats or the provider did not report them.
+     */
+    public var serviceFeeAssetDecimals: UInt32?
+    /**
      * Quote expiry as a unix timestamp in seconds.
      */
     public var expiresAt: UInt64
@@ -17217,6 +17482,10 @@ public struct CrossChainReceiveInfo {
          * in sats.
          */serviceFeeAsset: String?, 
         /**
+         * Decimals of `service_fee_asset`, for formatting `service_fee_amount`.
+         * Unset when the fee is in sats or the provider did not report them.
+         */serviceFeeAssetDecimals: UInt32?, 
+        /**
          * Quote expiry as a unix timestamp in seconds.
          */expiresAt: UInt64) {
         self.depositAddress = depositAddress
@@ -17226,6 +17495,7 @@ public struct CrossChainReceiveInfo {
         self.tokenIdentifier = tokenIdentifier
         self.serviceFeeAmount = serviceFeeAmount
         self.serviceFeeAsset = serviceFeeAsset
+        self.serviceFeeAssetDecimals = serviceFeeAssetDecimals
         self.expiresAt = expiresAt
     }
 }
@@ -17258,6 +17528,9 @@ extension CrossChainReceiveInfo: Equatable, Hashable {
         if lhs.serviceFeeAsset != rhs.serviceFeeAsset {
             return false
         }
+        if lhs.serviceFeeAssetDecimals != rhs.serviceFeeAssetDecimals {
+            return false
+        }
         if lhs.expiresAt != rhs.expiresAt {
             return false
         }
@@ -17272,6 +17545,7 @@ extension CrossChainReceiveInfo: Equatable, Hashable {
         hasher.combine(tokenIdentifier)
         hasher.combine(serviceFeeAmount)
         hasher.combine(serviceFeeAsset)
+        hasher.combine(serviceFeeAssetDecimals)
         hasher.combine(expiresAt)
     }
 }
@@ -17292,6 +17566,7 @@ public struct FfiConverterTypeCrossChainReceiveInfo: FfiConverterRustBuffer {
                 tokenIdentifier: FfiConverterOptionString.read(from: &buf), 
                 serviceFeeAmount: FfiConverterTypeu128.read(from: &buf), 
                 serviceFeeAsset: FfiConverterOptionString.read(from: &buf), 
+                serviceFeeAssetDecimals: FfiConverterOptionUInt32.read(from: &buf), 
                 expiresAt: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -17304,6 +17579,7 @@ public struct FfiConverterTypeCrossChainReceiveInfo: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.tokenIdentifier, into: &buf)
         FfiConverterTypeu128.write(value.serviceFeeAmount, into: &buf)
         FfiConverterOptionString.write(value.serviceFeeAsset, into: &buf)
+        FfiConverterOptionUInt32.write(value.serviceFeeAssetDecimals, into: &buf)
         FfiConverterUInt64.write(value.expiresAt, into: &buf)
     }
 }
@@ -17321,6 +17597,132 @@ public func FfiConverterTypeCrossChainReceiveInfo_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypeCrossChainReceiveInfo_lower(_ value: CrossChainReceiveInfo) -> RustBuffer {
     return FfiConverterTypeCrossChainReceiveInfo.lower(value)
+}
+
+
+/**
+ * Amount bounds a provider publishes for moving a route with one Spark-side
+ * asset.
+ *
+ * A route can enforce a tighter bound than it publishes, so an amount inside
+ * these can still be rejected when the payment is prepared.
+ *
+ * The two groups are independent, and either can be absent: a route may
+ * publish a base-unit floor (a dust minimum on a sats-funded route), a USD
+ * notional band, both, or neither.
+ *
+ * `min_amount` / `max_amount` bound the asset that is paid in, so which asset
+ * they are denominated in follows the direction: the Spark-side asset on a
+ * send, the external asset on a receive. The USD band bounds the order's
+ * value and reads the same in both directions.
+ */
+public struct CrossChainRouteLimits {
+    /**
+     * Smallest amount accepted, in the base units of the asset paid in.
+     */
+    public var minAmount: U128?
+    /**
+     * Largest amount accepted, in the base units of the asset paid in.
+     */
+    public var maxAmount: U128?
+    /**
+     * Smallest order value accepted, in USD cents.
+     */
+    public var minUsdCents: UInt64?
+    /**
+     * Largest order value accepted, in USD cents.
+     */
+    public var maxUsdCents: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Smallest amount accepted, in the base units of the asset paid in.
+         */minAmount: U128?, 
+        /**
+         * Largest amount accepted, in the base units of the asset paid in.
+         */maxAmount: U128?, 
+        /**
+         * Smallest order value accepted, in USD cents.
+         */minUsdCents: UInt64?, 
+        /**
+         * Largest order value accepted, in USD cents.
+         */maxUsdCents: UInt64?) {
+        self.minAmount = minAmount
+        self.maxAmount = maxAmount
+        self.minUsdCents = minUsdCents
+        self.maxUsdCents = maxUsdCents
+    }
+}
+
+#if compiler(>=6)
+extension CrossChainRouteLimits: Sendable {}
+#endif
+
+
+extension CrossChainRouteLimits: Equatable, Hashable {
+    public static func ==(lhs: CrossChainRouteLimits, rhs: CrossChainRouteLimits) -> Bool {
+        if lhs.minAmount != rhs.minAmount {
+            return false
+        }
+        if lhs.maxAmount != rhs.maxAmount {
+            return false
+        }
+        if lhs.minUsdCents != rhs.minUsdCents {
+            return false
+        }
+        if lhs.maxUsdCents != rhs.maxUsdCents {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(minAmount)
+        hasher.combine(maxAmount)
+        hasher.combine(minUsdCents)
+        hasher.combine(maxUsdCents)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCrossChainRouteLimits: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrossChainRouteLimits {
+        return
+            try CrossChainRouteLimits(
+                minAmount: FfiConverterOptionTypeu128.read(from: &buf), 
+                maxAmount: FfiConverterOptionTypeu128.read(from: &buf), 
+                minUsdCents: FfiConverterOptionUInt64.read(from: &buf), 
+                maxUsdCents: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CrossChainRouteLimits, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeu128.write(value.minAmount, into: &buf)
+        FfiConverterOptionTypeu128.write(value.maxAmount, into: &buf)
+        FfiConverterOptionUInt64.write(value.minUsdCents, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxUsdCents, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainRouteLimits_lift(_ buf: RustBuffer) throws -> CrossChainRouteLimits {
+    return try FfiConverterTypeCrossChainRouteLimits.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCrossChainRouteLimits_lower(_ value: CrossChainRouteLimits) -> RustBuffer {
+    return FfiConverterTypeCrossChainRouteLimits.lower(value)
 }
 
 
@@ -17360,9 +17762,9 @@ public struct CrossChainRoutePair {
      */
     public var exactOutEligible: Bool
     /**
-     * Spark-side assets this route accepts.
+     * Spark-side assets this route accepts, each with its own amount bounds.
      */
-    public var acceptedAssets: [SparkAsset]
+    public var acceptedAssets: [CrossChainAcceptedAsset]
     /**
      * Rails this route can be delivered over, orthogonal to
      * `accepted_assets` (the asset moved vs the rail moved on).
@@ -17396,8 +17798,8 @@ public struct CrossChainRoutePair {
          * Whether the route supports exact-out mode.
          */exactOutEligible: Bool, 
         /**
-         * Spark-side assets this route accepts.
-         */acceptedAssets: [SparkAsset], 
+         * Spark-side assets this route accepts, each with its own amount bounds.
+         */acceptedAssets: [CrossChainAcceptedAsset], 
         /**
          * Rails this route can be delivered over, orthogonal to
          * `accepted_assets` (the asset moved vs the rail moved on).
@@ -17480,7 +17882,7 @@ public struct FfiConverterTypeCrossChainRoutePair: FfiConverterRustBuffer {
                 contractAddress: FfiConverterOptionString.read(from: &buf), 
                 decimals: FfiConverterUInt8.read(from: &buf), 
                 exactOutEligible: FfiConverterBool.read(from: &buf), 
-                acceptedAssets: FfiConverterSequenceTypeSparkAsset.read(from: &buf), 
+                acceptedAssets: FfiConverterSequenceTypeCrossChainAcceptedAsset.read(from: &buf), 
                 deliveryMethods: FfiConverterSequenceTypeDeliveryMethod.read(from: &buf)
         )
     }
@@ -17493,7 +17895,7 @@ public struct FfiConverterTypeCrossChainRoutePair: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.contractAddress, into: &buf)
         FfiConverterUInt8.write(value.decimals, into: &buf)
         FfiConverterBool.write(value.exactOutEligible, into: &buf)
-        FfiConverterSequenceTypeSparkAsset.write(value.acceptedAssets, into: &buf)
+        FfiConverterSequenceTypeCrossChainAcceptedAsset.write(value.acceptedAssets, into: &buf)
         FfiConverterSequenceTypeDeliveryMethod.write(value.deliveryMethods, into: &buf)
     }
 }
@@ -17665,6 +18067,14 @@ public struct DepositInfo {
      * Unset when no instant claim has been attempted.
      */
     public var instantClaimStatus: InstantClaimStatus?
+    /**
+     * The fee ceiling standing for this deposit alone. It caps what may be paid
+     * to claim the deposit ahead of maturity. The claim at maturity runs under
+     * whichever is larger, this or the configured max deposit claim fee, so a
+     * ceiling set below that one does not hold the deposit back from it. Unset
+     * means the configured ceiling applies to both.
+     */
+    public var maxClaimFee: MaxFee?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -17696,7 +18106,14 @@ public struct DepositInfo {
          */claimError: DepositClaimError?, 
         /**
          * Unset when no instant claim has been attempted.
-         */instantClaimStatus: InstantClaimStatus?) {
+         */instantClaimStatus: InstantClaimStatus?, 
+        /**
+         * The fee ceiling standing for this deposit alone. It caps what may be paid
+         * to claim the deposit ahead of maturity. The claim at maturity runs under
+         * whichever is larger, this or the configured max deposit claim fee, so a
+         * ceiling set below that one does not hold the deposit back from it. Unset
+         * means the configured ceiling applies to both.
+         */maxClaimFee: MaxFee?) {
         self.txid = txid
         self.vout = vout
         self.amountSats = amountSats
@@ -17706,6 +18123,7 @@ public struct DepositInfo {
         self.refundState = refundState
         self.claimError = claimError
         self.instantClaimStatus = instantClaimStatus
+        self.maxClaimFee = maxClaimFee
     }
 }
 
@@ -17743,6 +18161,9 @@ extension DepositInfo: Equatable, Hashable {
         if lhs.instantClaimStatus != rhs.instantClaimStatus {
             return false
         }
+        if lhs.maxClaimFee != rhs.maxClaimFee {
+            return false
+        }
         return true
     }
 
@@ -17756,6 +18177,7 @@ extension DepositInfo: Equatable, Hashable {
         hasher.combine(refundState)
         hasher.combine(claimError)
         hasher.combine(instantClaimStatus)
+        hasher.combine(maxClaimFee)
     }
 }
 
@@ -17776,7 +18198,8 @@ public struct FfiConverterTypeDepositInfo: FfiConverterRustBuffer {
                 refundTxId: FfiConverterOptionString.read(from: &buf), 
                 refundState: FfiConverterOptionTypeRefundState.read(from: &buf), 
                 claimError: FfiConverterOptionTypeDepositClaimError.read(from: &buf), 
-                instantClaimStatus: FfiConverterOptionTypeInstantClaimStatus.read(from: &buf)
+                instantClaimStatus: FfiConverterOptionTypeInstantClaimStatus.read(from: &buf), 
+                maxClaimFee: FfiConverterOptionTypeMaxFee.read(from: &buf)
         )
     }
 
@@ -17790,6 +18213,7 @@ public struct FfiConverterTypeDepositInfo: FfiConverterRustBuffer {
         FfiConverterOptionTypeRefundState.write(value.refundState, into: &buf)
         FfiConverterOptionTypeDepositClaimError.write(value.claimError, into: &buf)
         FfiConverterOptionTypeInstantClaimStatus.write(value.instantClaimStatus, into: &buf)
+        FfiConverterOptionTypeMaxFee.write(value.maxClaimFee, into: &buf)
     }
 }
 
@@ -19063,6 +19487,72 @@ public func FfiConverterTypeExternalInputParser_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeExternalInputParser_lower(_ value: ExternalInputParser) -> RustBuffer {
     return FfiConverterTypeExternalInputParser.lower(value)
+}
+
+
+/**
+ * FFI-safe representation of `spark_wallet::LeafSigningKey`: the leaf signing
+ * key derived from `derived_from`.
+ */
+public struct ExternalLeafSigningKey {
+    public var derivedFrom: ExternalTreeNodeId
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(derivedFrom: ExternalTreeNodeId) {
+        self.derivedFrom = derivedFrom
+    }
+}
+
+#if compiler(>=6)
+extension ExternalLeafSigningKey: Sendable {}
+#endif
+
+
+extension ExternalLeafSigningKey: Equatable, Hashable {
+    public static func ==(lhs: ExternalLeafSigningKey, rhs: ExternalLeafSigningKey) -> Bool {
+        if lhs.derivedFrom != rhs.derivedFrom {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(derivedFrom)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExternalLeafSigningKey: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExternalLeafSigningKey {
+        return
+            try ExternalLeafSigningKey(
+                derivedFrom: FfiConverterTypeExternalTreeNodeId.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ExternalLeafSigningKey, into buf: inout [UInt8]) {
+        FfiConverterTypeExternalTreeNodeId.write(value.derivedFrom, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExternalLeafSigningKey_lift(_ buf: RustBuffer) throws -> ExternalLeafSigningKey {
+    return try FfiConverterTypeExternalLeafSigningKey.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExternalLeafSigningKey_lower(_ value: ExternalLeafSigningKey) -> RustBuffer {
+    return FfiConverterTypeExternalLeafSigningKey.lower(value)
 }
 
 
@@ -20856,18 +21346,21 @@ public func FfiConverterTypeExternalStartedStaticDepositRefund_lower(_ value: Ex
 
 
 /**
- * FFI-safe representation of `spark_wallet::TransferLeafInput`. Conveys the old
- * leaf id and the new (post-transfer) leaf id; the signer derives keys from them.
+ * FFI-safe representation of `spark_wallet::TransferLeafInput`. Conveys the
+ * leaf id, the key the leaf is held under and the new (post-transfer) leaf id;
+ * the signer derives the keys from them.
  */
 public struct ExternalTransferLeafInput {
     public var nodeId: ExternalTreeNodeId
     public var newLeafId: ExternalTreeNodeId
+    public var signingKey: ExternalLeafSigningKey
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(nodeId: ExternalTreeNodeId, newLeafId: ExternalTreeNodeId) {
+    public init(nodeId: ExternalTreeNodeId, newLeafId: ExternalTreeNodeId, signingKey: ExternalLeafSigningKey) {
         self.nodeId = nodeId
         self.newLeafId = newLeafId
+        self.signingKey = signingKey
     }
 }
 
@@ -20884,12 +21377,16 @@ extension ExternalTransferLeafInput: Equatable, Hashable {
         if lhs.newLeafId != rhs.newLeafId {
             return false
         }
+        if lhs.signingKey != rhs.signingKey {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(nodeId)
         hasher.combine(newLeafId)
+        hasher.combine(signingKey)
     }
 }
 
@@ -20903,13 +21400,15 @@ public struct FfiConverterTypeExternalTransferLeafInput: FfiConverterRustBuffer 
         return
             try ExternalTransferLeafInput(
                 nodeId: FfiConverterTypeExternalTreeNodeId.read(from: &buf), 
-                newLeafId: FfiConverterTypeExternalTreeNodeId.read(from: &buf)
+                newLeafId: FfiConverterTypeExternalTreeNodeId.read(from: &buf), 
+                signingKey: FfiConverterTypeExternalLeafSigningKey.read(from: &buf)
         )
     }
 
     public static func write(_ value: ExternalTransferLeafInput, into buf: inout [UInt8]) {
         FfiConverterTypeExternalTreeNodeId.write(value.nodeId, into: &buf)
         FfiConverterTypeExternalTreeNodeId.write(value.newLeafId, into: &buf)
+        FfiConverterTypeExternalLeafSigningKey.write(value.signingKey, into: &buf)
     }
 }
 
@@ -27141,6 +27640,11 @@ public struct PreparePaymentLinkResponse {
      */
     public var serviceFeeAsset: String?
     /**
+     * Decimals of `service_fee_asset`, for formatting `service_fee_amount`.
+     * Unset when the fee is in sats or the provider did not report them.
+     */
+    public var serviceFeeAssetDecimals: UInt32?
+    /**
      * RFC3339 timestamp after which the quote is no longer valid.
      */
     public var expiresAt: String
@@ -27169,6 +27673,10 @@ public struct PreparePaymentLinkResponse {
          * denominates its fee in sats, Orchestra in the stablecoin.
          */serviceFeeAsset: String?, 
         /**
+         * Decimals of `service_fee_asset`, for formatting `service_fee_amount`.
+         * Unset when the fee is in sats or the provider did not report them.
+         */serviceFeeAssetDecimals: UInt32?, 
+        /**
          * RFC3339 timestamp after which the quote is no longer valid.
          */expiresAt: String) {
         self.url = url
@@ -27177,6 +27685,7 @@ public struct PreparePaymentLinkResponse {
         self.asset = asset
         self.serviceFeeAmount = serviceFeeAmount
         self.serviceFeeAsset = serviceFeeAsset
+        self.serviceFeeAssetDecimals = serviceFeeAssetDecimals
         self.expiresAt = expiresAt
     }
 }
@@ -27206,6 +27715,9 @@ extension PreparePaymentLinkResponse: Equatable, Hashable {
         if lhs.serviceFeeAsset != rhs.serviceFeeAsset {
             return false
         }
+        if lhs.serviceFeeAssetDecimals != rhs.serviceFeeAssetDecimals {
+            return false
+        }
         if lhs.expiresAt != rhs.expiresAt {
             return false
         }
@@ -27219,6 +27731,7 @@ extension PreparePaymentLinkResponse: Equatable, Hashable {
         hasher.combine(asset)
         hasher.combine(serviceFeeAmount)
         hasher.combine(serviceFeeAsset)
+        hasher.combine(serviceFeeAssetDecimals)
         hasher.combine(expiresAt)
     }
 }
@@ -27238,6 +27751,7 @@ public struct FfiConverterTypePreparePaymentLinkResponse: FfiConverterRustBuffer
                 asset: FfiConverterString.read(from: &buf), 
                 serviceFeeAmount: FfiConverterTypeu128.read(from: &buf), 
                 serviceFeeAsset: FfiConverterOptionString.read(from: &buf), 
+                serviceFeeAssetDecimals: FfiConverterOptionUInt32.read(from: &buf), 
                 expiresAt: FfiConverterString.read(from: &buf)
         )
     }
@@ -27249,6 +27763,7 @@ public struct FfiConverterTypePreparePaymentLinkResponse: FfiConverterRustBuffer
         FfiConverterString.write(value.asset, into: &buf)
         FfiConverterTypeu128.write(value.serviceFeeAmount, into: &buf)
         FfiConverterOptionString.write(value.serviceFeeAsset, into: &buf)
+        FfiConverterOptionUInt32.write(value.serviceFeeAssetDecimals, into: &buf)
         FfiConverterString.write(value.expiresAt, into: &buf)
     }
 }
@@ -27799,6 +28314,11 @@ public func FfiConverterTypePrepareUnilateralExitRequest_lower(_ value: PrepareU
  * fee at the requested rate, and how much to fund.
  */
 public struct PrepareUnilateralExitResponse {
+    /**
+     * The leaves the exit covers. A leaf whose exit already finished is left out,
+     * even when named: `exit_chain_state` shows its refund swept or its branch
+     * stopped.
+     */
     public var leaves: [UnilateralExitLeaf]
     /**
      * Total value of the selected leaves, in satoshis.
@@ -27858,7 +28378,12 @@ public struct PrepareUnilateralExitResponse {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(leaves: [UnilateralExitLeaf], 
+    public init(
+        /**
+         * The leaves the exit covers. A leaf whose exit already finished is left out,
+         * even when named: `exit_chain_state` shows its refund swept or its branch
+         * stopped.
+         */leaves: [UnilateralExitLeaf], 
         /**
          * Total value of the selected leaves, in satoshis.
          */recoverableValueSat: UInt64, 
@@ -33756,6 +34281,7 @@ public struct TurnkeyConfig {
     /**
      * Network the wallet operates on; selects the Spark address format
      * (mainnet or regtest) used for Spark-protocol and Schnorr signing.
+     * Signet is unsupported by Turnkey's Spark account formats.
      */
     public var network: Network
     /**
@@ -33821,6 +34347,7 @@ public struct TurnkeyConfig {
         /**
          * Network the wallet operates on; selects the Spark address format
          * (mainnet or regtest) used for Spark-protocol and Schnorr signing.
+         * Signet is unsupported by Turnkey's Spark account formats.
          */network: Network, 
         /**
          * Spark account number: the `{account}` in every derivation path
@@ -35632,6 +36159,101 @@ public func FfiConverterTypeWalletSetup_lower(_ value: WalletSetup) -> RustBuffe
 
 
 /**
+ * A static deposit address being watched on-chain for unconfirmed deposits.
+ */
+public struct WatchedDepositAddress {
+    public var address: String
+    /**
+     * When the address was handed out, in seconds since the epoch. The watch
+     * window is measured from here.
+     */
+    public var issuedAt: UInt64
+    /**
+     * Whether a deposit to it has been seen unconfirmed.
+     */
+    public var seen: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(address: String, 
+        /**
+         * When the address was handed out, in seconds since the epoch. The watch
+         * window is measured from here.
+         */issuedAt: UInt64, 
+        /**
+         * Whether a deposit to it has been seen unconfirmed.
+         */seen: Bool) {
+        self.address = address
+        self.issuedAt = issuedAt
+        self.seen = seen
+    }
+}
+
+#if compiler(>=6)
+extension WatchedDepositAddress: Sendable {}
+#endif
+
+
+extension WatchedDepositAddress: Equatable, Hashable {
+    public static func ==(lhs: WatchedDepositAddress, rhs: WatchedDepositAddress) -> Bool {
+        if lhs.address != rhs.address {
+            return false
+        }
+        if lhs.issuedAt != rhs.issuedAt {
+            return false
+        }
+        if lhs.seen != rhs.seen {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(address)
+        hasher.combine(issuedAt)
+        hasher.combine(seen)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWatchedDepositAddress: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WatchedDepositAddress {
+        return
+            try WatchedDepositAddress(
+                address: FfiConverterString.read(from: &buf), 
+                issuedAt: FfiConverterUInt64.read(from: &buf), 
+                seen: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WatchedDepositAddress, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.address, into: &buf)
+        FfiConverterUInt64.write(value.issuedAt, into: &buf)
+        FfiConverterBool.write(value.seen, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWatchedDepositAddress_lift(_ buf: RustBuffer) throws -> WatchedDepositAddress {
+    return try FfiConverterTypeWatchedDepositAddress.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWatchedDepositAddress_lower(_ value: WatchedDepositAddress) -> RustBuffer {
+    return FfiConverterTypeWatchedDepositAddress.lower(value)
+}
+
+
+/**
  * A registered webhook entry.
  */
 public struct Webhook {
@@ -36619,6 +37241,12 @@ public enum ChainServiceError: Swift.Error {
     )
     case ServiceConnectivity(String
     )
+    /**
+     * The backend does not know this transaction or output. Distinct from a
+     * connectivity failure: it is an answer, not the absence of one.
+     */
+    case NotFound(String
+    )
     case Generic(String
     )
 }
@@ -36643,7 +37271,10 @@ public struct FfiConverterTypeChainServiceError: FfiConverterRustBuffer {
         case 2: return .ServiceConnectivity(
             try FfiConverterString.read(from: &buf)
             )
-        case 3: return .Generic(
+        case 3: return .NotFound(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 4: return .Generic(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -36668,8 +37299,13 @@ public struct FfiConverterTypeChainServiceError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .Generic(v1):
+        case let .NotFound(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .Generic(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -36702,6 +37338,224 @@ extension ChainServiceError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Why a claim was deferred rather than made.
+ */
+
+public enum ClaimDeferredReason {
+    
+    /**
+     * Claiming ahead of maturity costs more than the fee ceiling allows. Unlike a
+     * depth that has not arrived, this does not clear on its own: the deposit is
+     * claimed at maturity unless the ceiling is raised.
+     *
+     * `required_fee_sats` is what the early claim would have cost, so a caller can
+     * offer it at that price rather than quoting again.
+     */
+    case maxFeeExceeded(
+        /**
+         * What the provider asked to credit the deposit early.
+         */requiredFeeSats: UInt64, 
+        /**
+         * The ceiling it was held to.
+         */maxFeeSats: UInt64
+    )
+    /**
+     * The provider offers no early claim at the deposit's current depth, either
+     * because it is too shallow for any plan or because none was offered for it.
+     * Depth is the usual cause, and it resolves itself: the next confirmation may
+     * well bring an early claim within reach.
+     */
+    case noEarlyClaimAvailable
+    /**
+     * The provider refused the early claim or could not be reached, so nothing was
+     * submitted. Unlike a depth that has not arrived, waiting for a confirmation
+     * does not address this, and the deposit is claimed at maturity unless a later
+     * call succeeds. `message` is what the provider or the transport reported.
+     */
+    case providerDeclined(message: String
+    )
+}
+
+
+#if compiler(>=6)
+extension ClaimDeferredReason: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClaimDeferredReason: FfiConverterRustBuffer {
+    typealias SwiftType = ClaimDeferredReason
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClaimDeferredReason {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .maxFeeExceeded(requiredFeeSats: try FfiConverterUInt64.read(from: &buf), maxFeeSats: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 2: return .noEarlyClaimAvailable
+        
+        case 3: return .providerDeclined(message: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ClaimDeferredReason, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .maxFeeExceeded(requiredFeeSats,maxFeeSats):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt64.write(requiredFeeSats, into: &buf)
+            FfiConverterUInt64.write(maxFeeSats, into: &buf)
+            
+        
+        case .noEarlyClaimAvailable:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .providerDeclined(message):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(message, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClaimDeferredReason_lift(_ buf: RustBuffer) throws -> ClaimDeferredReason {
+    return try FfiConverterTypeClaimDeferredReason.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClaimDeferredReason_lower(_ value: ClaimDeferredReason) -> RustBuffer {
+    return FfiConverterTypeClaimDeferredReason.lower(value)
+}
+
+
+extension ClaimDeferredReason: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * What became of a claim.
+ */
+
+public enum ClaimDepositOutcome {
+    
+    /**
+     * Claimed at maturity and settled, carrying the payment it produced.
+     */
+    case settled(payment: Payment
+    )
+    /**
+     * Claimed ahead of maturity and submitted. The transfer settles
+     * asynchronously, so no payment is returned yet: watch for it via events or
+     * `list_payments`.
+     */
+    case submitted
+    /**
+     * Nothing was claimed yet, and no further call is needed: any fee ceiling this
+     * one asked for stands on the deposit, and the SDK keeps claiming it on its
+     * own. An early claim is attempted again as the deposit gains confirmations,
+     * so one declined for being too shallow is often claimed early a block or two
+     * later. Failing that, the deposit is claimed at maturity.
+     *
+     * An ordinary outcome rather than a failure. `reason` says which of the two to
+     * expect: a depth that has not arrived yet, or a cost the ceiling will not
+     * cover.
+     */
+    case deferred(reason: ClaimDeferredReason
+    )
+}
+
+
+#if compiler(>=6)
+extension ClaimDepositOutcome: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClaimDepositOutcome: FfiConverterRustBuffer {
+    typealias SwiftType = ClaimDepositOutcome
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClaimDepositOutcome {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .settled(payment: try FfiConverterTypePayment.read(from: &buf)
+        )
+        
+        case 2: return .submitted
+        
+        case 3: return .deferred(reason: try FfiConverterTypeClaimDeferredReason.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ClaimDepositOutcome, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .settled(payment):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypePayment.write(payment, into: &buf)
+            
+        
+        case .submitted:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .deferred(reason):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeClaimDeferredReason.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClaimDepositOutcome_lift(_ buf: RustBuffer) throws -> ClaimDepositOutcome {
+    return try FfiConverterTypeClaimDepositOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClaimDepositOutcome_lower(_ value: ClaimDepositOutcome) -> RustBuffer {
+    return FfiConverterTypeClaimDepositOutcome.lower(value)
+}
+
+
+extension ClaimDepositOutcome: Equatable, Hashable {}
+
+
 
 
 
@@ -37008,6 +37862,10 @@ public enum ConversionInfo {
          * Asset the service fee is denominated in. Unset means BTC sats.
          */serviceFeeAsset: String?, 
         /**
+         * Decimals of `service_fee_asset`, for formatting `service_fee_amount`.
+         * Unset when the fee is in sats or the provider did not report them.
+         */serviceFeeAssetDecimals: UInt32?, 
+        /**
          * Asset decimals (e.g. 6 for USDC).
          */assetDecimals: UInt32, 
         /**
@@ -37107,7 +37965,7 @@ public struct FfiConverterTypeConversionInfo: FfiConverterRustBuffer {
         case 1: return .amm(poolId: try FfiConverterString.read(from: &buf), conversionId: try FfiConverterString.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), fee: try FfiConverterOptionTypeu128.read(from: &buf), purpose: try FfiConverterOptionTypeConversionPurpose.read(from: &buf), amountAdjustment: try FfiConverterOptionTypeAmountAdjustmentReason.read(from: &buf), degradation: try FfiConverterOptionTypeSwapDegradation.read(from: &buf)
         )
         
-        case 2: return .orchestra(orderId: try FfiConverterString.read(from: &buf), quoteId: try FfiConverterString.read(from: &buf), readToken: try FfiConverterOptionString.read(from: &buf), chain: try FfiConverterString.read(from: &buf), chainId: try FfiConverterOptionString.read(from: &buf), asset: try FfiConverterString.read(from: &buf), recipientAddress: try FfiConverterString.read(from: &buf), assetAmountIn: try FfiConverterOptionTypeu128.read(from: &buf), estimatedOut: try FfiConverterTypeu128.read(from: &buf), deliveredAmount: try FfiConverterOptionTypeu128.read(from: &buf), externalTxHash: try FfiConverterOptionString.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), feeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAsset: try FfiConverterOptionString.read(from: &buf), assetDecimals: try FfiConverterUInt32.read(from: &buf), assetContract: try FfiConverterOptionString.read(from: &buf)
+        case 2: return .orchestra(orderId: try FfiConverterString.read(from: &buf), quoteId: try FfiConverterString.read(from: &buf), readToken: try FfiConverterOptionString.read(from: &buf), chain: try FfiConverterString.read(from: &buf), chainId: try FfiConverterOptionString.read(from: &buf), asset: try FfiConverterString.read(from: &buf), recipientAddress: try FfiConverterString.read(from: &buf), assetAmountIn: try FfiConverterOptionTypeu128.read(from: &buf), estimatedOut: try FfiConverterTypeu128.read(from: &buf), deliveredAmount: try FfiConverterOptionTypeu128.read(from: &buf), externalTxHash: try FfiConverterOptionString.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), feeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAsset: try FfiConverterOptionString.read(from: &buf), serviceFeeAssetDecimals: try FfiConverterOptionUInt32.read(from: &buf), assetDecimals: try FfiConverterUInt32.read(from: &buf), assetContract: try FfiConverterOptionString.read(from: &buf)
         )
         
         case 3: return .boltz(swapId: try FfiConverterString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), invoiceAmountSats: try FfiConverterUInt64.read(from: &buf), bridgeRef: try FfiConverterOptionString.read(from: &buf), maxSlippageBps: try FfiConverterUInt32.read(from: &buf), quoteDegraded: try FfiConverterBool.read(from: &buf), chain: try FfiConverterString.read(from: &buf), chainId: try FfiConverterOptionString.read(from: &buf), asset: try FfiConverterString.read(from: &buf), recipientAddress: try FfiConverterString.read(from: &buf), estimatedOut: try FfiConverterTypeu128.read(from: &buf), deliveredAmount: try FfiConverterOptionTypeu128.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), assetAmountIn: try FfiConverterOptionTypeu128.read(from: &buf), feeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAsset: try FfiConverterOptionString.read(from: &buf), assetDecimals: try FfiConverterUInt32.read(from: &buf), assetContract: try FfiConverterOptionString.read(from: &buf)
@@ -37132,7 +37990,7 @@ public struct FfiConverterTypeConversionInfo: FfiConverterRustBuffer {
             FfiConverterOptionTypeSwapDegradation.write(degradation, into: &buf)
             
         
-        case let .orchestra(orderId,quoteId,readToken,chain,chainId,asset,recipientAddress,assetAmountIn,estimatedOut,deliveredAmount,externalTxHash,status,feeAmount,serviceFeeAmount,serviceFeeAsset,assetDecimals,assetContract):
+        case let .orchestra(orderId,quoteId,readToken,chain,chainId,asset,recipientAddress,assetAmountIn,estimatedOut,deliveredAmount,externalTxHash,status,feeAmount,serviceFeeAmount,serviceFeeAsset,serviceFeeAssetDecimals,assetDecimals,assetContract):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(orderId, into: &buf)
             FfiConverterString.write(quoteId, into: &buf)
@@ -37149,6 +38007,7 @@ public struct FfiConverterTypeConversionInfo: FfiConverterRustBuffer {
             FfiConverterOptionTypeu128.write(feeAmount, into: &buf)
             FfiConverterOptionTypeu128.write(serviceFeeAmount, into: &buf)
             FfiConverterOptionString.write(serviceFeeAsset, into: &buf)
+            FfiConverterOptionUInt32.write(serviceFeeAssetDecimals, into: &buf)
             FfiConverterUInt32.write(assetDecimals, into: &buf)
             FfiConverterOptionString.write(assetContract, into: &buf)
             
@@ -38695,7 +39554,8 @@ public enum ExitLeafSelection {
      */
     case auto
     /**
-     * Exit exactly these leaves, regardless of profitability.
+     * Exit exactly these leaves, regardless of profitability, apart from any
+     * whose exit already finished.
      */
     case specific(leafIds: [String]
     )
@@ -39702,12 +40562,17 @@ public enum InstantClaimStatus {
     case declined(maxFeeSats: UInt64?, confirmations: UInt32
     )
     /**
-     * An instant claim was submitted and is settling. The deposit must not be
-     * re-claimed (instant or normal) until the claim settles and it is reconciled
-     * out. Carries the SSP claim id.
+     * An instant claim was submitted and is settling. Carries the SSP claim id.
      */
     case submitted(claimId: String
     )
+    /**
+     * A claim has taken the deposit: either its credit arrived here, or the
+     * provider reports the deposit as already claimed. It stays listed until
+     * the provider spends the output, so treat it as settled rather than as
+     * awaiting action.
+     */
+    case claimed
 }
 
 
@@ -39731,6 +40596,8 @@ public struct FfiConverterTypeInstantClaimStatus: FfiConverterRustBuffer {
         case 2: return .submitted(claimId: try FfiConverterString.read(from: &buf)
         )
         
+        case 3: return .claimed
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -39749,6 +40616,10 @@ public struct FfiConverterTypeInstantClaimStatus: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
             FfiConverterString.write(claimId, into: &buf)
             
+        
+        case .claimed:
+            writeInt(&buf, Int32(3))
+        
         }
     }
 }
@@ -40030,6 +40901,7 @@ public enum Network {
     
     case mainnet
     case regtest
+    case signet
 }
 
 
@@ -40051,6 +40923,8 @@ public struct FfiConverterTypeNetwork: FfiConverterRustBuffer {
         
         case 2: return .regtest
         
+        case 3: return .signet
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -40065,6 +40939,10 @@ public struct FfiConverterTypeNetwork: FfiConverterRustBuffer {
         
         case .regtest:
             writeInt(&buf, Int32(2))
+        
+        
+        case .signet:
+            writeInt(&buf, Int32(3))
         
         }
     }
@@ -42300,6 +43178,43 @@ public enum SdkError: Swift.Error {
     case InvalidInput(String
     )
     /**
+     * A cross-chain provider rejected the amount as outside what it accepts
+     * for the route.
+     *
+     * The bound fields carry what the route publishes in the direction that
+     * failed, in whichever denominations the provider publishes. A route can
+     * enforce a tighter bound than it publishes, so an amount inside the
+     * published one can still land here.
+     *
+     * The message is the provider's own rejection text with the published
+     * bound appended, so it already names the direction.
+     */
+    case CrossChainAmountOutOfRange(reason: String, 
+        /**
+         * `true` for a rejection below the minimum, `false` for one above the
+         * maximum or beyond available liquidity.
+         */tooSmall: Bool, 
+        /**
+         * The published bound in the base units of the asset paid in: the
+         * Spark-side asset on a send, the external asset on a receive.
+         */boundAmount: U128?, 
+        /**
+         * The published bound as an order value in USD cents.
+         */boundUsdCents: UInt64?
+    )
+    /**
+     * A cross-chain provider won't serve the route, for now or at all.
+     *
+     * The message leads with a fixed phrase for each case, for bindings that
+     * only see the text, followed by the provider's own reason.
+     */
+    case CrossChainRouteUnavailable(reason: String, 
+        /**
+         * `true` when the provider expects the route back shortly, so the
+         * same request can succeed later. Otherwise try another route.
+         */temporary: Bool
+    )
+    /**
      * Network error
      */
     case NetworkError(String
@@ -42375,46 +43290,56 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
         case 4: return .InvalidInput(
             try FfiConverterString.read(from: &buf)
             )
-        case 5: return .NetworkError(
+        case 5: return .CrossChainAmountOutOfRange(
+            reason: try FfiConverterString.read(from: &buf), 
+            tooSmall: try FfiConverterBool.read(from: &buf), 
+            boundAmount: try FfiConverterOptionTypeu128.read(from: &buf), 
+            boundUsdCents: try FfiConverterOptionUInt64.read(from: &buf)
+            )
+        case 6: return .CrossChainRouteUnavailable(
+            reason: try FfiConverterString.read(from: &buf), 
+            temporary: try FfiConverterBool.read(from: &buf)
+            )
+        case 7: return .NetworkError(
             try FfiConverterString.read(from: &buf)
             )
-        case 6: return .StorageError(
+        case 8: return .StorageError(
             try FfiConverterString.read(from: &buf)
             )
-        case 7: return .ChainServiceError(
+        case 9: return .ChainServiceError(
             try FfiConverterString.read(from: &buf)
             )
-        case 8: return .MaxDepositClaimFeeExceeded(
+        case 10: return .MaxDepositClaimFeeExceeded(
             tx: try FfiConverterString.read(from: &buf), 
             vout: try FfiConverterUInt32.read(from: &buf), 
             maxFee: try FfiConverterOptionTypeFee.read(from: &buf), 
             requiredFeeSats: try FfiConverterUInt64.read(from: &buf), 
             requiredFeeRateSatPerVbyte: try FfiConverterUInt64.read(from: &buf)
             )
-        case 9: return .MissingUtxo(
+        case 11: return .MissingUtxo(
             tx: try FfiConverterString.read(from: &buf), 
             vout: try FfiConverterUInt32.read(from: &buf)
             )
-        case 10: return .DepositClaimInProgress(
+        case 12: return .DepositClaimInProgress(
             tx: try FfiConverterString.read(from: &buf), 
             vout: try FfiConverterUInt32.read(from: &buf)
             )
-        case 11: return .RefundReplacementFeeTooLow(
+        case 13: return .RefundReplacementFeeTooLow(
             pendingFeeSats: try FfiConverterUInt64.read(from: &buf), 
             requiredFeeSats: try FfiConverterUInt64.read(from: &buf)
             )
-        case 12: return .LnurlError(
+        case 14: return .LnurlError(
             try FfiConverterString.read(from: &buf)
             )
-        case 13: return .Signer(
+        case 15: return .Signer(
             try FfiConverterString.read(from: &buf)
             )
-        case 14: return .OptimizationAlreadyRunning
-        case 15: return .OptimizationCancelled
-        case 16: return .InsufficientCpfpFunds(
+        case 16: return .OptimizationAlreadyRunning
+        case 17: return .OptimizationCancelled
+        case 18: return .InsufficientCpfpFunds(
             requiredSat: try FfiConverterUInt64.read(from: &buf)
             )
-        case 17: return .Generic(
+        case 19: return .Generic(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -42449,23 +43374,37 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .NetworkError(v1):
+        case let .CrossChainAmountOutOfRange(reason,tooSmall,boundAmount,boundUsdCents):
             writeInt(&buf, Int32(5))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
+            FfiConverterBool.write(tooSmall, into: &buf)
+            FfiConverterOptionTypeu128.write(boundAmount, into: &buf)
+            FfiConverterOptionUInt64.write(boundUsdCents, into: &buf)
             
         
-        case let .StorageError(v1):
+        case let .CrossChainRouteUnavailable(reason,temporary):
             writeInt(&buf, Int32(6))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
+            FfiConverterBool.write(temporary, into: &buf)
             
         
-        case let .ChainServiceError(v1):
+        case let .NetworkError(v1):
             writeInt(&buf, Int32(7))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .MaxDepositClaimFeeExceeded(tx,vout,maxFee,requiredFeeSats,requiredFeeRateSatPerVbyte):
+        case let .StorageError(v1):
             writeInt(&buf, Int32(8))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .ChainServiceError(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .MaxDepositClaimFeeExceeded(tx,vout,maxFee,requiredFeeSats,requiredFeeRateSatPerVbyte):
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(tx, into: &buf)
             FfiConverterUInt32.write(vout, into: &buf)
             FfiConverterOptionTypeFee.write(maxFee, into: &buf)
@@ -42474,48 +43413,48 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             
         
         case let .MissingUtxo(tx,vout):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(11))
             FfiConverterString.write(tx, into: &buf)
             FfiConverterUInt32.write(vout, into: &buf)
             
         
         case let .DepositClaimInProgress(tx,vout):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(12))
             FfiConverterString.write(tx, into: &buf)
             FfiConverterUInt32.write(vout, into: &buf)
             
         
         case let .RefundReplacementFeeTooLow(pendingFeeSats,requiredFeeSats):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(13))
             FfiConverterUInt64.write(pendingFeeSats, into: &buf)
             FfiConverterUInt64.write(requiredFeeSats, into: &buf)
             
         
         case let .LnurlError(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(14))
             FfiConverterString.write(v1, into: &buf)
             
         
         case let .Signer(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(15))
             FfiConverterString.write(v1, into: &buf)
             
         
         case .OptimizationAlreadyRunning:
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(16))
         
         
         case .OptimizationCancelled:
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(17))
         
         
         case let .InsufficientCpfpFunds(requiredSat):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(18))
             FfiConverterUInt64.write(requiredSat, into: &buf)
             
         
         case let .Generic(v1):
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(19))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -42594,6 +43533,13 @@ public enum SdkEvent {
     case paymentFailed(payment: Payment
     )
     /**
+     * Emitted when details of an already stored payment changed, such as the
+     * conversion info of a cross-chain receive arriving after the payment
+     * settled. Carries the updated payment.
+     */
+    case paymentMetadataUpdated(payment: Payment
+    )
+    /**
      * Emitted while the background auto-optimizer is running.
      *
      * Only fired from the auto path (enabled via
@@ -42654,16 +43600,19 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
         case 6: return .paymentFailed(payment: try FfiConverterTypePayment.read(from: &buf)
         )
         
-        case 7: return .autoOptimization(optimizationEvent: try FfiConverterTypeAutoOptimizationEvent.read(from: &buf)
+        case 7: return .paymentMetadataUpdated(payment: try FfiConverterTypePayment.read(from: &buf)
         )
         
-        case 8: return .lightningAddressChanged(lightningAddress: try FfiConverterOptionTypeLightningAddressInfo.read(from: &buf)
+        case 8: return .autoOptimization(optimizationEvent: try FfiConverterTypeAutoOptimizationEvent.read(from: &buf)
         )
         
-        case 9: return .newDeposits(newDeposits: try FfiConverterSequenceTypeDepositInfo.read(from: &buf)
+        case 9: return .lightningAddressChanged(lightningAddress: try FfiConverterOptionTypeLightningAddressInfo.read(from: &buf)
         )
         
-        case 10: return .unilateralExitStateChanged
+        case 10: return .newDeposits(newDeposits: try FfiConverterSequenceTypeDepositInfo.read(from: &buf)
+        )
+        
+        case 11: return .unilateralExitStateChanged
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -42702,23 +43651,28 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
             FfiConverterTypePayment.write(payment, into: &buf)
             
         
-        case let .autoOptimization(optimizationEvent):
+        case let .paymentMetadataUpdated(payment):
             writeInt(&buf, Int32(7))
+            FfiConverterTypePayment.write(payment, into: &buf)
+            
+        
+        case let .autoOptimization(optimizationEvent):
+            writeInt(&buf, Int32(8))
             FfiConverterTypeAutoOptimizationEvent.write(optimizationEvent, into: &buf)
             
         
         case let .lightningAddressChanged(lightningAddress):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterOptionTypeLightningAddressInfo.write(lightningAddress, into: &buf)
             
         
         case let .newDeposits(newDeposits):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterSequenceTypeDepositInfo.write(newDeposits, into: &buf)
             
         
         case .unilateralExitStateChanged:
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
         
         }
     }
@@ -42907,6 +43861,10 @@ public enum SendPaymentMethod {
          * Asset which service fee is denominated in. Unset means BTC sats.
          */serviceFeeAsset: String?, 
         /**
+         * Decimals of `service_fee_asset`, for formatting `service_fee_amount`.
+         * Unset when the fee is in sats or the provider did not report them.
+         */serviceFeeAssetDecimals: UInt32?, 
+        /**
          * Sats budget for moving the amount in from the wallet to the provider.
          */sourceTransferFeeSats: UInt64, 
         /**
@@ -42949,7 +43907,7 @@ public struct FfiConverterTypeSendPaymentMethod: FfiConverterRustBuffer {
         case 4: return .sparkInvoice(sparkInvoiceDetails: try FfiConverterTypeSparkInvoiceDetails.read(from: &buf), fee: try FfiConverterTypeu128.read(from: &buf), tokenIdentifier: try FfiConverterOptionString.read(from: &buf)
         )
         
-        case 5: return .crossChainAddress(route: try FfiConverterTypeCrossChainRoutePair.read(from: &buf), recipientAddress: try FfiConverterString.read(from: &buf), amountIn: try FfiConverterTypeu128.read(from: &buf), assetAmountIn: try FfiConverterTypeu128.read(from: &buf), estimatedOut: try FfiConverterTypeu128.read(from: &buf), feeAmount: try FfiConverterTypeu128.read(from: &buf), serviceFeeAmount: try FfiConverterTypeu128.read(from: &buf), serviceFeeAsset: try FfiConverterOptionString.read(from: &buf), sourceTransferFeeSats: try FfiConverterUInt64.read(from: &buf), feeMode: try FfiConverterTypeCrossChainFeeMode.read(from: &buf), expiresAt: try FfiConverterString.read(from: &buf), providerContext: try FfiConverterTypeCrossChainProviderContext.read(from: &buf)
+        case 5: return .crossChainAddress(route: try FfiConverterTypeCrossChainRoutePair.read(from: &buf), recipientAddress: try FfiConverterString.read(from: &buf), amountIn: try FfiConverterTypeu128.read(from: &buf), assetAmountIn: try FfiConverterTypeu128.read(from: &buf), estimatedOut: try FfiConverterTypeu128.read(from: &buf), feeAmount: try FfiConverterTypeu128.read(from: &buf), serviceFeeAmount: try FfiConverterTypeu128.read(from: &buf), serviceFeeAsset: try FfiConverterOptionString.read(from: &buf), serviceFeeAssetDecimals: try FfiConverterOptionUInt32.read(from: &buf), sourceTransferFeeSats: try FfiConverterUInt64.read(from: &buf), feeMode: try FfiConverterTypeCrossChainFeeMode.read(from: &buf), expiresAt: try FfiConverterString.read(from: &buf), providerContext: try FfiConverterTypeCrossChainProviderContext.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -42987,7 +43945,7 @@ public struct FfiConverterTypeSendPaymentMethod: FfiConverterRustBuffer {
             FfiConverterOptionString.write(tokenIdentifier, into: &buf)
             
         
-        case let .crossChainAddress(route,recipientAddress,amountIn,assetAmountIn,estimatedOut,feeAmount,serviceFeeAmount,serviceFeeAsset,sourceTransferFeeSats,feeMode,expiresAt,providerContext):
+        case let .crossChainAddress(route,recipientAddress,amountIn,assetAmountIn,estimatedOut,feeAmount,serviceFeeAmount,serviceFeeAsset,serviceFeeAssetDecimals,sourceTransferFeeSats,feeMode,expiresAt,providerContext):
             writeInt(&buf, Int32(5))
             FfiConverterTypeCrossChainRoutePair.write(route, into: &buf)
             FfiConverterString.write(recipientAddress, into: &buf)
@@ -42997,6 +43955,7 @@ public struct FfiConverterTypeSendPaymentMethod: FfiConverterRustBuffer {
             FfiConverterTypeu128.write(feeAmount, into: &buf)
             FfiConverterTypeu128.write(serviceFeeAmount, into: &buf)
             FfiConverterOptionString.write(serviceFeeAsset, into: &buf)
+            FfiConverterOptionUInt32.write(serviceFeeAssetDecimals, into: &buf)
             FfiConverterUInt64.write(sourceTransferFeeSats, into: &buf)
             FfiConverterTypeCrossChainFeeMode.write(feeMode, into: &buf)
             FfiConverterString.write(expiresAt, into: &buf)
@@ -45139,6 +46098,13 @@ public enum UpdateDepositPayload {
      */
     case refundBroadcastState(refundTxid: String, state: RefundState
     )
+    /**
+     * Sets the fee ceiling standing for this deposit, which later automatic
+     * claims run under. `None` clears it, returning the deposit to the
+     * configured ceiling.
+     */
+    case maxClaimFee(maxFee: MaxFee?
+    )
 }
 
 
@@ -45166,6 +46132,9 @@ public struct FfiConverterTypeUpdateDepositPayload: FfiConverterRustBuffer {
         )
         
         case 4: return .refundBroadcastState(refundTxid: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRefundState.read(from: &buf)
+        )
+        
+        case 5: return .maxClaimFee(maxFee: try FfiConverterOptionTypeMaxFee.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -45198,6 +46167,11 @@ public struct FfiConverterTypeUpdateDepositPayload: FfiConverterRustBuffer {
             FfiConverterString.write(refundTxid, into: &buf)
             FfiConverterTypeRefundState.write(state, into: &buf)
             
+        
+        case let .maxClaimFee(maxFee):
+            writeInt(&buf, Int32(5))
+            FfiConverterOptionTypeMaxFee.write(maxFee, into: &buf)
+            
         }
     }
 }
@@ -45219,6 +46193,101 @@ public func FfiConverterTypeUpdateDepositPayload_lower(_ value: UpdateDepositPay
 
 
 extension UpdateDepositPayload: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum UpdateWatchedAddressPayload {
+    
+    /**
+     * Starts watching the address, or restarts the window on one already
+     * watched, clearing `seen`.
+     */
+    case watch(issuedAt: UInt64
+    )
+    /**
+     * Records that a deposit to it has been seen unconfirmed.
+     */
+    case seen
+    /**
+     * Stops watching it, removing the row. Applies only while `issued_at` is
+     * still the stored value, so an address handed out again since it was read
+     * is not retired by a decision taken before that.
+     */
+    case unwatch(issuedAt: UInt64
+    )
+}
+
+
+#if compiler(>=6)
+extension UpdateWatchedAddressPayload: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUpdateWatchedAddressPayload: FfiConverterRustBuffer {
+    typealias SwiftType = UpdateWatchedAddressPayload
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UpdateWatchedAddressPayload {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .watch(issuedAt: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 2: return .seen
+        
+        case 3: return .unwatch(issuedAt: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: UpdateWatchedAddressPayload, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .watch(issuedAt):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt64.write(issuedAt, into: &buf)
+            
+        
+        case .seen:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .unwatch(issuedAt):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt64.write(issuedAt, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUpdateWatchedAddressPayload_lift(_ buf: RustBuffer) throws -> UpdateWatchedAddressPayload {
+    return try FfiConverterTypeUpdateWatchedAddressPayload.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUpdateWatchedAddressPayload_lower(_ value: UpdateWatchedAddressPayload) -> RustBuffer {
+    return FfiConverterTypeUpdateWatchedAddressPayload.lower(value)
+}
+
+
+extension UpdateWatchedAddressPayload: Equatable, Hashable {}
 
 
 
@@ -45898,6 +46967,30 @@ fileprivate struct FfiConverterOptionTypeCrossChainReceiveInfo: FfiConverterRust
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeCrossChainReceiveInfo.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeCrossChainRouteLimits: FfiConverterRustBuffer {
+    typealias SwiftType = CrossChainRouteLimits?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCrossChainRouteLimits.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCrossChainRouteLimits.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -47502,6 +48595,31 @@ fileprivate struct FfiConverterSequenceTypeConversion: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCrossChainAcceptedAsset: FfiConverterRustBuffer {
+    typealias SwiftType = [CrossChainAcceptedAsset]
+
+    public static func write(_ value: [CrossChainAcceptedAsset], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCrossChainAcceptedAsset.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CrossChainAcceptedAsset] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CrossChainAcceptedAsset]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCrossChainAcceptedAsset.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCrossChainRoutePair: FfiConverterRustBuffer {
     typealias SwiftType = [CrossChainRoutePair]
 
@@ -48352,6 +49470,31 @@ fileprivate struct FfiConverterSequenceTypeUtxo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeWatchedDepositAddress: FfiConverterRustBuffer {
+    typealias SwiftType = [WatchedDepositAddress]
+
+    public static func write(_ value: [WatchedDepositAddress], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeWatchedDepositAddress.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [WatchedDepositAddress] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [WatchedDepositAddress]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeWatchedDepositAddress.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeWebhook: FfiConverterRustBuffer {
     typealias SwiftType = [Webhook]
 
@@ -48519,31 +49662,6 @@ fileprivate struct FfiConverterSequenceTypePaymentType: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypePaymentType.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeSparkAsset: FfiConverterRustBuffer {
-    typealias SwiftType = [SparkAsset]
-
-    public static func write(_ value: [SparkAsset], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeSparkAsset.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SparkAsset] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [SparkAsset]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeSparkAsset.read(from: &buf))
         }
         return seq
     }
@@ -49086,9 +50204,9 @@ public func defaultConfig(network: Network) -> Config  {
  *
  * * `mnemonic` - BIP39 mnemonic phrase (12 or 24 words)
  * * `passphrase` - Optional passphrase for the mnemonic
- * * `network` - Network to use (Mainnet or Regtest)
+ * * `network` - Network to use (Mainnet, Signet, or Regtest)
  * * `account_number` - Account number in the derivation path. Unset uses the
- * network default: 0 on Regtest, 1 on all other networks.
+ * network default: 0 on Regtest and Signet, 1 on Mainnet.
  */
 public func defaultExternalSigners(mnemonic: String, passphrase: String?, network: Network, accountNumber: UInt32?)throws  -> ExternalSigners  {
     return try  FfiConverterTypeExternalSigners_lift(try rustCallWithError(FfiConverterTypeSdkError_lift) {
@@ -49344,7 +50462,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_default_config() != 62194) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_func_default_external_signers() != 58595) {
+    if (uniffi_breez_sdk_spark_checksum_func_default_external_signers() != 7133) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_default_mysql_storage_config() != 14529) {
@@ -49572,7 +50690,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_sign_message() != 47976) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_sync_wallet() != 30368) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_sync_wallet() != 62870) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_unilateral_exit() != 58676) {
@@ -49626,7 +50744,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_get_identity_public_key() != 38705) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_get_public_key_for_leaf() != 39015) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_get_public_key_for_leaf() != 59013) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_is_remote() != 63049) {
@@ -49641,7 +50759,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_message() != 1815) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_leaf_refund_spend() != 62629) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_leaf_refund_spend() != 61127) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_frost() != 58732) {
@@ -49731,7 +50849,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_build() != 8126) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_account_number() != 6550) {
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_account_number() != 18776) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_chain_service() != 2848) {
@@ -49815,55 +50933,61 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_storage_update_deposit() != 18714) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_set_lnurl_metadata() != 64210) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_list_watched_deposit_addresses() != 43297) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_list_contacts() != 10490) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_update_watched_deposit_address() != 23278) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_contact() != 19980) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_set_lnurl_metadata() != 3637) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_insert_contact() != 38342) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_list_contacts() != 40145) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_delete_contact() != 50274) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_contact() != 51536) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_set_cross_chain_swap() != 31116) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_insert_contact() != 48412) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_cross_chain_swap() != 20172) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_delete_contact() != 4102) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_list_active_cross_chain_swaps() != 23493) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_set_cross_chain_swap() != 17340) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_add_outgoing_change() != 44890) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_cross_chain_swap() != 39794) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_complete_outgoing_sync() != 8492) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_list_active_cross_chain_swaps() != 3449) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_pending_outgoing_changes() != 54668) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_add_outgoing_change() != 59529) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_last_revision() != 17237) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_complete_outgoing_sync() != 21965) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_insert_incoming_records() != 35265) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_pending_outgoing_changes() != 21366) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_delete_incoming_record() != 32789) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_last_revision() != 43970) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_incoming_records() != 18699) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_insert_incoming_records() != 59416) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_get_latest_outgoing_change() != 59591) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_delete_incoming_record() != 12675) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_storage_update_record_from_incoming() != 30443) {
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_incoming_records() != 20470) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_storage_get_latest_outgoing_change() != 25691) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_storage_update_record_from_incoming() != 61274) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_storagebackend_create_stores() != 51497) {
