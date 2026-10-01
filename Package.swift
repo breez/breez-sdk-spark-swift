@@ -16,7 +16,7 @@ let package = Package(
         .package(url: "https://github.com/mkrd/Swift-BigInt.git", from: "2.4.0")
     ],
     targets: [
-        .binaryTarget(name: "breez_sdk_sparkFFI", url: "https://github.com/breez/breez-sdk-spark-swift/releases/download/0.27.0-dev1/breez_sdk_sparkFFI.xcframework.zip", checksum: "dbaefa861c2476287bf60f9b0678481b009c674095d3bbaa14fab4599ae9c65c"),
+        .binaryTarget(name: "breez_sdk_sparkFFI", url: "https://github.com/breez/breez-sdk-spark-swift/releases/download/0.27.0-dev2/breez_sdk_sparkFFI.xcframework.zip", checksum: "560fa57b0a585034786cbb94d904a766f20f8a6bd4a92c679b1cb16c6ab1170e"),
         // ObjC helper for passkey PRF types hidden by NS_REFINED_FOR_SWIFT.
         // This target's copy is canonical: `cargo xtask sync-passkey-core`
         // mirrors it verbatim into the Flutter and React Native ios trees.
