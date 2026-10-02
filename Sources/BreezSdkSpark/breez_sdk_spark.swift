@@ -1387,9 +1387,6 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
      *
      * The early quote is requested from the provider on each call rather than read
      * from cache, so call this when a user is deciding, not on a timer.
-     *
-     * Fails with `DepositTooSmall` for a deposit worth too little to claim at the
-     * current fees.
      */
     func fetchClaimDepositQuote(request: FetchClaimDepositQuoteRequest) async throws  -> FetchClaimDepositQuoteResponse
     
@@ -2218,9 +2215,6 @@ open func exportUnilateralExitState()async throws  -> ExportUnilateralExitStateR
      *
      * The early quote is requested from the provider on each call rather than read
      * from cache, so call this when a user is deciding, not on a timer.
-     *
-     * Fails with `DepositTooSmall` for a deposit worth too little to claim at the
-     * current fees.
      */
 open func fetchClaimDepositQuote(request: FetchClaimDepositQuoteRequest)async throws  -> FetchClaimDepositQuoteResponse  {
     return
@@ -8208,8 +8202,7 @@ public protocol SdkBuilderProtocol: AnyObject, Sendable {
     func withPostgresBackend(config: PostgresStorageConfig) async throws 
     
     /**
-     * Adds a REST chain service backend to be used by the SDK. Call it more
-     * than once to add fallbacks, tried in the order they were added.
+     * Sets the REST chain service to be used by the SDK.
      * Arguments:
      * - `url`: The base URL of the REST API.
      * - `api_type`: The API type to be used.
@@ -8575,8 +8568,7 @@ open func withPostgresBackend(config: PostgresStorageConfig)async throws   {
 }
     
     /**
-     * Adds a REST chain service backend to be used by the SDK. Call it more
-     * than once to add fallbacks, tried in the order they were added.
+     * Sets the REST chain service to be used by the SDK.
      * Arguments:
      * - `url`: The base URL of the REST API.
      * - `api_type`: The API type to be used.
@@ -39205,13 +39197,6 @@ public enum DepositClaimError {
     )
     case missingUtxo(tx: String, vout: UInt32
     )
-    /**
-     * The deposit is worth too little to claim: after the claim fee, what would
-     * be credited is below the dust limit. A drop in on-chain fees can make it
-     * claimable.
-     */
-    case depositTooSmall(tx: String, vout: UInt32
-    )
     case generic(message: String
     )
 }
@@ -39237,10 +39222,7 @@ public struct FfiConverterTypeDepositClaimError: FfiConverterRustBuffer {
         case 2: return .missingUtxo(tx: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf)
         )
         
-        case 3: return .depositTooSmall(tx: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf)
-        )
-        
-        case 4: return .generic(message: try FfiConverterString.read(from: &buf)
+        case 3: return .generic(message: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -39266,14 +39248,8 @@ public struct FfiConverterTypeDepositClaimError: FfiConverterRustBuffer {
             FfiConverterUInt32.write(vout, into: &buf)
             
         
-        case let .depositTooSmall(tx,vout):
-            writeInt(&buf, Int32(3))
-            FfiConverterString.write(tx, into: &buf)
-            FfiConverterUInt32.write(vout, into: &buf)
-            
-        
         case let .generic(message):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(3))
             FfiConverterString.write(message, into: &buf)
             
         }
@@ -43255,13 +43231,6 @@ public enum SdkError: Swift.Error {
     case MissingUtxo(tx: String, vout: UInt32
     )
     /**
-     * The deposit is worth too little to claim: after the claim fee, what would
-     * be credited is below the dust limit. A drop in on-chain fees can make it
-     * claimable.
-     */
-    case DepositTooSmall(tx: String, vout: UInt32
-    )
-    /**
      * Another claim on this deposit is already running.
      */
     case DepositClaimInProgress(tx: String, vout: UInt32
@@ -43351,30 +43320,26 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             tx: try FfiConverterString.read(from: &buf), 
             vout: try FfiConverterUInt32.read(from: &buf)
             )
-        case 12: return .DepositTooSmall(
+        case 12: return .DepositClaimInProgress(
             tx: try FfiConverterString.read(from: &buf), 
             vout: try FfiConverterUInt32.read(from: &buf)
             )
-        case 13: return .DepositClaimInProgress(
-            tx: try FfiConverterString.read(from: &buf), 
-            vout: try FfiConverterUInt32.read(from: &buf)
-            )
-        case 14: return .RefundReplacementFeeTooLow(
+        case 13: return .RefundReplacementFeeTooLow(
             pendingFeeSats: try FfiConverterUInt64.read(from: &buf), 
             requiredFeeSats: try FfiConverterUInt64.read(from: &buf)
             )
-        case 15: return .LnurlError(
+        case 14: return .LnurlError(
             try FfiConverterString.read(from: &buf)
             )
-        case 16: return .Signer(
+        case 15: return .Signer(
             try FfiConverterString.read(from: &buf)
             )
-        case 17: return .OptimizationAlreadyRunning
-        case 18: return .OptimizationCancelled
-        case 19: return .InsufficientCpfpFunds(
+        case 16: return .OptimizationAlreadyRunning
+        case 17: return .OptimizationCancelled
+        case 18: return .InsufficientCpfpFunds(
             requiredSat: try FfiConverterUInt64.read(from: &buf)
             )
-        case 20: return .Generic(
+        case 19: return .Generic(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -43453,49 +43418,43 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             FfiConverterUInt32.write(vout, into: &buf)
             
         
-        case let .DepositTooSmall(tx,vout):
+        case let .DepositClaimInProgress(tx,vout):
             writeInt(&buf, Int32(12))
             FfiConverterString.write(tx, into: &buf)
             FfiConverterUInt32.write(vout, into: &buf)
             
         
-        case let .DepositClaimInProgress(tx,vout):
-            writeInt(&buf, Int32(13))
-            FfiConverterString.write(tx, into: &buf)
-            FfiConverterUInt32.write(vout, into: &buf)
-            
-        
         case let .RefundReplacementFeeTooLow(pendingFeeSats,requiredFeeSats):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(13))
             FfiConverterUInt64.write(pendingFeeSats, into: &buf)
             FfiConverterUInt64.write(requiredFeeSats, into: &buf)
             
         
         case let .LnurlError(v1):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(14))
             FfiConverterString.write(v1, into: &buf)
             
         
         case let .Signer(v1):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(15))
             FfiConverterString.write(v1, into: &buf)
             
         
         case .OptimizationAlreadyRunning:
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(16))
         
         
         case .OptimizationCancelled:
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(17))
         
         
         case let .InsufficientCpfpFunds(requiredSat):
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(18))
             FfiConverterUInt64.write(requiredSat, into: &buf)
             
         
         case let .Generic(v1):
-            writeInt(&buf, Int32(20))
+            writeInt(&buf, Int32(19))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -43607,16 +43566,6 @@ public enum SdkEvent {
      * exit state exported earlier is out of date and should be exported again.
      */
     case unilateralExitStateChanged
-    /**
-     * Emitted when a Stable Balance conversion failed: sweeping received
-     * bitcoin into the stable token, or converting the token back to bitcoin
-     * on deactivation. The SDK tries again after a growing delay, and
-     * `retry_in_secs` is the soonest it will. It is unset for a received
-     * payment's own conversion, which is not retried: its sats go to the next
-     * batch conversion, which reports its own failures.
-     */
-    case stableBalanceConversionFailed(conversion: StableBalanceConversionKind, error: String, retryInSecs: UInt64?
-    )
 }
 
 
@@ -43664,9 +43613,6 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
         )
         
         case 11: return .unilateralExitStateChanged
-        
-        case 12: return .stableBalanceConversionFailed(conversion: try FfiConverterTypeStableBalanceConversionKind.read(from: &buf), error: try FfiConverterString.read(from: &buf), retryInSecs: try FfiConverterOptionUInt64.read(from: &buf)
-        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -43728,13 +43674,6 @@ public struct FfiConverterTypeSdkEvent: FfiConverterRustBuffer {
         case .unilateralExitStateChanged:
             writeInt(&buf, Int32(11))
         
-        
-        case let .stableBalanceConversionFailed(conversion,error,retryInSecs):
-            writeInt(&buf, Int32(12))
-            FfiConverterTypeStableBalanceConversionKind.write(conversion, into: &buf)
-            FfiConverterString.write(error, into: &buf)
-            FfiConverterOptionUInt64.write(retryInSecs, into: &buf)
-            
         }
     }
 }
@@ -44984,96 +44923,6 @@ public func FfiConverterTypeStableBalanceActiveLabel_lower(_ value: StableBalanc
 
 
 extension StableBalanceActiveLabel: Equatable, Hashable {}
-
-
-
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-/**
- * Which Stable Balance conversion an [`SdkEvent::StableBalanceConversionFailed`]
- * refers to.
- */
-
-public enum StableBalanceConversionKind {
-    
-    /**
-     * A single received payment being converted to the stable token.
-     */
-    case perReceive
-    /**
-     * Bitcoin above the threshold being swept into the stable token.
-     */
-    case autoConvert
-    /**
-     * The stable token being converted back to bitcoin after deactivation.
-     */
-    case deactivation
-}
-
-
-#if compiler(>=6)
-extension StableBalanceConversionKind: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeStableBalanceConversionKind: FfiConverterRustBuffer {
-    typealias SwiftType = StableBalanceConversionKind
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StableBalanceConversionKind {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .perReceive
-        
-        case 2: return .autoConvert
-        
-        case 3: return .deactivation
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: StableBalanceConversionKind, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .perReceive:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .autoConvert:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .deactivation:
-            writeInt(&buf, Int32(3))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeStableBalanceConversionKind_lift(_ buf: RustBuffer) throws -> StableBalanceConversionKind {
-    return try FfiConverterTypeStableBalanceConversionKind.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeStableBalanceConversionKind_lower(_ value: StableBalanceConversionKind) -> RustBuffer {
-    return FfiConverterTypeStableBalanceConversionKind.lower(value)
-}
-
-
-extension StableBalanceConversionKind: Equatable, Hashable {}
 
 
 
@@ -50556,18 +50405,6 @@ public func newSharedSdkContext(config: SdkContextConfig)async throws  -> SdkCon
         )
 }
 /**
- * Reads a [`SparkConfig`] from JSON, for a deployment that publishes its
- * operators, service provider and certificates as a file. Set it on
- * [`Config::spark_config`] to connect a wallet to that deployment.
- */
-public func parseSparkConfig(json: String)throws  -> SparkConfig  {
-    return try  FfiConverterTypeSparkConfig_lift(try rustCallWithError(FfiConverterTypeSdkError_lift) {
-    uniffi_breez_sdk_spark_fn_func_parse_spark_config(
-        FfiConverterString.lower(json),$0
-    )
-})
-}
-/**
  * `PostgreSQL`-backed storage built from `config`. Opens the connection pool;
  * fails if `config` is invalid, or if this build of the SDK does not include
  * `PostgreSQL` support.
@@ -50660,9 +50497,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_new_shared_sdk_context() != 7027) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_func_parse_spark_config() != 54802) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_breez_sdk_spark_checksum_func_postgres_storage() != 45001) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -50744,7 +50578,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_export_unilateral_exit_state() != 63178) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_fetch_claim_deposit_quote() != 39876) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_fetch_claim_deposit_quote() != 30349) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_fetch_conversion_limits() != 50958) {
@@ -51041,7 +50875,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_postgres_backend() != 61824) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_rest_chain_service() != 10546) {
+    if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_rest_chain_service() != 63155) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_sdkbuilder_with_session_store() != 32818) {
