@@ -1271,6 +1271,10 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     func authorizeLightningAddressTransfer(request: AuthorizeTransferRequest) async throws  -> TransferAuthorization
     
     /**
+     * **Deprecated.** Use `bridge_from_cash_app` on the client from
+     * [`get_bridging_client`](Self::get_bridging_client), whose bridges can be
+     * looked up with `get_bridge_status`.
+     *
      * Bridge from Cash App to USDC/USDT on an external chain.
      *
      * Creates a cross-chain order and returns a `cash.app` deep link the payer
@@ -1281,6 +1285,10 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     func bridgeFromCashApp(request: BridgeFromCashAppRequest) async throws  -> BridgeFromCashAppResponse
     
     /**
+     * **Deprecated.** Use `bridge_to_cash_app` on the client from
+     * [`get_bridging_client`](Self::get_bridging_client), whose bridges can be
+     * looked up with `get_bridge_status`.
+     *
      * Bridge USDC/USDT from an external chain to a Cash App user.
      *
      * Returns the deposit the payer makes on the source chain. Once it lands,
@@ -1422,6 +1430,15 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     func fetchClaimDepositQuote(request: FetchClaimDepositQuoteRequest) async throws  -> FetchClaimDepositQuoteResponse
     
     func fetchConversionLimits(request: FetchConversionLimitsRequest) async throws  -> FetchConversionLimitsResponse
+    
+    /**
+     * Returns a client for bridges: orders in which a payer on another chain
+     * or on Lightning pays a recipient, with no funds moving through the
+     * SDK. It shares this SDK's API key, and its cross-chain settings when
+     * set. It doesn't need cross-chain payments enabled, so it also works in
+     * server mode. Only available on mainnet.
+     */
+    func getBridgingClient() throws  -> BridgingClient
     
     /**
      * Returns the available cross-chain routes.
@@ -1613,7 +1630,8 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     func prepareLnurlPay(request: PrepareLnurlPayRequest) async throws  -> PrepareLnurlPayResponse
     
     /**
-     * **Deprecated.** Use [`bridge_from_cash_app`](Self::bridge_from_cash_app).
+     * **Deprecated.** Use `bridge_from_cash_app` on the client from
+     * [`get_bridging_client`](Self::get_bridging_client).
      */
     func preparePaymentLink(request: PreparePaymentLinkRequest) async throws  -> PreparePaymentLinkResponse
     
@@ -1941,6 +1959,10 @@ open func authorizeLightningAddressTransfer(request: AuthorizeTransferRequest)as
 }
     
     /**
+     * **Deprecated.** Use `bridge_from_cash_app` on the client from
+     * [`get_bridging_client`](Self::get_bridging_client), whose bridges can be
+     * looked up with `get_bridge_status`.
+     *
      * Bridge from Cash App to USDC/USDT on an external chain.
      *
      * Creates a cross-chain order and returns a `cash.app` deep link the payer
@@ -1966,6 +1988,10 @@ open func bridgeFromCashApp(request: BridgeFromCashAppRequest)async throws  -> B
 }
     
     /**
+     * **Deprecated.** Use `bridge_to_cash_app` on the client from
+     * [`get_bridging_client`](Self::get_bridging_client), whose bridges can be
+     * looked up with `get_bridge_status`.
+     *
      * Bridge USDC/USDT from an external chain to a Cash App user.
      *
      * Returns the deposit the payer makes on the source chain. Once it lands,
@@ -2391,6 +2417,20 @@ open func fetchConversionLimits(request: FetchConversionLimitsRequest)async thro
             liftFunc: FfiConverterTypeFetchConversionLimitsResponse_lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
+}
+    
+    /**
+     * Returns a client for bridges: orders in which a payer on another chain
+     * or on Lightning pays a recipient, with no funds moving through the
+     * SDK. It shares this SDK's API key, and its cross-chain settings when
+     * set. It doesn't need cross-chain payments enabled, so it also works in
+     * server mode. Only available on mainnet.
+     */
+open func getBridgingClient()throws  -> BridgingClient  {
+    return try  FfiConverterTypeBridgingClient_lift(try rustCallWithError(FfiConverterTypeSdkError_lift) {
+    uniffi_breez_sdk_spark_fn_method_breezsdk_get_bridging_client(self.uniffiClonePointer(),$0
+    )
+})
 }
     
     /**
@@ -2888,7 +2928,8 @@ open func prepareLnurlPay(request: PrepareLnurlPayRequest)async throws  -> Prepa
 }
     
     /**
-     * **Deprecated.** Use [`bridge_from_cash_app`](Self::bridge_from_cash_app).
+     * **Deprecated.** Use `bridge_from_cash_app` on the client from
+     * [`get_bridging_client`](Self::get_bridging_client).
      */
 open func preparePaymentLink(request: PreparePaymentLinkRequest)async throws  -> PreparePaymentLinkResponse  {
     return
@@ -3499,6 +3540,268 @@ public func FfiConverterTypeBreezSdk_lift(_ pointer: UnsafeMutableRawPointer) th
 #endif
 public func FfiConverterTypeBreezSdk_lower(_ value: BreezSdk) -> UnsafeMutableRawPointer {
     return FfiConverterTypeBreezSdk.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Creates bridges: orders that pay a recipient from another chain or over
+ * Lightning, with no funds moving through the SDK. Get one with
+ * [`new_bridging_client`], or from a connected SDK with
+ * `get_bridging_client`. Only available on mainnet.
+ */
+public protocol BridgingClientProtocol: AnyObject, Sendable {
+    
+    /**
+     * Pays a recipient on another chain from Cash App. Takes a route for the
+     * address that the payer funds over Lightning, and returns the bridge
+     * with the Cash App link as its `payment_request`.
+     */
+    func bridgeFromCashApp(request: CreateBridgeRequest) async throws  -> CreateBridgeResponse
+    
+    /**
+     * Pays a Cash App user from another chain. The recipient is their
+     * username, as `$alice`, or their `alice@cash.app` Lightning address, as
+     * given to [`Self::get_routes`].
+     */
+    func bridgeToCashApp(request: CreateBridgeRequest) async throws  -> CreateBridgeResponse
+    
+    /**
+     * Creates a bridge and returns what the payer pays. Once paid, the
+     * provider delivers to the recipient, or refunds `refund_address` if it
+     * can't. Track it with [`Self::get_bridge_status`].
+     */
+    func createBridge(request: CreateBridgeRequest) async throws  -> CreateBridgeResponse
+    
+    /**
+     * Reads a bridge's status from the provider.
+     */
+    func getBridgeStatus(request: GetBridgeStatusRequest) async throws  -> GetBridgeStatusResponse
+    
+    /**
+     * Lists the routes that can pay `recipient`.
+     */
+    func getRoutes(request: GetBridgeRoutesRequest) async throws  -> GetBridgeRoutesResponse
+    
+}
+/**
+ * Creates bridges: orders that pay a recipient from another chain or over
+ * Lightning, with no funds moving through the SDK. Get one with
+ * [`new_bridging_client`], or from a connected SDK with
+ * `get_bridging_client`. Only available on mainnet.
+ */
+open class BridgingClient: BridgingClientProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_breez_sdk_spark_fn_clone_bridgingclient(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_breez_sdk_spark_fn_free_bridgingclient(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Pays a recipient on another chain from Cash App. Takes a route for the
+     * address that the payer funds over Lightning, and returns the bridge
+     * with the Cash App link as its `payment_request`.
+     */
+open func bridgeFromCashApp(request: CreateBridgeRequest)async throws  -> CreateBridgeResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_bridgingclient_bridge_from_cash_app(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeCreateBridgeRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCreateBridgeResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
+     * Pays a Cash App user from another chain. The recipient is their
+     * username, as `$alice`, or their `alice@cash.app` Lightning address, as
+     * given to [`Self::get_routes`].
+     */
+open func bridgeToCashApp(request: CreateBridgeRequest)async throws  -> CreateBridgeResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_bridgingclient_bridge_to_cash_app(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeCreateBridgeRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCreateBridgeResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
+     * Creates a bridge and returns what the payer pays. Once paid, the
+     * provider delivers to the recipient, or refunds `refund_address` if it
+     * can't. Track it with [`Self::get_bridge_status`].
+     */
+open func createBridge(request: CreateBridgeRequest)async throws  -> CreateBridgeResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_bridgingclient_create_bridge(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeCreateBridgeRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCreateBridgeResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
+     * Reads a bridge's status from the provider.
+     */
+open func getBridgeStatus(request: GetBridgeStatusRequest)async throws  -> GetBridgeStatusResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_bridgingclient_get_bridge_status(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeGetBridgeStatusRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeGetBridgeStatusResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
+     * Lists the routes that can pay `recipient`.
+     */
+open func getRoutes(request: GetBridgeRoutesRequest)async throws  -> GetBridgeRoutesResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_bridgingclient_get_routes(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeGetBridgeRoutesRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeGetBridgeRoutesResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBridgingClient: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = BridgingClient
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> BridgingClient {
+        return BridgingClient(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: BridgingClient) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BridgingClient {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: BridgingClient, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBridgingClient_lift(_ pointer: UnsafeMutableRawPointer) throws -> BridgingClient {
+    return try FfiConverterTypeBridgingClient.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBridgingClient_lower(_ value: BridgingClient) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeBridgingClient.lower(value)
 }
 
 
@@ -14375,6 +14678,9 @@ public func FfiConverterTypeBolt12OfferDetails_lower(_ value: Bolt12OfferDetails
 
 
 /**
+ * **Deprecated.** Use `CreateBridgeRequest` with the bridging client's
+ * `bridge_from_cash_app`.
+ *
  * Request to bridge from Cash App to USDC/USDT on an external chain.
  *
  * The payer pays the returned URL in Cash App over Lightning, and the
@@ -14524,6 +14830,9 @@ public func FfiConverterTypeBridgeFromCashAppRequest_lower(_ value: BridgeFromCa
 
 
 /**
+ * **Deprecated.** Use `CreateBridgeResponse`, from the bridging client's
+ * `bridge_from_cash_app`.
+ *
  * Response to a [`BridgeFromCashAppRequest`]: the URL to pay plus the quote,
  * so the caller can display the expected delivery and fees.
  */
@@ -14700,6 +15009,242 @@ public func FfiConverterTypeBridgeFromCashAppResponse_lower(_ value: BridgeFromC
 
 
 /**
+ * A way to pay a recipient: what the payer pays, and what the recipient
+ * receives.
+ */
+public struct BridgeRoutePair {
+    public var provider: CrossChainProvider
+    /**
+     * What the payer pays.
+     */
+    public var source: BridgeRoutePairSide
+    /**
+     * What the recipient receives.
+     */
+    public var destination: BridgeRoutePairSide
+    /**
+     * Bounds on what the payer pays, in `source` base units. Unset when the
+     * provider publishes none.
+     */
+    public var limits: CrossChainRouteLimits?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(provider: CrossChainProvider, 
+        /**
+         * What the payer pays.
+         */source: BridgeRoutePairSide, 
+        /**
+         * What the recipient receives.
+         */destination: BridgeRoutePairSide, 
+        /**
+         * Bounds on what the payer pays, in `source` base units. Unset when the
+         * provider publishes none.
+         */limits: CrossChainRouteLimits?) {
+        self.provider = provider
+        self.source = source
+        self.destination = destination
+        self.limits = limits
+    }
+}
+
+#if compiler(>=6)
+extension BridgeRoutePair: Sendable {}
+#endif
+
+
+extension BridgeRoutePair: Equatable, Hashable {
+    public static func ==(lhs: BridgeRoutePair, rhs: BridgeRoutePair) -> Bool {
+        if lhs.provider != rhs.provider {
+            return false
+        }
+        if lhs.source != rhs.source {
+            return false
+        }
+        if lhs.destination != rhs.destination {
+            return false
+        }
+        if lhs.limits != rhs.limits {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(provider)
+        hasher.combine(source)
+        hasher.combine(destination)
+        hasher.combine(limits)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBridgeRoutePair: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BridgeRoutePair {
+        return
+            try BridgeRoutePair(
+                provider: FfiConverterTypeCrossChainProvider.read(from: &buf), 
+                source: FfiConverterTypeBridgeRoutePairSide.read(from: &buf), 
+                destination: FfiConverterTypeBridgeRoutePairSide.read(from: &buf), 
+                limits: FfiConverterOptionTypeCrossChainRouteLimits.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BridgeRoutePair, into buf: inout [UInt8]) {
+        FfiConverterTypeCrossChainProvider.write(value.provider, into: &buf)
+        FfiConverterTypeBridgeRoutePairSide.write(value.source, into: &buf)
+        FfiConverterTypeBridgeRoutePairSide.write(value.destination, into: &buf)
+        FfiConverterOptionTypeCrossChainRouteLimits.write(value.limits, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBridgeRoutePair_lift(_ buf: RustBuffer) throws -> BridgeRoutePair {
+    return try FfiConverterTypeBridgeRoutePair.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBridgeRoutePair_lower(_ value: BridgeRoutePair) -> RustBuffer {
+    return FfiConverterTypeBridgeRoutePair.lower(value)
+}
+
+
+/**
+ * One side of a [`BridgeRoutePair`].
+ */
+public struct BridgeRoutePairSide {
+    /**
+     * `"spark"`, `"lightning"`, or another chain, e.g. `"base"` or `"tron"`.
+     */
+    public var chain: String
+    /**
+     * EVM `chainId` as a decimal string. Unset on chains without one.
+     */
+    public var chainId: String?
+    /**
+     * Asset symbol, e.g. `"USDC"`, `"USDT"`, `"BTC"` or `"USDB"`.
+     */
+    public var asset: String
+    /**
+     * Token contract or mint address, or the token identifier on Spark.
+     * Unset for Bitcoin.
+     */
+    public var contractAddress: String?
+    public var decimals: UInt8
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `"spark"`, `"lightning"`, or another chain, e.g. `"base"` or `"tron"`.
+         */chain: String, 
+        /**
+         * EVM `chainId` as a decimal string. Unset on chains without one.
+         */chainId: String?, 
+        /**
+         * Asset symbol, e.g. `"USDC"`, `"USDT"`, `"BTC"` or `"USDB"`.
+         */asset: String, 
+        /**
+         * Token contract or mint address, or the token identifier on Spark.
+         * Unset for Bitcoin.
+         */contractAddress: String?, decimals: UInt8) {
+        self.chain = chain
+        self.chainId = chainId
+        self.asset = asset
+        self.contractAddress = contractAddress
+        self.decimals = decimals
+    }
+}
+
+#if compiler(>=6)
+extension BridgeRoutePairSide: Sendable {}
+#endif
+
+
+extension BridgeRoutePairSide: Equatable, Hashable {
+    public static func ==(lhs: BridgeRoutePairSide, rhs: BridgeRoutePairSide) -> Bool {
+        if lhs.chain != rhs.chain {
+            return false
+        }
+        if lhs.chainId != rhs.chainId {
+            return false
+        }
+        if lhs.asset != rhs.asset {
+            return false
+        }
+        if lhs.contractAddress != rhs.contractAddress {
+            return false
+        }
+        if lhs.decimals != rhs.decimals {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(chain)
+        hasher.combine(chainId)
+        hasher.combine(asset)
+        hasher.combine(contractAddress)
+        hasher.combine(decimals)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBridgeRoutePairSide: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BridgeRoutePairSide {
+        return
+            try BridgeRoutePairSide(
+                chain: FfiConverterString.read(from: &buf), 
+                chainId: FfiConverterOptionString.read(from: &buf), 
+                asset: FfiConverterString.read(from: &buf), 
+                contractAddress: FfiConverterOptionString.read(from: &buf), 
+                decimals: FfiConverterUInt8.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BridgeRoutePairSide, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.chain, into: &buf)
+        FfiConverterOptionString.write(value.chainId, into: &buf)
+        FfiConverterString.write(value.asset, into: &buf)
+        FfiConverterOptionString.write(value.contractAddress, into: &buf)
+        FfiConverterUInt8.write(value.decimals, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBridgeRoutePairSide_lift(_ buf: RustBuffer) throws -> BridgeRoutePairSide {
+    return try FfiConverterTypeBridgeRoutePairSide.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBridgeRoutePairSide_lower(_ value: BridgeRoutePairSide) -> RustBuffer {
+    return FfiConverterTypeBridgeRoutePairSide.lower(value)
+}
+
+
+/**
+ * **Deprecated.** Use `CreateBridgeRequest` with the bridging client's
+ * `bridge_to_cash_app`.
+ *
  * Request to bridge USDC/USDT from an external chain to a Cash App user.
  *
  * The payer deposits the stablecoin to the returned address, and the
@@ -14867,6 +15412,9 @@ public func FfiConverterTypeBridgeToCashAppRequest_lower(_ value: BridgeToCashAp
 
 
 /**
+ * **Deprecated.** Use `CreateBridgeResponse`, from the bridging client's
+ * `bridge_to_cash_app`.
+ *
  * Response to a [`BridgeToCashAppRequest`].
  */
 public struct BridgeToCashAppResponse {
@@ -14952,6 +15500,106 @@ public func FfiConverterTypeBridgeToCashAppResponse_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeBridgeToCashAppResponse_lower(_ value: BridgeToCashAppResponse) -> RustBuffer {
     return FfiConverterTypeBridgeToCashAppResponse.lower(value)
+}
+
+
+/**
+ * Settings for a [`BridgingClient`](super::BridgingClient) built with
+ * [`new_bridging_client`](super::new_bridging_client).
+ */
+public struct BridgingConfig {
+    /**
+     * Breez API key.
+     */
+    public var apiKey: String
+    /**
+     * Routes the client's connections through a SOCKS5 proxy.
+     */
+    public var proxy: ProxyConfig?
+    /**
+     * Default slippage and overpay. Unset uses the built-in defaults.
+     */
+    public var crossChainConfig: CrossChainConfig?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Breez API key.
+         */apiKey: String, 
+        /**
+         * Routes the client's connections through a SOCKS5 proxy.
+         */proxy: ProxyConfig? = nil, 
+        /**
+         * Default slippage and overpay. Unset uses the built-in defaults.
+         */crossChainConfig: CrossChainConfig? = nil) {
+        self.apiKey = apiKey
+        self.proxy = proxy
+        self.crossChainConfig = crossChainConfig
+    }
+}
+
+#if compiler(>=6)
+extension BridgingConfig: Sendable {}
+#endif
+
+
+extension BridgingConfig: Equatable, Hashable {
+    public static func ==(lhs: BridgingConfig, rhs: BridgingConfig) -> Bool {
+        if lhs.apiKey != rhs.apiKey {
+            return false
+        }
+        if lhs.proxy != rhs.proxy {
+            return false
+        }
+        if lhs.crossChainConfig != rhs.crossChainConfig {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(apiKey)
+        hasher.combine(proxy)
+        hasher.combine(crossChainConfig)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBridgingConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BridgingConfig {
+        return
+            try BridgingConfig(
+                apiKey: FfiConverterString.read(from: &buf), 
+                proxy: FfiConverterOptionTypeProxyConfig.read(from: &buf), 
+                crossChainConfig: FfiConverterOptionTypeCrossChainConfig.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BridgingConfig, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.apiKey, into: &buf)
+        FfiConverterOptionTypeProxyConfig.write(value.proxy, into: &buf)
+        FfiConverterOptionTypeCrossChainConfig.write(value.crossChainConfig, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBridgingConfig_lift(_ buf: RustBuffer) throws -> BridgingConfig {
+    return try FfiConverterTypeBridgingConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBridgingConfig_lower(_ value: BridgingConfig) -> RustBuffer {
+    return FfiConverterTypeBridgingConfig.lower(value)
 }
 
 
@@ -15282,7 +15930,8 @@ public struct BuyBitcoinResponse {
      */
     public var url: String
     /**
-     * The conversion quote, populated only for cross-chain delivery.
+     * The conversion quote, populated for cross-chain delivery and for
+     * `CashApp`, whose purchase is delivered through a conversion provider.
      */
     public var crossChainInfo: CrossChainReceiveInfo?
 
@@ -15293,7 +15942,8 @@ public struct BuyBitcoinResponse {
          * The URL to open in a browser to complete the purchase
          */url: String, 
         /**
-         * The conversion quote, populated only for cross-chain delivery.
+         * The conversion quote, populated for cross-chain delivery and for
+         * `CashApp`, whose purchase is delivered through a conversion provider.
          */crossChainInfo: CrossChainReceiveInfo?) {
         self.url = url
         self.crossChainInfo = crossChainInfo
@@ -18261,6 +18911,280 @@ public func FfiConverterTypeCooperativeRecoveryFailure_lower(_ value: Cooperativ
 }
 
 
+public struct CreateBridgeRequest {
+    /**
+     * Who to pay, as given to [`BridgingClient::get_routes`](super::BridgingClient::get_routes).
+     */
+    public var recipient: String
+    /**
+     * A route from [`BridgingClient::get_routes`](super::BridgingClient::get_routes)
+     * for this recipient.
+     */
+    public var route: BridgeRoutePair
+    /**
+     * Amount in stablecoin base units: the destination asset when the
+     * recipient is paid in a stablecoin, the source asset otherwise, per that
+     * side's `decimals`. At parity this is the USD value: `1_000_000` is 1
+     * USDC at 6 decimals.
+     */
+    public var amount: U128
+    /**
+     * The payer's address on the source chain, where the deposit is refunded
+     * if the recipient can't be paid. Required to pay a Lightning address,
+     * and recommended whenever the payer pays from another chain: without
+     * one the provider has no address to refund to. Ignored when the payer
+     * pays over Lightning.
+     */
+    public var refundAddress: String?
+    /**
+     * Whether fees are added on top of `amount` (`FeesExcluded`, the default)
+     * or deducted from it (`FeesIncluded`).
+     */
+    public var feePolicy: FeePolicy?
+    /**
+     * Maximum slippage tolerance in basis points. Unset uses the configured
+     * default.
+     */
+    public var maxSlippageBps: UInt32?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Who to pay, as given to [`BridgingClient::get_routes`](super::BridgingClient::get_routes).
+         */recipient: String, 
+        /**
+         * A route from [`BridgingClient::get_routes`](super::BridgingClient::get_routes)
+         * for this recipient.
+         */route: BridgeRoutePair, 
+        /**
+         * Amount in stablecoin base units: the destination asset when the
+         * recipient is paid in a stablecoin, the source asset otherwise, per that
+         * side's `decimals`. At parity this is the USD value: `1_000_000` is 1
+         * USDC at 6 decimals.
+         */amount: U128, 
+        /**
+         * The payer's address on the source chain, where the deposit is refunded
+         * if the recipient can't be paid. Required to pay a Lightning address,
+         * and recommended whenever the payer pays from another chain: without
+         * one the provider has no address to refund to. Ignored when the payer
+         * pays over Lightning.
+         */refundAddress: String? = nil, 
+        /**
+         * Whether fees are added on top of `amount` (`FeesExcluded`, the default)
+         * or deducted from it (`FeesIncluded`).
+         */feePolicy: FeePolicy? = nil, 
+        /**
+         * Maximum slippage tolerance in basis points. Unset uses the configured
+         * default.
+         */maxSlippageBps: UInt32? = nil) {
+        self.recipient = recipient
+        self.route = route
+        self.amount = amount
+        self.refundAddress = refundAddress
+        self.feePolicy = feePolicy
+        self.maxSlippageBps = maxSlippageBps
+    }
+}
+
+#if compiler(>=6)
+extension CreateBridgeRequest: Sendable {}
+#endif
+
+
+extension CreateBridgeRequest: Equatable, Hashable {
+    public static func ==(lhs: CreateBridgeRequest, rhs: CreateBridgeRequest) -> Bool {
+        if lhs.recipient != rhs.recipient {
+            return false
+        }
+        if lhs.route != rhs.route {
+            return false
+        }
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        if lhs.refundAddress != rhs.refundAddress {
+            return false
+        }
+        if lhs.feePolicy != rhs.feePolicy {
+            return false
+        }
+        if lhs.maxSlippageBps != rhs.maxSlippageBps {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(recipient)
+        hasher.combine(route)
+        hasher.combine(amount)
+        hasher.combine(refundAddress)
+        hasher.combine(feePolicy)
+        hasher.combine(maxSlippageBps)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateBridgeRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateBridgeRequest {
+        return
+            try CreateBridgeRequest(
+                recipient: FfiConverterString.read(from: &buf), 
+                route: FfiConverterTypeBridgeRoutePair.read(from: &buf), 
+                amount: FfiConverterTypeu128.read(from: &buf), 
+                refundAddress: FfiConverterOptionString.read(from: &buf), 
+                feePolicy: FfiConverterOptionTypeFeePolicy.read(from: &buf), 
+                maxSlippageBps: FfiConverterOptionUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateBridgeRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.recipient, into: &buf)
+        FfiConverterTypeBridgeRoutePair.write(value.route, into: &buf)
+        FfiConverterTypeu128.write(value.amount, into: &buf)
+        FfiConverterOptionString.write(value.refundAddress, into: &buf)
+        FfiConverterOptionTypeFeePolicy.write(value.feePolicy, into: &buf)
+        FfiConverterOptionUInt32.write(value.maxSlippageBps, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateBridgeRequest_lift(_ buf: RustBuffer) throws -> CreateBridgeRequest {
+    return try FfiConverterTypeCreateBridgeRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateBridgeRequest_lower(_ value: CreateBridgeRequest) -> RustBuffer {
+    return FfiConverterTypeCreateBridgeRequest.lower(value)
+}
+
+
+public struct CreateBridgeResponse {
+    /**
+     * Identifies the bridge for [`BridgingClient::get_bridge_status`](super::BridgingClient::get_bridge_status).
+     * Store it to look up the status later.
+     */
+    public var bridgeId: String
+    /**
+     * Pass it to
+     * [`BridgingClient::get_bridge_status`](super::BridgingClient::get_bridge_status).
+     */
+    public var statusToken: String?
+    /**
+     * What the payer pays: an EIP-681 URI on EVM chains, a BOLT11 invoice or a
+     * Cash App link over Lightning, otherwise the bare deposit address.
+     */
+    public var paymentRequest: String
+    /**
+     * The deposit and the expected delivery.
+     */
+    public var info: CrossChainReceiveInfo
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Identifies the bridge for [`BridgingClient::get_bridge_status`](super::BridgingClient::get_bridge_status).
+         * Store it to look up the status later.
+         */bridgeId: String, 
+        /**
+         * Pass it to
+         * [`BridgingClient::get_bridge_status`](super::BridgingClient::get_bridge_status).
+         */statusToken: String?, 
+        /**
+         * What the payer pays: an EIP-681 URI on EVM chains, a BOLT11 invoice or a
+         * Cash App link over Lightning, otherwise the bare deposit address.
+         */paymentRequest: String, 
+        /**
+         * The deposit and the expected delivery.
+         */info: CrossChainReceiveInfo) {
+        self.bridgeId = bridgeId
+        self.statusToken = statusToken
+        self.paymentRequest = paymentRequest
+        self.info = info
+    }
+}
+
+#if compiler(>=6)
+extension CreateBridgeResponse: Sendable {}
+#endif
+
+
+extension CreateBridgeResponse: Equatable, Hashable {
+    public static func ==(lhs: CreateBridgeResponse, rhs: CreateBridgeResponse) -> Bool {
+        if lhs.bridgeId != rhs.bridgeId {
+            return false
+        }
+        if lhs.statusToken != rhs.statusToken {
+            return false
+        }
+        if lhs.paymentRequest != rhs.paymentRequest {
+            return false
+        }
+        if lhs.info != rhs.info {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(bridgeId)
+        hasher.combine(statusToken)
+        hasher.combine(paymentRequest)
+        hasher.combine(info)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateBridgeResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateBridgeResponse {
+        return
+            try CreateBridgeResponse(
+                bridgeId: FfiConverterString.read(from: &buf), 
+                statusToken: FfiConverterOptionString.read(from: &buf), 
+                paymentRequest: FfiConverterString.read(from: &buf), 
+                info: FfiConverterTypeCrossChainReceiveInfo.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateBridgeResponse, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.bridgeId, into: &buf)
+        FfiConverterOptionString.write(value.statusToken, into: &buf)
+        FfiConverterString.write(value.paymentRequest, into: &buf)
+        FfiConverterTypeCrossChainReceiveInfo.write(value.info, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateBridgeResponse_lift(_ buf: RustBuffer) throws -> CreateBridgeResponse {
+    return try FfiConverterTypeCreateBridgeResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateBridgeResponse_lower(_ value: CreateBridgeResponse) -> RustBuffer {
+    return FfiConverterTypeCreateBridgeResponse.lower(value)
+}
+
+
 public struct CreateIssuerTokenRequest {
     public var name: String
     public var ticker: String
@@ -18982,36 +19906,44 @@ public func FfiConverterTypeCrossChainConfig_lower(_ value: CrossChainConfig) ->
 
 
 /**
- * Information about the cross-chain receive quote.
+ * Information about the cross-chain receive quote: what the sender deposits
+ * and what the receiver is expected to get.
  */
 public struct CrossChainReceiveInfo {
     /**
-     * Bare external deposit address the sender pays to.
+     * The provider's id for this receive. The incoming payment carries the
+     * same id in its conversion info, so it can be matched to this receive.
+     */
+    public var quoteId: String
+    /**
+     * Bare deposit address the sender pays to on the source chain, or the
+     * BOLT11 invoice when the sender pays over Lightning.
      */
     public var depositAddress: String
     /**
      * Amount the sender must deposit, in source-asset base units
-     * (`route.decimals`). On `FeesExcluded` this may differ from the
-     * request's `amount` because the SDK inflates the deposit to absorb
-     * provider fees. Render this value to the sender.
+     * (`route.decimals`, or sats over Lightning). On `FeesExcluded` this may
+     * differ from the request's `amount` because the SDK inflates the deposit
+     * to absorb provider fees. Render this value to the sender.
      */
     public var depositAmount: U128
     /**
      * Amount the receiver will see, net of provider fees, in
-     * destination-asset base units. Sats when receiving BTC into Spark,
-     * or token base units when receiving a Spark token (e.g. USDB). The
-     * final delivered amount may move within the slippage tolerance.
+     * destination-asset base units. Sats when receiving BTC, token base
+     * units when receiving a Spark token (e.g. USDB), or stablecoin base
+     * units when the receiver is on another chain. The final delivered
+     * amount may move within the slippage tolerance.
      */
     public var expectedReceivedAmount: U128
     /**
-     * Symbol of the Spark-side asset `expected_received_amount` is
-     * denominated in, as the provider reports it: `"BTC"` for sats, or the
-     * token symbol (e.g. `"USDB"`).
+     * Symbol of the asset `expected_received_amount` is denominated in, as
+     * the provider reports it: `"BTC"` for sats, a Spark token symbol (e.g.
+     * `"USDB"`), or the stablecoin when the receiver is on another chain.
      */
     public var destinationAsset: String
     /**
-     * Spark token identifier when the destination is a token. Absent when
-     * the destination is BTC and the receiver will see sats.
+     * Spark token identifier when the destination is a Spark token. Absent
+     * otherwise.
      */
     public var tokenIdentifier: String?
     /**
@@ -19038,28 +19970,34 @@ public struct CrossChainReceiveInfo {
     // declare one manually.
     public init(
         /**
-         * Bare external deposit address the sender pays to.
+         * The provider's id for this receive. The incoming payment carries the
+         * same id in its conversion info, so it can be matched to this receive.
+         */quoteId: String, 
+        /**
+         * Bare deposit address the sender pays to on the source chain, or the
+         * BOLT11 invoice when the sender pays over Lightning.
          */depositAddress: String, 
         /**
          * Amount the sender must deposit, in source-asset base units
-         * (`route.decimals`). On `FeesExcluded` this may differ from the
-         * request's `amount` because the SDK inflates the deposit to absorb
-         * provider fees. Render this value to the sender.
+         * (`route.decimals`, or sats over Lightning). On `FeesExcluded` this may
+         * differ from the request's `amount` because the SDK inflates the deposit
+         * to absorb provider fees. Render this value to the sender.
          */depositAmount: U128, 
         /**
          * Amount the receiver will see, net of provider fees, in
-         * destination-asset base units. Sats when receiving BTC into Spark,
-         * or token base units when receiving a Spark token (e.g. USDB). The
-         * final delivered amount may move within the slippage tolerance.
+         * destination-asset base units. Sats when receiving BTC, token base
+         * units when receiving a Spark token (e.g. USDB), or stablecoin base
+         * units when the receiver is on another chain. The final delivered
+         * amount may move within the slippage tolerance.
          */expectedReceivedAmount: U128, 
         /**
-         * Symbol of the Spark-side asset `expected_received_amount` is
-         * denominated in, as the provider reports it: `"BTC"` for sats, or the
-         * token symbol (e.g. `"USDB"`).
+         * Symbol of the asset `expected_received_amount` is denominated in, as
+         * the provider reports it: `"BTC"` for sats, a Spark token symbol (e.g.
+         * `"USDB"`), or the stablecoin when the receiver is on another chain.
          */destinationAsset: String, 
         /**
-         * Spark token identifier when the destination is a token. Absent when
-         * the destination is BTC and the receiver will see sats.
+         * Spark token identifier when the destination is a Spark token. Absent
+         * otherwise.
          */tokenIdentifier: String?, 
         /**
          * Provider-quoted total fee for this receive, including the partner fee
@@ -19076,6 +20014,7 @@ public struct CrossChainReceiveInfo {
         /**
          * Quote expiry as a unix timestamp in seconds.
          */expiresAt: UInt64) {
+        self.quoteId = quoteId
         self.depositAddress = depositAddress
         self.depositAmount = depositAmount
         self.expectedReceivedAmount = expectedReceivedAmount
@@ -19095,6 +20034,9 @@ extension CrossChainReceiveInfo: Sendable {}
 
 extension CrossChainReceiveInfo: Equatable, Hashable {
     public static func ==(lhs: CrossChainReceiveInfo, rhs: CrossChainReceiveInfo) -> Bool {
+        if lhs.quoteId != rhs.quoteId {
+            return false
+        }
         if lhs.depositAddress != rhs.depositAddress {
             return false
         }
@@ -19126,6 +20068,7 @@ extension CrossChainReceiveInfo: Equatable, Hashable {
     }
 
     public func hash(into hasher: inout Hasher) {
+        hasher.combine(quoteId)
         hasher.combine(depositAddress)
         hasher.combine(depositAmount)
         hasher.combine(expectedReceivedAmount)
@@ -19147,6 +20090,7 @@ public struct FfiConverterTypeCrossChainReceiveInfo: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrossChainReceiveInfo {
         return
             try CrossChainReceiveInfo(
+                quoteId: FfiConverterString.read(from: &buf), 
                 depositAddress: FfiConverterString.read(from: &buf), 
                 depositAmount: FfiConverterTypeu128.read(from: &buf), 
                 expectedReceivedAmount: FfiConverterTypeu128.read(from: &buf), 
@@ -19160,6 +20104,7 @@ public struct FfiConverterTypeCrossChainReceiveInfo: FfiConverterRustBuffer {
     }
 
     public static func write(_ value: CrossChainReceiveInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.quoteId, into: &buf)
         FfiConverterString.write(value.depositAddress, into: &buf)
         FfiConverterTypeu128.write(value.depositAmount, into: &buf)
         FfiConverterTypeu128.write(value.expectedReceivedAmount, into: &buf)
@@ -23932,13 +24877,409 @@ public func FfiConverterTypeFreezeIssuerTokenResponse_lower(_ value: FreezeIssue
 }
 
 
+public struct GetBridgeRoutesRequest {
+    /**
+     * Who to pay: a Spark address, a Lightning address (a Cash App
+     * `$cashtag` included), or an EVM/Solana/Tron address or URI.
+     */
+    public var recipient: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Who to pay: a Spark address, a Lightning address (a Cash App
+         * `$cashtag` included), or an EVM/Solana/Tron address or URI.
+         */recipient: String) {
+        self.recipient = recipient
+    }
+}
+
+#if compiler(>=6)
+extension GetBridgeRoutesRequest: Sendable {}
+#endif
+
+
+extension GetBridgeRoutesRequest: Equatable, Hashable {
+    public static func ==(lhs: GetBridgeRoutesRequest, rhs: GetBridgeRoutesRequest) -> Bool {
+        if lhs.recipient != rhs.recipient {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(recipient)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGetBridgeRoutesRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GetBridgeRoutesRequest {
+        return
+            try GetBridgeRoutesRequest(
+                recipient: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GetBridgeRoutesRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.recipient, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetBridgeRoutesRequest_lift(_ buf: RustBuffer) throws -> GetBridgeRoutesRequest {
+    return try FfiConverterTypeGetBridgeRoutesRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetBridgeRoutesRequest_lower(_ value: GetBridgeRoutesRequest) -> RustBuffer {
+    return FfiConverterTypeGetBridgeRoutesRequest.lower(value)
+}
+
+
+public struct GetBridgeRoutesResponse {
+    /**
+     * The routes that can pay the recipient. Empty when none can.
+     */
+    public var routes: [BridgeRoutePair]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The routes that can pay the recipient. Empty when none can.
+         */routes: [BridgeRoutePair]) {
+        self.routes = routes
+    }
+}
+
+#if compiler(>=6)
+extension GetBridgeRoutesResponse: Sendable {}
+#endif
+
+
+extension GetBridgeRoutesResponse: Equatable, Hashable {
+    public static func ==(lhs: GetBridgeRoutesResponse, rhs: GetBridgeRoutesResponse) -> Bool {
+        if lhs.routes != rhs.routes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(routes)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGetBridgeRoutesResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GetBridgeRoutesResponse {
+        return
+            try GetBridgeRoutesResponse(
+                routes: FfiConverterSequenceTypeBridgeRoutePair.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GetBridgeRoutesResponse, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeBridgeRoutePair.write(value.routes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetBridgeRoutesResponse_lift(_ buf: RustBuffer) throws -> GetBridgeRoutesResponse {
+    return try FfiConverterTypeGetBridgeRoutesResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetBridgeRoutesResponse_lower(_ value: GetBridgeRoutesResponse) -> RustBuffer {
+    return FfiConverterTypeGetBridgeRoutesResponse.lower(value)
+}
+
+
+public struct GetBridgeStatusRequest {
+    public var bridgeId: String
+    /**
+     * The bridge's status token, if any.
+     */
+    public var statusToken: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(bridgeId: String, 
+        /**
+         * The bridge's status token, if any.
+         */statusToken: String? = nil) {
+        self.bridgeId = bridgeId
+        self.statusToken = statusToken
+    }
+}
+
+#if compiler(>=6)
+extension GetBridgeStatusRequest: Sendable {}
+#endif
+
+
+extension GetBridgeStatusRequest: Equatable, Hashable {
+    public static func ==(lhs: GetBridgeStatusRequest, rhs: GetBridgeStatusRequest) -> Bool {
+        if lhs.bridgeId != rhs.bridgeId {
+            return false
+        }
+        if lhs.statusToken != rhs.statusToken {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(bridgeId)
+        hasher.combine(statusToken)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGetBridgeStatusRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GetBridgeStatusRequest {
+        return
+            try GetBridgeStatusRequest(
+                bridgeId: FfiConverterString.read(from: &buf), 
+                statusToken: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GetBridgeStatusRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.bridgeId, into: &buf)
+        FfiConverterOptionString.write(value.statusToken, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetBridgeStatusRequest_lift(_ buf: RustBuffer) throws -> GetBridgeStatusRequest {
+    return try FfiConverterTypeGetBridgeStatusRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetBridgeStatusRequest_lower(_ value: GetBridgeStatusRequest) -> RustBuffer {
+    return FfiConverterTypeGetBridgeStatusRequest.lower(value)
+}
+
+
+public struct GetBridgeStatusResponse {
+    public var status: BridgeStatus
+    /**
+     * The provider's own status, e.g. `"bridging"` or `"awaiting_approval"`,
+     * for display and support. Unset before the payment arrives.
+     */
+    public var providerStatus: String?
+    /**
+     * The provider's order id, once the payment arrived.
+     */
+    public var orderId: String?
+    /**
+     * The amount the payer paid, in the source asset's base units.
+     */
+    public var amountIn: U128?
+    /**
+     * The amount the recipient received, in the destination asset's base
+     * units. Set once completed.
+     */
+    public var amountOut: U128?
+    /**
+     * The payer's transaction on the source chain.
+     */
+    public var depositTxHash: String?
+    /**
+     * The transaction that paid the recipient, or the Spark transfer when the
+     * recipient is on Spark. Set once completed.
+     */
+    public var deliveryTxHash: String?
+    /**
+     * The transaction that refunded the payer.
+     */
+    public var refundTxHash: String?
+    /**
+     * The provider's error code when the bridge failed.
+     */
+    public var errorCode: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(status: BridgeStatus, 
+        /**
+         * The provider's own status, e.g. `"bridging"` or `"awaiting_approval"`,
+         * for display and support. Unset before the payment arrives.
+         */providerStatus: String?, 
+        /**
+         * The provider's order id, once the payment arrived.
+         */orderId: String?, 
+        /**
+         * The amount the payer paid, in the source asset's base units.
+         */amountIn: U128?, 
+        /**
+         * The amount the recipient received, in the destination asset's base
+         * units. Set once completed.
+         */amountOut: U128?, 
+        /**
+         * The payer's transaction on the source chain.
+         */depositTxHash: String?, 
+        /**
+         * The transaction that paid the recipient, or the Spark transfer when the
+         * recipient is on Spark. Set once completed.
+         */deliveryTxHash: String?, 
+        /**
+         * The transaction that refunded the payer.
+         */refundTxHash: String?, 
+        /**
+         * The provider's error code when the bridge failed.
+         */errorCode: String?) {
+        self.status = status
+        self.providerStatus = providerStatus
+        self.orderId = orderId
+        self.amountIn = amountIn
+        self.amountOut = amountOut
+        self.depositTxHash = depositTxHash
+        self.deliveryTxHash = deliveryTxHash
+        self.refundTxHash = refundTxHash
+        self.errorCode = errorCode
+    }
+}
+
+#if compiler(>=6)
+extension GetBridgeStatusResponse: Sendable {}
+#endif
+
+
+extension GetBridgeStatusResponse: Equatable, Hashable {
+    public static func ==(lhs: GetBridgeStatusResponse, rhs: GetBridgeStatusResponse) -> Bool {
+        if lhs.status != rhs.status {
+            return false
+        }
+        if lhs.providerStatus != rhs.providerStatus {
+            return false
+        }
+        if lhs.orderId != rhs.orderId {
+            return false
+        }
+        if lhs.amountIn != rhs.amountIn {
+            return false
+        }
+        if lhs.amountOut != rhs.amountOut {
+            return false
+        }
+        if lhs.depositTxHash != rhs.depositTxHash {
+            return false
+        }
+        if lhs.deliveryTxHash != rhs.deliveryTxHash {
+            return false
+        }
+        if lhs.refundTxHash != rhs.refundTxHash {
+            return false
+        }
+        if lhs.errorCode != rhs.errorCode {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(status)
+        hasher.combine(providerStatus)
+        hasher.combine(orderId)
+        hasher.combine(amountIn)
+        hasher.combine(amountOut)
+        hasher.combine(depositTxHash)
+        hasher.combine(deliveryTxHash)
+        hasher.combine(refundTxHash)
+        hasher.combine(errorCode)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGetBridgeStatusResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GetBridgeStatusResponse {
+        return
+            try GetBridgeStatusResponse(
+                status: FfiConverterTypeBridgeStatus.read(from: &buf), 
+                providerStatus: FfiConverterOptionString.read(from: &buf), 
+                orderId: FfiConverterOptionString.read(from: &buf), 
+                amountIn: FfiConverterOptionTypeu128.read(from: &buf), 
+                amountOut: FfiConverterOptionTypeu128.read(from: &buf), 
+                depositTxHash: FfiConverterOptionString.read(from: &buf), 
+                deliveryTxHash: FfiConverterOptionString.read(from: &buf), 
+                refundTxHash: FfiConverterOptionString.read(from: &buf), 
+                errorCode: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GetBridgeStatusResponse, into buf: inout [UInt8]) {
+        FfiConverterTypeBridgeStatus.write(value.status, into: &buf)
+        FfiConverterOptionString.write(value.providerStatus, into: &buf)
+        FfiConverterOptionString.write(value.orderId, into: &buf)
+        FfiConverterOptionTypeu128.write(value.amountIn, into: &buf)
+        FfiConverterOptionTypeu128.write(value.amountOut, into: &buf)
+        FfiConverterOptionString.write(value.depositTxHash, into: &buf)
+        FfiConverterOptionString.write(value.deliveryTxHash, into: &buf)
+        FfiConverterOptionString.write(value.refundTxHash, into: &buf)
+        FfiConverterOptionString.write(value.errorCode, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetBridgeStatusResponse_lift(_ buf: RustBuffer) throws -> GetBridgeStatusResponse {
+    return try FfiConverterTypeGetBridgeStatusResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGetBridgeStatusResponse_lower(_ value: GetBridgeStatusResponse) -> RustBuffer {
+    return FfiConverterTypeGetBridgeStatusResponse.lower(value)
+}
+
+
 /**
  * Request to get the balance of the wallet
  */
 public struct GetInfoRequest {
     /**
      * When `Some(true)`, and `background_tasks_enabled` is `true`, the call
-     * waits for the initial Full sync to complete before returning.
+     * waits for the initial Full sync to complete before returning. The sync
+     * can fail to reach the network: `last_sync_error` in the response says
+     * whether it did.
      *
      * When `background_tasks_enabled` is `false`, setting this to `Some(true)`
      * is rejected with an invalid-input error. There is no background sync to
@@ -23951,7 +25292,9 @@ public struct GetInfoRequest {
     public init(
         /**
          * When `Some(true)`, and `background_tasks_enabled` is `true`, the call
-         * waits for the initial Full sync to complete before returning.
+         * waits for the initial Full sync to complete before returning. The sync
+         * can fail to reach the network: `last_sync_error` in the response says
+         * whether it did.
          *
          * When `background_tasks_enabled` is `false`, setting this to `Some(true)`
          * is rejected with an invalid-input error. There is no background sync to
@@ -24039,6 +25382,17 @@ public struct GetInfoResponse {
      * you choose.
      */
     public var recoverableFundsSats: UInt64
+    /**
+     * Why the latest sync could not refresh the balances, which may then be
+     * out of date. Unset once a sync succeeds. It is not persisted, so it is
+     * also unset after each `connect` until the first sync ends.
+     */
+    public var lastSyncError: SyncError?
+    /**
+     * When a sync last refreshed the balances, in seconds since the Unix
+     * epoch. Unset until a sync succeeds with this storage.
+     */
+    public var lastSyncedAt: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -24060,11 +25414,22 @@ public struct GetInfoResponse {
          * and `check_recover_funds`, and during syncs at most once per leaf. The
          * total includes funds too small to be worth recovering at the fee rate
          * you choose.
-         */recoverableFundsSats: UInt64) {
+         */recoverableFundsSats: UInt64, 
+        /**
+         * Why the latest sync could not refresh the balances, which may then be
+         * out of date. Unset once a sync succeeds. It is not persisted, so it is
+         * also unset after each `connect` until the first sync ends.
+         */lastSyncError: SyncError?, 
+        /**
+         * When a sync last refreshed the balances, in seconds since the Unix
+         * epoch. Unset until a sync succeeds with this storage.
+         */lastSyncedAt: UInt64?) {
         self.identityPubkey = identityPubkey
         self.balanceSats = balanceSats
         self.tokenBalances = tokenBalances
         self.recoverableFundsSats = recoverableFundsSats
+        self.lastSyncError = lastSyncError
+        self.lastSyncedAt = lastSyncedAt
     }
 }
 
@@ -24087,6 +25452,12 @@ extension GetInfoResponse: Equatable, Hashable {
         if lhs.recoverableFundsSats != rhs.recoverableFundsSats {
             return false
         }
+        if lhs.lastSyncError != rhs.lastSyncError {
+            return false
+        }
+        if lhs.lastSyncedAt != rhs.lastSyncedAt {
+            return false
+        }
         return true
     }
 
@@ -24095,6 +25466,8 @@ extension GetInfoResponse: Equatable, Hashable {
         hasher.combine(balanceSats)
         hasher.combine(tokenBalances)
         hasher.combine(recoverableFundsSats)
+        hasher.combine(lastSyncError)
+        hasher.combine(lastSyncedAt)
     }
 }
 
@@ -24110,7 +25483,9 @@ public struct FfiConverterTypeGetInfoResponse: FfiConverterRustBuffer {
                 identityPubkey: FfiConverterString.read(from: &buf), 
                 balanceSats: FfiConverterUInt64.read(from: &buf), 
                 tokenBalances: FfiConverterDictionaryStringTypeTokenBalance.read(from: &buf), 
-                recoverableFundsSats: FfiConverterUInt64.read(from: &buf)
+                recoverableFundsSats: FfiConverterUInt64.read(from: &buf), 
+                lastSyncError: FfiConverterOptionTypeSyncError.read(from: &buf), 
+                lastSyncedAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
@@ -24119,6 +25494,8 @@ public struct FfiConverterTypeGetInfoResponse: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.balanceSats, into: &buf)
         FfiConverterDictionaryStringTypeTokenBalance.write(value.tokenBalances, into: &buf)
         FfiConverterUInt64.write(value.recoverableFundsSats, into: &buf)
+        FfiConverterOptionTypeSyncError.write(value.lastSyncError, into: &buf)
+        FfiConverterOptionUInt64.write(value.lastSyncedAt, into: &buf)
     }
 }
 
@@ -26935,13 +28312,23 @@ public struct LnurlReceiveMetadata {
     public var nostrZapRequest: String?
     public var nostrZapReceipt: String?
     public var senderComment: String?
+    /**
+     * The Lightning address the payment was received on. Unset for some payments received
+     * before the LNURL server recorded addresses.
+     */
+    public var lightningAddress: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(nostrZapRequest: String?, nostrZapReceipt: String?, senderComment: String?) {
+    public init(nostrZapRequest: String?, nostrZapReceipt: String?, senderComment: String?, 
+        /**
+         * The Lightning address the payment was received on. Unset for some payments received
+         * before the LNURL server recorded addresses.
+         */lightningAddress: String?) {
         self.nostrZapRequest = nostrZapRequest
         self.nostrZapReceipt = nostrZapReceipt
         self.senderComment = senderComment
+        self.lightningAddress = lightningAddress
     }
 }
 
@@ -26961,6 +28348,9 @@ extension LnurlReceiveMetadata: Equatable, Hashable {
         if lhs.senderComment != rhs.senderComment {
             return false
         }
+        if lhs.lightningAddress != rhs.lightningAddress {
+            return false
+        }
         return true
     }
 
@@ -26968,6 +28358,7 @@ extension LnurlReceiveMetadata: Equatable, Hashable {
         hasher.combine(nostrZapRequest)
         hasher.combine(nostrZapReceipt)
         hasher.combine(senderComment)
+        hasher.combine(lightningAddress)
     }
 }
 
@@ -26982,7 +28373,8 @@ public struct FfiConverterTypeLnurlReceiveMetadata: FfiConverterRustBuffer {
             try LnurlReceiveMetadata(
                 nostrZapRequest: FfiConverterOptionString.read(from: &buf), 
                 nostrZapReceipt: FfiConverterOptionString.read(from: &buf), 
-                senderComment: FfiConverterOptionString.read(from: &buf)
+                senderComment: FfiConverterOptionString.read(from: &buf), 
+                lightningAddress: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -26990,6 +28382,7 @@ public struct FfiConverterTypeLnurlReceiveMetadata: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.nostrZapRequest, into: &buf)
         FfiConverterOptionString.write(value.nostrZapReceipt, into: &buf)
         FfiConverterOptionString.write(value.senderComment, into: &buf)
+        FfiConverterOptionString.write(value.lightningAddress, into: &buf)
     }
 }
 
@@ -29163,7 +30556,8 @@ public func FfiConverterTypePaymentRequestSource_lower(_ value: PaymentRequestSo
 
 
 /**
- * How much to fund one branch of the exit to avoid a fan-out.
+ * How much one funding UTXO must hold to avoid a fan-out: for a branch of the
+ * exit, or under `CpfpFundingStrategy::PerNode` for one transaction of it.
  */
 public struct PerBranchFunding {
     /**
@@ -29171,7 +30565,7 @@ public struct PerBranchFunding {
      */
     public var leafId: String
     /**
-     * Fund a UTXO of at least this many satoshis for this branch.
+     * Fund a UTXO of at least this many satoshis.
      */
     public var fundingSats: UInt64
 
@@ -29182,7 +30576,7 @@ public struct PerBranchFunding {
          * The leaf whose branch this funds.
          */leafId: String, 
         /**
-         * Fund a UTXO of at least this many satoshis for this branch.
+         * Fund a UTXO of at least this many satoshis.
          */fundingSats: UInt64) {
         self.leafId = leafId
         self.fundingSats = fundingSats
@@ -29739,7 +31133,8 @@ public func FfiConverterTypePrepareLnurlPayResponse_lower(_ value: PrepareLnurlP
 
 
 /**
- * **Deprecated.** Use [`BridgeFromCashAppRequest`].
+ * **Deprecated.** Use `CreateBridgeRequest` with the bridging client's
+ * `bridge_from_cash_app`.
  *
  * Request for a payment link that sends USDC/USDT to an external-chain
  * recipient, funded by Cash App over Lightning.
@@ -29891,7 +31286,8 @@ public func FfiConverterTypePreparePaymentLinkRequest_lower(_ value: PreparePaym
 
 
 /**
- * **Deprecated.** Use [`BridgeFromCashAppResponse`].
+ * **Deprecated.** Use `CreateBridgeResponse`, from the bridging client's
+ * `bridge_from_cash_app`.
  *
  * Response to a [`PreparePaymentLinkRequest`]. Mirrors `BuyBitcoinResponse`
  * (a payable `url`) plus the quote so the caller can display the expected
@@ -30293,6 +31689,11 @@ public struct PrepareRecoverFundsRequest {
      */
     public var fundingKind: CpfpFundingKind?
     /**
+     * How the funding UTXOs pay a unilateral exit's CPFP children. Unset funds
+     * one UTXO per branch.
+     */
+    public var fundingStrategy: CpfpFundingStrategy?
+    /**
      * The Bitcoin address the recovered funds are sent to.
      */
     public var destination: String
@@ -30311,10 +31712,15 @@ public struct PrepareRecoverFundsRequest {
          * transaction of a unilateral exit in the quote has a CPFP child.
          */fundingKind: CpfpFundingKind? = nil, 
         /**
+         * How the funding UTXOs pay a unilateral exit's CPFP children. Unset funds
+         * one UTXO per branch.
+         */fundingStrategy: CpfpFundingStrategy? = nil, 
+        /**
          * The Bitcoin address the recovered funds are sent to.
          */destination: String, selection: ExitLeafSelection) {
         self.feeRateSatPerVbyte = feeRateSatPerVbyte
         self.fundingKind = fundingKind
+        self.fundingStrategy = fundingStrategy
         self.destination = destination
         self.selection = selection
     }
@@ -30333,6 +31739,9 @@ extension PrepareRecoverFundsRequest: Equatable, Hashable {
         if lhs.fundingKind != rhs.fundingKind {
             return false
         }
+        if lhs.fundingStrategy != rhs.fundingStrategy {
+            return false
+        }
         if lhs.destination != rhs.destination {
             return false
         }
@@ -30345,6 +31754,7 @@ extension PrepareRecoverFundsRequest: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(feeRateSatPerVbyte)
         hasher.combine(fundingKind)
+        hasher.combine(fundingStrategy)
         hasher.combine(destination)
         hasher.combine(selection)
     }
@@ -30361,6 +31771,7 @@ public struct FfiConverterTypePrepareRecoverFundsRequest: FfiConverterRustBuffer
             try PrepareRecoverFundsRequest(
                 feeRateSatPerVbyte: FfiConverterUInt64.read(from: &buf), 
                 fundingKind: FfiConverterOptionTypeCpfpFundingKind.read(from: &buf), 
+                fundingStrategy: FfiConverterOptionTypeCpfpFundingStrategy.read(from: &buf), 
                 destination: FfiConverterString.read(from: &buf), 
                 selection: FfiConverterTypeExitLeafSelection.read(from: &buf)
         )
@@ -30369,6 +31780,7 @@ public struct FfiConverterTypePrepareRecoverFundsRequest: FfiConverterRustBuffer
     public static func write(_ value: PrepareRecoverFundsRequest, into buf: inout [UInt8]) {
         FfiConverterUInt64.write(value.feeRateSatPerVbyte, into: &buf)
         FfiConverterOptionTypeCpfpFundingKind.write(value.fundingKind, into: &buf)
+        FfiConverterOptionTypeCpfpFundingStrategy.write(value.fundingStrategy, into: &buf)
         FfiConverterString.write(value.destination, into: &buf)
         FfiConverterTypeExitLeafSelection.write(value.selection, into: &buf)
     }
@@ -30421,8 +31833,8 @@ public struct PrepareRecoverFundsResponse {
      */
     public var cpfpFeeSats: UInt64
     /**
-     * Paid by the fan-out, from your funding UTXO. Funding one UTXO per branch
-     * (`funding.per_branch`) avoids it.
+     * Paid by the fan-out, from your funding UTXO. Funding one UTXO per
+     * `funding.per_branch` entry avoids it.
      */
     public var fanoutFeeSats: UInt64
     /**
@@ -30474,8 +31886,8 @@ public struct PrepareRecoverFundsResponse {
          * Paid by the CPFP children, from your funding UTXOs.
          */cpfpFeeSats: UInt64, 
         /**
-         * Paid by the fan-out, from your funding UTXO. Funding one UTXO per branch
-         * (`funding.per_branch`) avoids it.
+         * Paid by the fan-out, from your funding UTXO. Funding one UTXO per
+         * `funding.per_branch` entry avoids it.
          */fanoutFeeSats: UInt64, 
         /**
          * Paid from the unilateral leaves' own value before the sweep: each leaf's
@@ -32403,7 +33815,7 @@ public struct RecoverFundsRequest {
     public var prepared: PrepareRecoverFundsResponse
     /**
      * UTXOs that meet the quote's `funding`: one of at least `single_utxo_sats`,
-     * or one per branch. Not needed when the quote has no `funding`.
+     * or one per `per_branch` entry. Not needed when the quote has no `funding`.
      */
     public var fundingInputs: [CpfpInput]
 
@@ -32412,7 +33824,7 @@ public struct RecoverFundsRequest {
     public init(prepared: PrepareRecoverFundsResponse, 
         /**
          * UTXOs that meet the quote's `funding`: one of at least `single_utxo_sats`,
-         * or one per branch. Not needed when the quote has no `funding`.
+         * or one per `per_branch` entry. Not needed when the quote has no `funding`.
          */fundingInputs: [CpfpInput] = []) {
         self.prepared = prepared
         self.fundingInputs = fundingInputs
@@ -32735,28 +34147,40 @@ public func FfiConverterTypeRecoverableEcdsaSignatureBytes_lower(_ value: Recove
 public struct RecoveryFunding {
     /**
      * Fund a single UTXO of at least this many satoshis, which a fan-out
-     * splits over the branches.
+     * splits over the `per_branch` entries.
      */
     public var singleUtxoSats: UInt64
     /**
-     * To skip the fan-out, fund one UTXO per branch of at least the given
-     * amount.
+     * To skip the fan-out, fund one UTXO per entry of at least its amount, in
+     * any order. An entry is a branch, or under `CpfpFundingStrategy::PerNode`
+     * one transaction of a branch, so a leaf can have several.
      */
     public var perBranch: [PerBranchFunding]
+    /**
+     * The strategy the amounts were computed for, which `recover_funds` builds
+     * with.
+     */
+    public var strategy: CpfpFundingStrategy
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(
         /**
          * Fund a single UTXO of at least this many satoshis, which a fan-out
-         * splits over the branches.
+         * splits over the `per_branch` entries.
          */singleUtxoSats: UInt64, 
         /**
-         * To skip the fan-out, fund one UTXO per branch of at least the given
-         * amount.
-         */perBranch: [PerBranchFunding]) {
+         * To skip the fan-out, fund one UTXO per entry of at least its amount, in
+         * any order. An entry is a branch, or under `CpfpFundingStrategy::PerNode`
+         * one transaction of a branch, so a leaf can have several.
+         */perBranch: [PerBranchFunding], 
+        /**
+         * The strategy the amounts were computed for, which `recover_funds` builds
+         * with.
+         */strategy: CpfpFundingStrategy) {
         self.singleUtxoSats = singleUtxoSats
         self.perBranch = perBranch
+        self.strategy = strategy
     }
 }
 
@@ -32773,12 +34197,16 @@ extension RecoveryFunding: Equatable, Hashable {
         if lhs.perBranch != rhs.perBranch {
             return false
         }
+        if lhs.strategy != rhs.strategy {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(singleUtxoSats)
         hasher.combine(perBranch)
+        hasher.combine(strategy)
     }
 }
 
@@ -32792,13 +34220,15 @@ public struct FfiConverterTypeRecoveryFunding: FfiConverterRustBuffer {
         return
             try RecoveryFunding(
                 singleUtxoSats: FfiConverterUInt64.read(from: &buf), 
-                perBranch: FfiConverterSequenceTypePerBranchFunding.read(from: &buf)
+                perBranch: FfiConverterSequenceTypePerBranchFunding.read(from: &buf), 
+                strategy: FfiConverterTypeCpfpFundingStrategy.read(from: &buf)
         )
     }
 
     public static func write(_ value: RecoveryFunding, into buf: inout [UInt8]) {
         FfiConverterUInt64.write(value.singleUtxoSats, into: &buf)
         FfiConverterSequenceTypePerBranchFunding.write(value.perBranch, into: &buf)
+        FfiConverterTypeCpfpFundingStrategy.write(value.strategy, into: &buf)
     }
 }
 
@@ -34638,12 +36068,16 @@ public func FfiConverterTypeSendPaymentResponse_lower(_ value: SendPaymentRespon
 public struct Session {
     public var token: String
     public var expiration: UInt64
+    public var refreshToken: String?
+    public var refreshTokenExpiration: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(token: String, expiration: UInt64) {
+    public init(token: String, expiration: UInt64, refreshToken: String?, refreshTokenExpiration: UInt64?) {
         self.token = token
         self.expiration = expiration
+        self.refreshToken = refreshToken
+        self.refreshTokenExpiration = refreshTokenExpiration
     }
 }
 
@@ -34660,12 +36094,20 @@ extension Session: Equatable, Hashable {
         if lhs.expiration != rhs.expiration {
             return false
         }
+        if lhs.refreshToken != rhs.refreshToken {
+            return false
+        }
+        if lhs.refreshTokenExpiration != rhs.refreshTokenExpiration {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(token)
         hasher.combine(expiration)
+        hasher.combine(refreshToken)
+        hasher.combine(refreshTokenExpiration)
     }
 }
 
@@ -34679,13 +36121,17 @@ public struct FfiConverterTypeSession: FfiConverterRustBuffer {
         return
             try Session(
                 token: FfiConverterString.read(from: &buf), 
-                expiration: FfiConverterUInt64.read(from: &buf)
+                expiration: FfiConverterUInt64.read(from: &buf), 
+                refreshToken: FfiConverterOptionString.read(from: &buf), 
+                refreshTokenExpiration: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
     public static func write(_ value: Session, into buf: inout [UInt8]) {
         FfiConverterString.write(value.token, into: &buf)
         FfiConverterUInt64.write(value.expiration, into: &buf)
+        FfiConverterOptionString.write(value.refreshToken, into: &buf)
+        FfiConverterOptionUInt64.write(value.refreshTokenExpiration, into: &buf)
     }
 }
 
@@ -34710,14 +36156,16 @@ public struct SetLnurlMetadataItem {
     public var senderComment: String?
     public var nostrZapRequest: String?
     public var nostrZapReceipt: String?
+    public var lightningAddress: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(paymentHash: String, senderComment: String?, nostrZapRequest: String?, nostrZapReceipt: String?) {
+    public init(paymentHash: String, senderComment: String?, nostrZapRequest: String?, nostrZapReceipt: String?, lightningAddress: String?) {
         self.paymentHash = paymentHash
         self.senderComment = senderComment
         self.nostrZapRequest = nostrZapRequest
         self.nostrZapReceipt = nostrZapReceipt
+        self.lightningAddress = lightningAddress
     }
 }
 
@@ -34740,6 +36188,9 @@ extension SetLnurlMetadataItem: Equatable, Hashable {
         if lhs.nostrZapReceipt != rhs.nostrZapReceipt {
             return false
         }
+        if lhs.lightningAddress != rhs.lightningAddress {
+            return false
+        }
         return true
     }
 
@@ -34748,6 +36199,7 @@ extension SetLnurlMetadataItem: Equatable, Hashable {
         hasher.combine(senderComment)
         hasher.combine(nostrZapRequest)
         hasher.combine(nostrZapReceipt)
+        hasher.combine(lightningAddress)
     }
 }
 
@@ -34763,7 +36215,8 @@ public struct FfiConverterTypeSetLnurlMetadataItem: FfiConverterRustBuffer {
                 paymentHash: FfiConverterString.read(from: &buf), 
                 senderComment: FfiConverterOptionString.read(from: &buf), 
                 nostrZapRequest: FfiConverterOptionString.read(from: &buf), 
-                nostrZapReceipt: FfiConverterOptionString.read(from: &buf)
+                nostrZapReceipt: FfiConverterOptionString.read(from: &buf), 
+                lightningAddress: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -34772,6 +36225,7 @@ public struct FfiConverterTypeSetLnurlMetadataItem: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.senderComment, into: &buf)
         FfiConverterOptionString.write(value.nostrZapRequest, into: &buf)
         FfiConverterOptionString.write(value.nostrZapReceipt, into: &buf)
+        FfiConverterOptionString.write(value.lightningAddress, into: &buf)
     }
 }
 
@@ -35414,84 +36868,6 @@ public func FfiConverterTypeSigningOnlyExternalSigners_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeSigningOnlyExternalSigners_lower(_ value: SigningOnlyExternalSigners) -> RustBuffer {
     return FfiConverterTypeSigningOnlyExternalSigners.lower(value)
-}
-
-
-public struct SilentPaymentAddressDetails {
-    public var address: String
-    public var network: BitcoinNetwork
-    public var source: PaymentRequestSource
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(address: String, network: BitcoinNetwork, source: PaymentRequestSource) {
-        self.address = address
-        self.network = network
-        self.source = source
-    }
-}
-
-#if compiler(>=6)
-extension SilentPaymentAddressDetails: Sendable {}
-#endif
-
-
-extension SilentPaymentAddressDetails: Equatable, Hashable {
-    public static func ==(lhs: SilentPaymentAddressDetails, rhs: SilentPaymentAddressDetails) -> Bool {
-        if lhs.address != rhs.address {
-            return false
-        }
-        if lhs.network != rhs.network {
-            return false
-        }
-        if lhs.source != rhs.source {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(address)
-        hasher.combine(network)
-        hasher.combine(source)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeSilentPaymentAddressDetails: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SilentPaymentAddressDetails {
-        return
-            try SilentPaymentAddressDetails(
-                address: FfiConverterString.read(from: &buf), 
-                network: FfiConverterTypeBitcoinNetwork.read(from: &buf), 
-                source: FfiConverterTypePaymentRequestSource.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: SilentPaymentAddressDetails, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.address, into: &buf)
-        FfiConverterTypeBitcoinNetwork.write(value.network, into: &buf)
-        FfiConverterTypePaymentRequestSource.write(value.source, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSilentPaymentAddressDetails_lift(_ buf: RustBuffer) throws -> SilentPaymentAddressDetails {
-    return try FfiConverterTypeSilentPaymentAddressDetails.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSilentPaymentAddressDetails_lower(_ value: SilentPaymentAddressDetails) -> RustBuffer {
-    return FfiConverterTypeSilentPaymentAddressDetails.lower(value)
 }
 
 
@@ -37364,10 +38740,30 @@ public func FfiConverterTypeSyncWalletRequest_lower(_ value: SyncWalletRequest) 
  * Response from synchronizing the wallet
  */
 public struct SyncWalletResponse {
+    /**
+     * Why the sync could not refresh the balances, which may then be out of
+     * date. Unset when it succeeded.
+     */
+    public var lastSyncError: SyncError?
+    /**
+     * When a sync last refreshed the balances, in seconds since the Unix
+     * epoch. Unset until a sync succeeds with this storage.
+     */
+    public var lastSyncedAt: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init() {
+    public init(
+        /**
+         * Why the sync could not refresh the balances, which may then be out of
+         * date. Unset when it succeeded.
+         */lastSyncError: SyncError?, 
+        /**
+         * When a sync last refreshed the balances, in seconds since the Unix
+         * epoch. Unset until a sync succeeds with this storage.
+         */lastSyncedAt: UInt64?) {
+        self.lastSyncError = lastSyncError
+        self.lastSyncedAt = lastSyncedAt
     }
 }
 
@@ -37378,10 +38774,18 @@ extension SyncWalletResponse: Sendable {}
 
 extension SyncWalletResponse: Equatable, Hashable {
     public static func ==(lhs: SyncWalletResponse, rhs: SyncWalletResponse) -> Bool {
+        if lhs.lastSyncError != rhs.lastSyncError {
+            return false
+        }
+        if lhs.lastSyncedAt != rhs.lastSyncedAt {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
+        hasher.combine(lastSyncError)
+        hasher.combine(lastSyncedAt)
     }
 }
 
@@ -37393,10 +38797,15 @@ extension SyncWalletResponse: Equatable, Hashable {
 public struct FfiConverterTypeSyncWalletResponse: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncWalletResponse {
         return
-            SyncWalletResponse()
+            try SyncWalletResponse(
+                lastSyncError: FfiConverterOptionTypeSyncError.read(from: &buf), 
+                lastSyncedAt: FfiConverterOptionUInt64.read(from: &buf)
+        )
     }
 
     public static func write(_ value: SyncWalletResponse, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeSyncError.write(value.lastSyncError, into: &buf)
+        FfiConverterOptionUInt64.write(value.lastSyncedAt, into: &buf)
     }
 }
 
@@ -40493,6 +41902,138 @@ extension BitcoinNetwork: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Where a bridge is in its lifecycle.
+ */
+
+public enum BridgeStatus {
+    
+    /**
+     * The bridge was created, and the payer hasn't paid yet. An unpaid bridge
+     * stays `Created` after its `expires_at`. A late deposit on another chain
+     * may still be accepted at a new price.
+     */
+    case created
+    /**
+     * The provider is processing the payment, from confirming the deposit to
+     * paying the recipient. `provider_status` gives the stage.
+     */
+    case pending
+    /**
+     * The recipient can't be paid, and the payment is being refunded.
+     */
+    case refunding
+    /**
+     * The recipient was paid.
+     */
+    case completed
+    /**
+     * The payment was refunded to the payer's refund address.
+     */
+    case refunded
+    /**
+     * The bridge failed. `error_code` gives the reason.
+     */
+    case failed
+    /**
+     * The provider's order expired without a payment.
+     */
+    case expired
+}
+
+
+#if compiler(>=6)
+extension BridgeStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBridgeStatus: FfiConverterRustBuffer {
+    typealias SwiftType = BridgeStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BridgeStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .created
+        
+        case 2: return .pending
+        
+        case 3: return .refunding
+        
+        case 4: return .completed
+        
+        case 5: return .refunded
+        
+        case 6: return .failed
+        
+        case 7: return .expired
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BridgeStatus, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .created:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .pending:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .refunding:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .completed:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .refunded:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .failed:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .expired:
+            writeInt(&buf, Int32(7))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBridgeStatus_lift(_ buf: RustBuffer) throws -> BridgeStatus {
+    return try FfiConverterTypeBridgeStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBridgeStatus_lower(_ value: BridgeStatus) -> RustBuffer {
+    return FfiConverterTypeBridgeStatus.lower(value)
+}
+
+
+extension BridgeStatus: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum BuildTransferPackageOptions {
     
@@ -40598,8 +42139,9 @@ public enum BuyBitcoinRequest {
     )
     /**
      * `CashApp`: Pay via the Lightning Network.
-     * Generates a bolt11 invoice for the given amount and returns a
-     * `cash.app` deep link. Only available on mainnet.
+     * Returns a `cash.app` deep link to a bolt11 invoice. A conversion
+     * provider delivers the payment to the wallet over Spark, and the payer
+     * pays its fee on top of the amount. Only available on mainnet.
      *
      * The amount is required. With an amountless invoice, Cash App only
      * lets the payer fund from their existing Cash App BTC balance. With
@@ -40608,7 +42150,7 @@ public enum BuyBitcoinRequest {
      */
     case cashApp(
         /**
-         * Amount in satoshis for the Lightning invoice. Must be non-zero.
+         * Amount in satoshis the wallet receives. Must be non-zero.
          */amountSats: UInt64
     )
 }
@@ -42152,6 +43694,89 @@ extension CpfpFundingKind: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * How funding UTXOs pay a unilateral exit's CPFP children.
+ */
+
+public enum CpfpFundingStrategy {
+    
+    /**
+     * One UTXO per branch. Each child after the first spends the change of the
+     * one before it, so a child's inputs depend on the fee rate of every child
+     * above it.
+     */
+    case perBranch
+    /**
+     * One UTXO per fee-bumped transaction. No child spends another's output,
+     * so each can be signed at any fee rate without knowing the others. Each
+     * child's change stays on the funding script rather than being swept.
+     */
+    case perNode
+}
+
+
+#if compiler(>=6)
+extension CpfpFundingStrategy: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCpfpFundingStrategy: FfiConverterRustBuffer {
+    typealias SwiftType = CpfpFundingStrategy
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CpfpFundingStrategy {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .perBranch
+        
+        case 2: return .perNode
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CpfpFundingStrategy, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .perBranch:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .perNode:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCpfpFundingStrategy_lift(_ buf: RustBuffer) throws -> CpfpFundingStrategy {
+    return try FfiConverterTypeCpfpFundingStrategy.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCpfpFundingStrategy_lower(_ value: CpfpFundingStrategy) -> RustBuffer {
+    return FfiConverterTypeCpfpFundingStrategy.lower(value)
+}
+
+
+extension CpfpFundingStrategy: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * A funding UTXO that pays the on-chain fees of a unilateral exit.
  */
 
@@ -43190,9 +44815,9 @@ extension ErrorKind: Equatable, Hashable {}
 /**
  * Which leaves to recover. `All` and `RecoverableOnly` take a leaf only when
  * what is left of its funds exceeds what recovering it costs. That cost leaves
- * out the shared fan-out fee, so funding several unilateral exits from one UTXO
- * adds `fanout_fee_sats` on top: compare `recoverable_value_sats` with
- * `total_fee_sats`, or fund one UTXO per branch to avoid the fan-out.
+ * out the shared fan-out fee, which you also pay when you fund several
+ * `funding.per_branch` entries from one UTXO: compare `recoverable_value_sats`
+ * with `total_fee_sats`, or fund one UTXO per entry to avoid the fan-out.
  */
 
 public enum ExitLeafSelection {
@@ -44041,7 +45666,7 @@ public enum InputType {
     )
     case lnurlPay(LnurlPayRequestDetails
     )
-    case silentPaymentAddress(SilentPaymentAddressDetails
+    case silentPaymentAddress(BitcoinAddressDetails
     )
     case lnurlAuth(LnurlAuthRequestDetails
     )
@@ -44094,7 +45719,7 @@ public struct FfiConverterTypeInputType: FfiConverterRustBuffer {
         case 6: return .lnurlPay(try FfiConverterTypeLnurlPayRequestDetails.read(from: &buf)
         )
         
-        case 7: return .silentPaymentAddress(try FfiConverterTypeSilentPaymentAddressDetails.read(from: &buf)
+        case 7: return .silentPaymentAddress(try FfiConverterTypeBitcoinAddressDetails.read(from: &buf)
         )
         
         case 8: return .lnurlAuth(try FfiConverterTypeLnurlAuthRequestDetails.read(from: &buf)
@@ -44161,7 +45786,7 @@ public struct FfiConverterTypeInputType: FfiConverterRustBuffer {
         
         case let .silentPaymentAddress(v1):
             writeInt(&buf, Int32(7))
-            FfiConverterTypeSilentPaymentAddressDetails.write(v1, into: &buf)
+            FfiConverterTypeBitcoinAddressDetails.write(v1, into: &buf)
             
         
         case let .lnurlAuth(v1):
@@ -45489,7 +47114,11 @@ public enum PaymentDetails {
          * Boltz reverse swap paying a hold invoice).
          */conversionInfo: ConversionInfo?
     )
-    case withdraw(txId: String
+    case withdraw(txId: String, 
+        /**
+         * The index of the withdrawal transaction's output that pays the
+         * destination address.
+         */vout: UInt32, destinationAddress: String
     )
     case deposit(txId: String, vout: UInt32
     )
@@ -45519,7 +47148,7 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
         case 3: return .lightning(description: try FfiConverterOptionString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), destinationPubkey: try FfiConverterString.read(from: &buf), htlcDetails: try FfiConverterTypeSparkHtlcDetails.read(from: &buf), lnurlPayInfo: try FfiConverterOptionTypeLnurlPayInfo.read(from: &buf), lnurlWithdrawInfo: try FfiConverterOptionTypeLnurlWithdrawInfo.read(from: &buf), lnurlReceiveMetadata: try FfiConverterOptionTypeLnurlReceiveMetadata.read(from: &buf), conversionInfo: try FfiConverterOptionTypeConversionInfo.read(from: &buf)
         )
         
-        case 4: return .withdraw(txId: try FfiConverterString.read(from: &buf)
+        case 4: return .withdraw(txId: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf), destinationAddress: try FfiConverterString.read(from: &buf)
         )
         
         case 5: return .deposit(txId: try FfiConverterString.read(from: &buf), vout: try FfiConverterUInt32.read(from: &buf)
@@ -45561,9 +47190,11 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
             FfiConverterOptionTypeConversionInfo.write(conversionInfo, into: &buf)
             
         
-        case let .withdraw(txId):
+        case let .withdraw(txId,vout,destinationAddress):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(txId, into: &buf)
+            FfiConverterUInt32.write(vout, into: &buf)
+            FfiConverterString.write(destinationAddress, into: &buf)
             
         
         case let .deposit(txId,vout):
@@ -46722,7 +48353,15 @@ public enum ReceivePaymentMethod {
         /**
          * Spark identity public key that will receive the payment.
          * If absent, the connected wallet's identity public key is used.
-         */receiverIdentityPublicKey: String?
+         */receiverIdentityPublicKey: String?, 
+        /**
+         * If set, creates an invoice for the hash of this preimage (hex-encoded)
+         * instead of one the SDK generates. The SSP settles the payment without
+         * the receiver, and the payer learns the preimage. Use a random value
+         * below the secp256k1 group order, and a new one for each invoice. The
+         * invoice never includes a Spark address. Set at most one of this and
+         * `payment_hash`.
+         */preimage: String?
     )
     case crossChain(
         /**
@@ -46787,7 +48426,7 @@ public struct FfiConverterTypeReceivePaymentMethod: FfiConverterRustBuffer {
         case 3: return .bitcoinAddress(newAddress: try FfiConverterOptionBool.read(from: &buf)
         )
         
-        case 4: return .bolt11Invoice(description: try FfiConverterString.read(from: &buf), amountSats: try FfiConverterOptionUInt64.read(from: &buf), expirySecs: try FfiConverterOptionUInt32.read(from: &buf), paymentHash: try FfiConverterOptionString.read(from: &buf), receiverIdentityPublicKey: try FfiConverterOptionString.read(from: &buf)
+        case 4: return .bolt11Invoice(description: try FfiConverterString.read(from: &buf), amountSats: try FfiConverterOptionUInt64.read(from: &buf), expirySecs: try FfiConverterOptionUInt32.read(from: &buf), paymentHash: try FfiConverterOptionString.read(from: &buf), receiverIdentityPublicKey: try FfiConverterOptionString.read(from: &buf), preimage: try FfiConverterOptionString.read(from: &buf)
         )
         
         case 5: return .crossChain(route: try FfiConverterTypeCrossChainRoutePair.read(from: &buf), amount: try FfiConverterTypeu128.read(from: &buf), destination: try FfiConverterOptionTypeSparkAsset.read(from: &buf), feeMode: try FfiConverterOptionTypeCrossChainFeeMode.read(from: &buf), maxSlippageBps: try FfiConverterOptionUInt32.read(from: &buf), targetOverpayBps: try FfiConverterOptionUInt32.read(from: &buf)
@@ -46819,13 +48458,14 @@ public struct FfiConverterTypeReceivePaymentMethod: FfiConverterRustBuffer {
             FfiConverterOptionBool.write(newAddress, into: &buf)
             
         
-        case let .bolt11Invoice(description,amountSats,expirySecs,paymentHash,receiverIdentityPublicKey):
+        case let .bolt11Invoice(description,amountSats,expirySecs,paymentHash,receiverIdentityPublicKey,preimage):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(description, into: &buf)
             FfiConverterOptionUInt64.write(amountSats, into: &buf)
             FfiConverterOptionUInt32.write(expirySecs, into: &buf)
             FfiConverterOptionString.write(paymentHash, into: &buf)
             FfiConverterOptionString.write(receiverIdentityPublicKey, into: &buf)
+            FfiConverterOptionString.write(preimage, into: &buf)
             
         
         case let .crossChain(route,amount,destination,feeMode,maxSlippageBps,targetOverpayBps):
@@ -47032,8 +48672,10 @@ public enum RecoveryTxKind {
      */
     case cooperative
     /**
-     * Splits the caller's funding into one output per branch. Present only
-     * when the funding couldn't be matched one-to-one to branches.
+     * Splits the caller's funding into one output per `funding.per_branch`
+     * entry: per branch, or under `CpfpFundingStrategy::PerNode` per
+     * transaction. Present only when the funding couldn't be matched
+     * one-to-one to the entries.
      */
     case fanOut
     /**
@@ -48899,6 +50541,12 @@ public enum SkippedLeafReason {
      */
     case unverified
     /**
+     * The SDK needs data from the Spark operators to find the leaf's funds,
+     * and could not reach them or they were too busy. It tries again the next
+     * time you prepare.
+     */
+    case operatorsUnavailable
+    /**
      * No recovery can be built for the leaf as it stands. `message` says why.
      */
     case notRecoverable(message: String
@@ -48926,7 +50574,9 @@ public struct FfiConverterTypeSkippedLeafReason: FfiConverterRustBuffer {
         
         case 3: return .unverified
         
-        case 4: return .notRecoverable(message: try FfiConverterString.read(from: &buf)
+        case 4: return .operatorsUnavailable
+        
+        case 5: return .notRecoverable(message: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -48949,8 +50599,12 @@ public struct FfiConverterTypeSkippedLeafReason: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         
         
-        case let .notRecoverable(message):
+        case .operatorsUnavailable:
             writeInt(&buf, Int32(4))
+        
+        
+        case let .notRecoverable(message):
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(message, into: &buf)
             
         }
@@ -49910,6 +51564,92 @@ public func FfiConverterTypeSwapDegradation_lower(_ value: SwapDegradation) -> R
 
 
 extension SwapDegradation: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Why a sync could not refresh the balances. Each message is for logs, not
+ * for display.
+ */
+
+public enum SyncError {
+    
+    /**
+     * The network could not be reached, or is temporarily too busy to answer.
+     */
+    case network(message: String
+    )
+    /**
+     * Any other failure.
+     */
+    case generic(message: String
+    )
+}
+
+
+#if compiler(>=6)
+extension SyncError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncError: FfiConverterRustBuffer {
+    typealias SwiftType = SyncError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .network(message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .generic(message: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SyncError, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .network(message):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .generic(message):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(message, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncError_lift(_ buf: RustBuffer) throws -> SyncError {
+    return try FfiConverterTypeSyncError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncError_lower(_ value: SyncError) -> RustBuffer {
+    return FfiConverterTypeSyncError.lower(value)
+}
+
+
+extension SyncError: Equatable, Hashable {}
 
 
 
@@ -52438,6 +54178,30 @@ fileprivate struct FfiConverterOptionTypeCpfpFundingKind: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeCpfpFundingStrategy: FfiConverterRustBuffer {
+    typealias SwiftType = CpfpFundingStrategy?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCpfpFundingStrategy.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCpfpFundingStrategy.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeCrossChainFeeMode: FfiConverterRustBuffer {
     typealias SwiftType = CrossChainFeeMode?
 
@@ -52790,6 +54554,30 @@ fileprivate struct FfiConverterOptionTypeSwapDegradation: FfiConverterRustBuffer
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeSwapDegradation.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeSyncError: FfiConverterRustBuffer {
+    typealias SwiftType = SyncError?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSyncError.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSyncError.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -53279,6 +55067,31 @@ fileprivate struct FfiConverterSequenceTypeBolt12OfferBlindedPath: FfiConverterR
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeBolt12OfferBlindedPath.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeBridgeRoutePair: FfiConverterRustBuffer {
+    typealias SwiftType = [BridgeRoutePair]
+
+    public static func write(_ value: [BridgeRoutePair], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBridgeRoutePair.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BridgeRoutePair] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BridgeRoutePair]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBridgeRoutePair.read(from: &buf))
         }
         return seq
     }
@@ -55102,6 +56915,16 @@ public func customStorage(storage: Storage) -> StorageBackend  {
     )
 })
 }
+/**
+ * Settings for [`new_bridging_client`] with every optional field unset.
+ */
+public func defaultBridgingConfig(apiKey: String) -> BridgingConfig  {
+    return try!  FfiConverterTypeBridgingConfig_lift(try! rustCall() {
+    uniffi_breez_sdk_spark_fn_func_default_bridging_config(
+        FfiConverterString.lower(apiKey),$0
+    )
+})
+}
 public func defaultConfig(network: Network) -> Config  {
     return try!  FfiConverterTypeConfig_lift(try! rustCall() {
     uniffi_breez_sdk_spark_fn_func_default_config(
@@ -55276,6 +57099,23 @@ public func mysqlStorage(config: MysqlStorageConfig)throws  -> StorageBackend  {
 })
 }
 /**
+ * Builds a [`BridgingClient`] from an API key, with no seed or storage.
+ */
+public func newBridgingClient(config: BridgingConfig)async throws  -> BridgingClient  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_func_new_bridging_client(FfiConverterTypeBridgingConfig_lower(config)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_pointer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_pointer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeBridgingClient_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+/**
  * Constructs a shareable REST-based [`BitcoinChainService`].
  *
  * Pass the returned `Arc` to multiple [`SdkBuilder`](crate::SdkBuilder)s via
@@ -55390,6 +57230,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_func_custom_storage() != 18116) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_func_default_bridging_config() != 23181) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_func_default_config() != 62194) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -55418,6 +57261,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_mysql_storage() != 2826) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_func_new_bridging_client() != 35110) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_func_new_rest_chain_service() != 53269) {
@@ -55468,10 +57314,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_authorize_lightning_address_transfer() != 15257) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_bridge_from_cash_app() != 35122) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_bridge_from_cash_app() != 29767) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_bridge_to_cash_app() != 54543) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_bridge_to_cash_app() != 25187) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_build_unsigned_batch_package() != 52999) {
@@ -55526,6 +57372,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_fetch_conversion_limits() != 50958) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_bridging_client() != 12454) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_cross_chain_routes() != 29180) {
@@ -55591,7 +57440,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_lnurl_pay() != 37691) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_payment_link() != 32711) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_payment_link() != 7617) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_prepare_pull_payment() != 17707) {
@@ -55664,6 +57513,21 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_update_user_settings() != 1721) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_bridgingclient_bridge_from_cash_app() != 63903) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_bridgingclient_bridge_to_cash_app() != 29057) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_bridgingclient_create_bridge() != 60481) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_bridgingclient_get_bridge_status() != 45714) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_bridgingclient_get_routes() != 65444) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_cpfpsigner_sign_psbt() != 20736) {
