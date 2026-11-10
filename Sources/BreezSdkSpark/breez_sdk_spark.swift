@@ -1279,8 +1279,9 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
      *
      * Creates a cross-chain order and returns a `cash.app` deep link the payer
      * opens. Once paid over Lightning, the provider delivers the stablecoin to
-     * `address`. No funds move through the Spark wallet, and nothing is
-     * tracked. Only available on mainnet.
+     * `address`, or refunds a failure before the swap to this wallet's
+     * Lightning address, when one is registered. Nothing is tracked. Only
+     * available on mainnet.
      */
     func bridgeFromCashApp(request: BridgeFromCashAppRequest) async throws  -> BridgeFromCashAppResponse
     
@@ -1967,8 +1968,9 @@ open func authorizeLightningAddressTransfer(request: AuthorizeTransferRequest)as
      *
      * Creates a cross-chain order and returns a `cash.app` deep link the payer
      * opens. Once paid over Lightning, the provider delivers the stablecoin to
-     * `address`. No funds move through the Spark wallet, and nothing is
-     * tracked. Only available on mainnet.
+     * `address`, or refunds a failure before the swap to this wallet's
+     * Lightning address, when one is registered. Nothing is tracked. Only
+     * available on mainnet.
      */
 open func bridgeFromCashApp(request: BridgeFromCashAppRequest)async throws  -> BridgeFromCashAppResponse  {
     return
@@ -3558,7 +3560,10 @@ public protocol BridgingClientProtocol: AnyObject, Sendable {
     /**
      * Pays a recipient on another chain from Cash App. Takes a route for the
      * address that the payer funds over Lightning, and returns the bridge
-     * with the Cash App link as its `payment_request`.
+     * with the Cash App link as its `payment_request`. The provider allows
+     * these payments 10% slippage when they execute. With fees excluded,
+     * `max_slippage_bps` bounds how far the quoted delivery may fall short of
+     * `amount` when the bridge is created.
      */
     func bridgeFromCashApp(request: CreateBridgeRequest) async throws  -> CreateBridgeResponse
     
@@ -3648,7 +3653,10 @@ open class BridgingClient: BridgingClientProtocol, @unchecked Sendable {
     /**
      * Pays a recipient on another chain from Cash App. Takes a route for the
      * address that the payer funds over Lightning, and returns the bridge
-     * with the Cash App link as its `payment_request`.
+     * with the Cash App link as its `payment_request`. The provider allows
+     * these payments 10% slippage when they execute. With fees excluded,
+     * `max_slippage_bps` bounds how far the quoted delivery may fall short of
+     * `amount` when the bridge is created.
      */
 open func bridgeFromCashApp(request: CreateBridgeRequest)async throws  -> CreateBridgeResponse  {
     return
@@ -18931,9 +18939,11 @@ public struct CreateBridgeRequest {
     /**
      * The payer's address on the source chain, where the deposit is refunded
      * if the recipient can't be paid. Required to pay a Lightning address,
-     * and recommended whenever the payer pays from another chain: without
-     * one the provider has no address to refund to. Ignored when the payer
-     * pays over Lightning.
+     * and recommended otherwise: without one the provider has no address to
+     * refund to. When the payer pays over Lightning, it is a Lightning
+     * address, a Cash App `$cashtag` or an amountless BOLT11 invoice that
+     * doesn't expire before the bridge, refunded if the payment fails before
+     * the swap. Anything else is rejected.
      */
     public var refundAddress: String?
     /**
@@ -18966,9 +18976,11 @@ public struct CreateBridgeRequest {
         /**
          * The payer's address on the source chain, where the deposit is refunded
          * if the recipient can't be paid. Required to pay a Lightning address,
-         * and recommended whenever the payer pays from another chain: without
-         * one the provider has no address to refund to. Ignored when the payer
-         * pays over Lightning.
+         * and recommended otherwise: without one the provider has no address to
+         * refund to. When the payer pays over Lightning, it is a Lightning
+         * address, a Cash App `$cashtag` or an amountless BOLT11 invoice that
+         * doesn't expire before the bridge, refunded if the payment fails before
+         * the swap. Anything else is rejected.
          */refundAddress: String? = nil, 
         /**
          * Whether fees are added on top of `amount` (`FeesExcluded`, the default)
@@ -27957,7 +27969,7 @@ public struct LnurlPayRequest {
     /**
      * If set, providing the same idempotency key for multiple requests will ensure that only one
      * payment is made. If an idempotency key is re-used, the same payment will be returned.
-     * The idempotency key must be a valid UUID.
+     * The idempotency key must be a valid UUID. The payment's id is the idempotency key.
      */
     public var idempotencyKey: String?
 
@@ -27967,7 +27979,7 @@ public struct LnurlPayRequest {
         /**
          * If set, providing the same idempotency key for multiple requests will ensure that only one
          * payment is made. If an idempotency key is re-used, the same payment will be returned.
-         * The idempotency key must be a valid UUID.
+         * The idempotency key must be a valid UUID. The payment's id is the idempotency key.
          */idempotencyKey: String? = nil) {
         self.prepareResponse = prepareResponse
         self.idempotencyKey = idempotencyKey
@@ -30110,7 +30122,8 @@ public func FfiConverterTypePasskeyProviderOptions_lower(_ value: PasskeyProvide
  */
 public struct Payment {
     /**
-     * Unique identifier for the payment
+     * Unique identifier for the payment. A second payment of the same invoice has a
+     * different id.
      */
     public var id: String
     /**
@@ -30151,7 +30164,8 @@ public struct Payment {
     // declare one manually.
     public init(
         /**
-         * Unique identifier for the payment
+         * Unique identifier for the payment. A second payment of the same invoice has a
+         * different id.
          */id: String, 
         /**
          * Type of payment (send or receive)
@@ -35916,7 +35930,7 @@ public struct SendPaymentRequest {
      * and cross-chain sends).
      * If set, providing the same idempotency key for multiple requests will ensure that only one
      * payment is made. If an idempotency key is re-used, the same payment will be returned.
-     * The idempotency key must be a valid UUID.
+     * The idempotency key must be a valid UUID. The payment's id is the idempotency key.
      */
     public var idempotencyKey: String?
 
@@ -35928,7 +35942,7 @@ public struct SendPaymentRequest {
          * and cross-chain sends).
          * If set, providing the same idempotency key for multiple requests will ensure that only one
          * payment is made. If an idempotency key is re-used, the same payment will be returned.
-         * The idempotency key must be a valid UUID.
+         * The idempotency key must be a valid UUID. The payment's id is the idempotency key.
          */idempotencyKey: String? = nil) {
         self.prepareResponse = prepareResponse
         self.options = options
@@ -41909,9 +41923,10 @@ extension BitcoinNetwork: Equatable, Hashable {}
 public enum BridgeStatus {
     
     /**
-     * The bridge was created, and the payer hasn't paid yet. An unpaid bridge
-     * stays `Created` after its `expires_at`. A late deposit on another chain
-     * may still be accepted at a new price.
+     * The bridge was created, and the payer hasn't paid yet. A bridge from
+     * Cash App becomes `Expired` once it can no longer be paid. Other unpaid
+     * bridges stay `Created` after their `expires_at`, and a late deposit on
+     * another chain may still be accepted at a new price.
      */
     case created
     /**
@@ -41936,7 +41951,7 @@ public enum BridgeStatus {
      */
     case failed
     /**
-     * The provider's order expired without a payment.
+     * The bridge can no longer be paid, and nobody paid it.
      */
     case expired
 }
@@ -57314,7 +57329,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_authorize_lightning_address_transfer() != 15257) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_bridge_from_cash_app() != 29767) {
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_bridge_from_cash_app() != 8629) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_bridge_to_cash_app() != 25187) {
@@ -57515,7 +57530,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_update_user_settings() != 1721) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_bridgingclient_bridge_from_cash_app() != 63903) {
+    if (uniffi_breez_sdk_spark_checksum_method_bridgingclient_bridge_from_cash_app() != 61880) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_bridgingclient_bridge_to_cash_app() != 29057) {
