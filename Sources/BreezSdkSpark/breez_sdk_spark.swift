@@ -1433,6 +1433,13 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     func fetchConversionLimits(request: FetchConversionLimitsRequest) async throws  -> FetchConversionLimitsResponse
     
     /**
+     * Fetches the status of this wallet's Lightning payment of a Bolt11 invoice from the Spark
+     * operators, without reading the local payment history. A payment made by a direct Spark
+     * transfer to the invoice's Spark address is not covered.
+     */
+    func fetchLightningSendStatus(request: FetchLightningSendStatusRequest) async throws  -> FetchLightningSendStatusResponse
+    
+    /**
      * Returns a client for bridges: orders in which a payer on another chain
      * or on Lightning pays a recipient, with no funds moving through the
      * SDK. It shares this SDK's API key, and its cross-chain settings when
@@ -2417,6 +2424,28 @@ open func fetchConversionLimits(request: FetchConversionLimitsRequest)async thro
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFetchConversionLimitsResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
+     * Fetches the status of this wallet's Lightning payment of a Bolt11 invoice from the Spark
+     * operators, without reading the local payment history. A payment made by a direct Spark
+     * transfer to the invoice's Spark address is not covered.
+     */
+open func fetchLightningSendStatus(request: FetchLightningSendStatusRequest)async throws  -> FetchLightningSendStatusResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_fetch_lightning_send_status(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeFetchLightningSendStatusRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFetchLightningSendStatusResponse_lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
@@ -5328,6 +5357,13 @@ public protocol ExternalSparkSigner: AnyObject, Sendable {
     func isRemote()  -> Bool
     
     /**
+     * Whether [`sign_frost`](Self::sign_frost) can sign jobs whose
+     * `adaptor_v2` is set, with version 2 adaptor signing. The SDK only sets it
+     * for a signer that returns true.
+     */
+    func supportsAdaptorV2()  -> Bool
+    
+    /**
      * The static-deposit signing public key at `index`.
      */
     func getStaticDepositPublicKey(index: UInt32) async throws  -> PublicKeyBytes
@@ -5530,6 +5566,18 @@ open func getPublicKeyForLeaf(leafId: ExternalTreeNodeId)async throws  -> Public
 open func isRemote() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_breez_sdk_spark_fn_method_externalsparksigner_is_remote(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Whether [`sign_frost`](Self::sign_frost) can sign jobs whose
+     * `adaptor_v2` is set, with version 2 adaptor signing. The SDK only sets it
+     * for a signer that returns true.
+     */
+open func supportsAdaptorV2() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_breez_sdk_spark_fn_method_externalsparksigner_supports_adaptor_v2(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -5979,6 +6027,28 @@ fileprivate struct UniffiCallbackInterfaceExternalSparkSigner {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return uniffiObj.isRemote(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        supportsAdaptorV2: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterTypeExternalSparkSigner.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.supportsAdaptorV2(
                 )
             }
 
@@ -19203,15 +19273,25 @@ public struct CreateIssuerTokenRequest {
     public var decimals: UInt32
     public var isFreezable: Bool
     public var maxSupply: U128
+    /**
+     * Arbitrary data to attach to the token, such as an icon or a JSON description, of at most
+     * 1024 bytes. It is part of the token identifier, so it cannot be changed after creation.
+     */
+    public var extraMetadata: Data?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(name: String, ticker: String, decimals: UInt32, isFreezable: Bool, maxSupply: U128) {
+    public init(name: String, ticker: String, decimals: UInt32, isFreezable: Bool, maxSupply: U128, 
+        /**
+         * Arbitrary data to attach to the token, such as an icon or a JSON description, of at most
+         * 1024 bytes. It is part of the token identifier, so it cannot be changed after creation.
+         */extraMetadata: Data? = nil) {
         self.name = name
         self.ticker = ticker
         self.decimals = decimals
         self.isFreezable = isFreezable
         self.maxSupply = maxSupply
+        self.extraMetadata = extraMetadata
     }
 }
 
@@ -19237,6 +19317,9 @@ extension CreateIssuerTokenRequest: Equatable, Hashable {
         if lhs.maxSupply != rhs.maxSupply {
             return false
         }
+        if lhs.extraMetadata != rhs.extraMetadata {
+            return false
+        }
         return true
     }
 
@@ -19246,6 +19329,7 @@ extension CreateIssuerTokenRequest: Equatable, Hashable {
         hasher.combine(decimals)
         hasher.combine(isFreezable)
         hasher.combine(maxSupply)
+        hasher.combine(extraMetadata)
     }
 }
 
@@ -19262,7 +19346,8 @@ public struct FfiConverterTypeCreateIssuerTokenRequest: FfiConverterRustBuffer {
                 ticker: FfiConverterString.read(from: &buf), 
                 decimals: FfiConverterUInt32.read(from: &buf), 
                 isFreezable: FfiConverterBool.read(from: &buf), 
-                maxSupply: FfiConverterTypeu128.read(from: &buf)
+                maxSupply: FfiConverterTypeu128.read(from: &buf), 
+                extraMetadata: FfiConverterOptionData.read(from: &buf)
         )
     }
 
@@ -19272,6 +19357,7 @@ public struct FfiConverterTypeCreateIssuerTokenRequest: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.decimals, into: &buf)
         FfiConverterBool.write(value.isFreezable, into: &buf)
         FfiConverterTypeu128.write(value.maxSupply, into: &buf)
+        FfiConverterOptionData.write(value.extraMetadata, into: &buf)
     }
 }
 
@@ -21522,6 +21608,12 @@ public struct ExternalFrostJob {
      * Optional adaptor public key (33 bytes compressed).
      */
     public var adaptorPublicKey: Data?
+    /**
+     * Sign the adaptor signature with version 2 adaptor signing, whose FROST
+     * binding factors include the adaptor point. Only set when the signer's
+     * `supports_adaptor_v2` returns true.
+     */
+    public var adaptorV2: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -21540,12 +21632,18 @@ public struct ExternalFrostJob {
          */operatorCommitments: [IdentifierCommitmentPair], 
         /**
          * Optional adaptor public key (33 bytes compressed).
-         */adaptorPublicKey: Data?) {
+         */adaptorPublicKey: Data?, 
+        /**
+         * Sign the adaptor signature with version 2 adaptor signing, whose FROST
+         * binding factors include the adaptor point. Only set when the signer's
+         * `supports_adaptor_v2` returns true.
+         */adaptorV2: Bool) {
         self.derivation = derivation
         self.sighash = sighash
         self.verifyingKey = verifyingKey
         self.operatorCommitments = operatorCommitments
         self.adaptorPublicKey = adaptorPublicKey
+        self.adaptorV2 = adaptorV2
     }
 }
 
@@ -21571,6 +21669,9 @@ extension ExternalFrostJob: Equatable, Hashable {
         if lhs.adaptorPublicKey != rhs.adaptorPublicKey {
             return false
         }
+        if lhs.adaptorV2 != rhs.adaptorV2 {
+            return false
+        }
         return true
     }
 
@@ -21580,6 +21681,7 @@ extension ExternalFrostJob: Equatable, Hashable {
         hasher.combine(verifyingKey)
         hasher.combine(operatorCommitments)
         hasher.combine(adaptorPublicKey)
+        hasher.combine(adaptorV2)
     }
 }
 
@@ -21596,7 +21698,8 @@ public struct FfiConverterTypeExternalFrostJob: FfiConverterRustBuffer {
                 sighash: FfiConverterData.read(from: &buf), 
                 verifyingKey: FfiConverterData.read(from: &buf), 
                 operatorCommitments: FfiConverterSequenceTypeIdentifierCommitmentPair.read(from: &buf), 
-                adaptorPublicKey: FfiConverterOptionData.read(from: &buf)
+                adaptorPublicKey: FfiConverterOptionData.read(from: &buf), 
+                adaptorV2: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -21606,6 +21709,7 @@ public struct FfiConverterTypeExternalFrostJob: FfiConverterRustBuffer {
         FfiConverterData.write(value.verifyingKey, into: &buf)
         FfiConverterSequenceTypeIdentifierCommitmentPair.write(value.operatorCommitments, into: &buf)
         FfiConverterOptionData.write(value.adaptorPublicKey, into: &buf)
+        FfiConverterBool.write(value.adaptorV2, into: &buf)
     }
 }
 
@@ -24681,6 +24785,162 @@ public func FfiConverterTypeFetchConversionLimitsResponse_lift(_ buf: RustBuffer
 #endif
 public func FfiConverterTypeFetchConversionLimitsResponse_lower(_ value: FetchConversionLimitsResponse) -> RustBuffer {
     return FfiConverterTypeFetchConversionLimitsResponse.lower(value)
+}
+
+
+public struct FetchLightningSendStatusRequest {
+    /**
+     * The Bolt11 invoice to look up
+     */
+    public var invoice: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The Bolt11 invoice to look up
+         */invoice: String) {
+        self.invoice = invoice
+    }
+}
+
+#if compiler(>=6)
+extension FetchLightningSendStatusRequest: Sendable {}
+#endif
+
+
+extension FetchLightningSendStatusRequest: Equatable, Hashable {
+    public static func ==(lhs: FetchLightningSendStatusRequest, rhs: FetchLightningSendStatusRequest) -> Bool {
+        if lhs.invoice != rhs.invoice {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(invoice)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFetchLightningSendStatusRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FetchLightningSendStatusRequest {
+        return
+            try FetchLightningSendStatusRequest(
+                invoice: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FetchLightningSendStatusRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.invoice, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFetchLightningSendStatusRequest_lift(_ buf: RustBuffer) throws -> FetchLightningSendStatusRequest {
+    return try FfiConverterTypeFetchLightningSendStatusRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFetchLightningSendStatusRequest_lower(_ value: FetchLightningSendStatusRequest) -> RustBuffer {
+    return FfiConverterTypeFetchLightningSendStatusRequest.lower(value)
+}
+
+
+public struct FetchLightningSendStatusResponse {
+    /**
+     * The status of this wallet's Lightning payments of the invoice: completed if one completed,
+     * pending if one is in flight, failed if every one was returned. Unset when there is none.
+     * A payment made by a direct Spark transfer to the invoice's Spark address is not found, so
+     * unset does not mean the invoice is unpaid.
+     */
+    public var status: PaymentStatus?
+    /**
+     * The hex-encoded preimage that proves the payment, set when the status is completed
+     */
+    public var preimage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The status of this wallet's Lightning payments of the invoice: completed if one completed,
+         * pending if one is in flight, failed if every one was returned. Unset when there is none.
+         * A payment made by a direct Spark transfer to the invoice's Spark address is not found, so
+         * unset does not mean the invoice is unpaid.
+         */status: PaymentStatus?, 
+        /**
+         * The hex-encoded preimage that proves the payment, set when the status is completed
+         */preimage: String?) {
+        self.status = status
+        self.preimage = preimage
+    }
+}
+
+#if compiler(>=6)
+extension FetchLightningSendStatusResponse: Sendable {}
+#endif
+
+
+extension FetchLightningSendStatusResponse: Equatable, Hashable {
+    public static func ==(lhs: FetchLightningSendStatusResponse, rhs: FetchLightningSendStatusResponse) -> Bool {
+        if lhs.status != rhs.status {
+            return false
+        }
+        if lhs.preimage != rhs.preimage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(status)
+        hasher.combine(preimage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFetchLightningSendStatusResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FetchLightningSendStatusResponse {
+        return
+            try FetchLightningSendStatusResponse(
+                status: FfiConverterOptionTypePaymentStatus.read(from: &buf), 
+                preimage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FetchLightningSendStatusResponse, into buf: inout [UInt8]) {
+        FfiConverterOptionTypePaymentStatus.write(value.status, into: &buf)
+        FfiConverterOptionString.write(value.preimage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFetchLightningSendStatusResponse_lift(_ buf: RustBuffer) throws -> FetchLightningSendStatusResponse {
+    return try FfiConverterTypeFetchLightningSendStatusResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFetchLightningSendStatusResponse_lower(_ value: FetchLightningSendStatusResponse) -> RustBuffer {
+    return FfiConverterTypeFetchLightningSendStatusResponse.lower(value)
 }
 
 
@@ -30566,6 +30826,132 @@ public func FfiConverterTypePaymentRequestSource_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypePaymentRequestSource_lower(_ value: PaymentRequestSource) -> RustBuffer {
     return FfiConverterTypePaymentRequestSource.lower(value)
+}
+
+
+/**
+ * Metadata of the token a payment moved. The token's extra metadata is available from
+ * `get_tokens_metadata`.
+ */
+public struct PaymentTokenMetadata {
+    public var identifier: String
+    /**
+     * Hex representation of the issuer public key
+     */
+    public var issuerPublicKey: String
+    public var name: String
+    public var ticker: String
+    /**
+     * Number of decimals the token uses
+     */
+    public var decimals: UInt32
+    public var maxSupply: U128
+    public var isFreezable: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(identifier: String, 
+        /**
+         * Hex representation of the issuer public key
+         */issuerPublicKey: String, name: String, ticker: String, 
+        /**
+         * Number of decimals the token uses
+         */decimals: UInt32, maxSupply: U128, isFreezable: Bool) {
+        self.identifier = identifier
+        self.issuerPublicKey = issuerPublicKey
+        self.name = name
+        self.ticker = ticker
+        self.decimals = decimals
+        self.maxSupply = maxSupply
+        self.isFreezable = isFreezable
+    }
+}
+
+#if compiler(>=6)
+extension PaymentTokenMetadata: Sendable {}
+#endif
+
+
+extension PaymentTokenMetadata: Equatable, Hashable {
+    public static func ==(lhs: PaymentTokenMetadata, rhs: PaymentTokenMetadata) -> Bool {
+        if lhs.identifier != rhs.identifier {
+            return false
+        }
+        if lhs.issuerPublicKey != rhs.issuerPublicKey {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.ticker != rhs.ticker {
+            return false
+        }
+        if lhs.decimals != rhs.decimals {
+            return false
+        }
+        if lhs.maxSupply != rhs.maxSupply {
+            return false
+        }
+        if lhs.isFreezable != rhs.isFreezable {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(identifier)
+        hasher.combine(issuerPublicKey)
+        hasher.combine(name)
+        hasher.combine(ticker)
+        hasher.combine(decimals)
+        hasher.combine(maxSupply)
+        hasher.combine(isFreezable)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePaymentTokenMetadata: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PaymentTokenMetadata {
+        return
+            try PaymentTokenMetadata(
+                identifier: FfiConverterString.read(from: &buf), 
+                issuerPublicKey: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                ticker: FfiConverterString.read(from: &buf), 
+                decimals: FfiConverterUInt32.read(from: &buf), 
+                maxSupply: FfiConverterTypeu128.read(from: &buf), 
+                isFreezable: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PaymentTokenMetadata, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.identifier, into: &buf)
+        FfiConverterString.write(value.issuerPublicKey, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.ticker, into: &buf)
+        FfiConverterUInt32.write(value.decimals, into: &buf)
+        FfiConverterTypeu128.write(value.maxSupply, into: &buf)
+        FfiConverterBool.write(value.isFreezable, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePaymentTokenMetadata_lift(_ buf: RustBuffer) throws -> PaymentTokenMetadata {
+    return try FfiConverterTypePaymentTokenMetadata.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePaymentTokenMetadata_lower(_ value: PaymentTokenMetadata) -> RustBuffer {
+    return FfiConverterTypePaymentTokenMetadata.lower(value)
 }
 
 
@@ -39105,6 +39491,11 @@ public struct TokenMetadata {
     public var decimals: UInt32
     public var maxSupply: U128
     public var isFreezable: Bool
+    /**
+     * Arbitrary data the issuer attached when creating the token, such as an icon or a JSON
+     * description. Unset when the issuer attached none.
+     */
+    public var extraMetadata: Data?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -39114,7 +39505,11 @@ public struct TokenMetadata {
          */issuerPublicKey: String, name: String, ticker: String, 
         /**
          * Number of decimals the token uses
-         */decimals: UInt32, maxSupply: U128, isFreezable: Bool) {
+         */decimals: UInt32, maxSupply: U128, isFreezable: Bool, 
+        /**
+         * Arbitrary data the issuer attached when creating the token, such as an icon or a JSON
+         * description. Unset when the issuer attached none.
+         */extraMetadata: Data?) {
         self.identifier = identifier
         self.issuerPublicKey = issuerPublicKey
         self.name = name
@@ -39122,6 +39517,7 @@ public struct TokenMetadata {
         self.decimals = decimals
         self.maxSupply = maxSupply
         self.isFreezable = isFreezable
+        self.extraMetadata = extraMetadata
     }
 }
 
@@ -39153,6 +39549,9 @@ extension TokenMetadata: Equatable, Hashable {
         if lhs.isFreezable != rhs.isFreezable {
             return false
         }
+        if lhs.extraMetadata != rhs.extraMetadata {
+            return false
+        }
         return true
     }
 
@@ -39164,6 +39563,7 @@ extension TokenMetadata: Equatable, Hashable {
         hasher.combine(decimals)
         hasher.combine(maxSupply)
         hasher.combine(isFreezable)
+        hasher.combine(extraMetadata)
     }
 }
 
@@ -39182,7 +39582,8 @@ public struct FfiConverterTypeTokenMetadata: FfiConverterRustBuffer {
                 ticker: FfiConverterString.read(from: &buf), 
                 decimals: FfiConverterUInt32.read(from: &buf), 
                 maxSupply: FfiConverterTypeu128.read(from: &buf), 
-                isFreezable: FfiConverterBool.read(from: &buf)
+                isFreezable: FfiConverterBool.read(from: &buf), 
+                extraMetadata: FfiConverterOptionData.read(from: &buf)
         )
     }
 
@@ -39194,6 +39595,7 @@ public struct FfiConverterTypeTokenMetadata: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.decimals, into: &buf)
         FfiConverterTypeu128.write(value.maxSupply, into: &buf)
         FfiConverterBool.write(value.isFreezable, into: &buf)
+        FfiConverterOptionData.write(value.extraMetadata, into: &buf)
     }
 }
 
@@ -47091,7 +47493,7 @@ public enum PaymentDetails {
          * The information for a conversion
          */conversionInfo: ConversionInfo?
     )
-    case token(metadata: TokenMetadata, txHash: String, txType: TokenTransactionType, 
+    case token(metadata: PaymentTokenMetadata, txHash: String, txType: TokenTransactionType, 
         /**
          * The invoice details if the payment fulfilled a spark invoice
          */invoiceDetails: SparkInvoicePaymentDetails?, 
@@ -47157,7 +47559,7 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
         case 1: return .spark(invoiceDetails: try FfiConverterOptionTypeSparkInvoicePaymentDetails.read(from: &buf), htlcDetails: try FfiConverterOptionTypeSparkHtlcDetails.read(from: &buf), conversionInfo: try FfiConverterOptionTypeConversionInfo.read(from: &buf)
         )
         
-        case 2: return .token(metadata: try FfiConverterTypeTokenMetadata.read(from: &buf), txHash: try FfiConverterString.read(from: &buf), txType: try FfiConverterTypeTokenTransactionType.read(from: &buf), invoiceDetails: try FfiConverterOptionTypeSparkInvoicePaymentDetails.read(from: &buf), conversionInfo: try FfiConverterOptionTypeConversionInfo.read(from: &buf)
+        case 2: return .token(metadata: try FfiConverterTypePaymentTokenMetadata.read(from: &buf), txHash: try FfiConverterString.read(from: &buf), txType: try FfiConverterTypeTokenTransactionType.read(from: &buf), invoiceDetails: try FfiConverterOptionTypeSparkInvoicePaymentDetails.read(from: &buf), conversionInfo: try FfiConverterOptionTypeConversionInfo.read(from: &buf)
         )
         
         case 3: return .lightning(description: try FfiConverterOptionString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), destinationPubkey: try FfiConverterString.read(from: &buf), htlcDetails: try FfiConverterTypeSparkHtlcDetails.read(from: &buf), lnurlPayInfo: try FfiConverterOptionTypeLnurlPayInfo.read(from: &buf), lnurlWithdrawInfo: try FfiConverterOptionTypeLnurlWithdrawInfo.read(from: &buf), lnurlReceiveMetadata: try FfiConverterOptionTypeLnurlReceiveMetadata.read(from: &buf), conversionInfo: try FfiConverterOptionTypeConversionInfo.read(from: &buf)
@@ -47186,7 +47588,7 @@ public struct FfiConverterTypePaymentDetails: FfiConverterRustBuffer {
         
         case let .token(metadata,txHash,txType,invoiceDetails,conversionInfo):
             writeInt(&buf, Int32(2))
-            FfiConverterTypeTokenMetadata.write(metadata, into: &buf)
+            FfiConverterTypePaymentTokenMetadata.write(metadata, into: &buf)
             FfiConverterString.write(txHash, into: &buf)
             FfiConverterTypeTokenTransactionType.write(txType, into: &buf)
             FfiConverterOptionTypeSparkInvoicePaymentDetails.write(invoiceDetails, into: &buf)
@@ -54385,6 +54787,30 @@ fileprivate struct FfiConverterOptionTypePaymentDetails: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypePaymentStatus: FfiConverterRustBuffer {
+    typealias SwiftType = PaymentStatus?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePaymentStatus.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePaymentStatus.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeRefundState: FfiConverterRustBuffer {
     typealias SwiftType = RefundState?
 
@@ -57389,6 +57815,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_fetch_conversion_limits() != 50958) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_fetch_lightning_send_status() != 52698) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_get_bridging_client() != 12454) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -57590,52 +58019,55 @@ private let initializationResult: InitializationResult = {
     if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_is_remote() != 25651) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_get_static_deposit_public_key() != 54380) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_supports_adaptor_v2() != 56510) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_authentication_challenge() != 53611) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_get_static_deposit_public_key() != 27896) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_message() != 1815) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_authentication_challenge() != 58211) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_leaf_refund_spend() != 61127) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_message() != 32678) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_frost() != 58732) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_leaf_refund_spend() != 47798) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_transfer() != 29829) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_frost() != 36320) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_claim() != 17684) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_transfer() != 39309) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_lightning_receive() != 25306) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_claim() != 7759) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_static_deposit() != 3348) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_lightning_receive() != 6460) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_start_static_deposit_refund() != 24696) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_static_deposit() != 37233) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_static_deposit_refund() != 52719) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_start_static_deposit_refund() != 59292) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_start_watchtower_exit_recovery() != 4407) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_static_deposit_refund() != 45794) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_watchtower_exit_recovery() != 31640) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_start_watchtower_exit_recovery() != 65328) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_spark_invoice() != 10640) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_watchtower_exit_recovery() != 32035) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_token_transaction() != 40168) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_sign_spark_invoice() != 31691) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_static_deposit_claim() != 29840) {
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_token_transaction() != 18619) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_externalsparksigner_prepare_static_deposit_claim() != 44445) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_fiatservice_fetch_fiat_currencies() != 19092) {
