@@ -19008,9 +19008,10 @@ public struct CreateBridgeRequest {
     public var amount: U128
     /**
      * The payer's address on the source chain, where the deposit is refunded
-     * if the recipient can't be paid. Required to pay a Lightning address,
-     * and recommended otherwise: without one the provider has no address to
-     * refund to. When the payer pays over Lightning, it is a Lightning
+     * if the recipient can't be paid. Required to pay a Lightning address or
+     * when the payer sends from an exchange, and advised for BSC and Tron:
+     * unset, the provider refunds the sending address only when that is
+     * safe. When the payer pays over Lightning, it is a Lightning
      * address, a Cash App `$cashtag` or an amountless BOLT11 invoice that
      * doesn't expire before the bridge, refunded if the payment fails before
      * the swap. Anything else is rejected.
@@ -19045,9 +19046,10 @@ public struct CreateBridgeRequest {
          */amount: U128, 
         /**
          * The payer's address on the source chain, where the deposit is refunded
-         * if the recipient can't be paid. Required to pay a Lightning address,
-         * and recommended otherwise: without one the provider has no address to
-         * refund to. When the payer pays over Lightning, it is a Lightning
+         * if the recipient can't be paid. Required to pay a Lightning address or
+         * when the payer sends from an exchange, and advised for BSC and Tron:
+         * unset, the provider refunds the sending address only when that is
+         * safe. When the payer pays over Lightning, it is a Lightning
          * address, a Cash App `$cashtag` or an amountless BOLT11 invoice that
          * doesn't expire before the bridge, refunded if the payment fails before
          * the swap. Anything else is rejected.
@@ -42345,7 +42347,8 @@ public enum BridgeStatus {
      */
     case completed
     /**
-     * The payment was refunded to the payer's refund address.
+     * The payment was refunded to the payer's refund address, or without one
+     * to the address it came from.
      */
     case refunded
     /**
@@ -43324,9 +43327,13 @@ public enum ConversionInfo {
          * Transaction on `chain`, the non-Spark side of the conversion: the
          * delivery on a send, the funding deposit on a receive. Format follows
          * the chain (e.g. `0x`-prefixed hex on EVM, a base58 signature on
-         * Solana). Unset until that transaction exists, and on orders that
-         * failed or were refunded.
-         */externalTxHash: String?, status: ConversionStatus, 
+         * Solana). Unset until that transaction exists.
+         */externalTxHash: String?, 
+        /**
+         * The transaction that refunded the deposit, to the refund address given
+         * for the order or, without one, to the payer. Set once the order is
+         * refunded.
+         */refundTxHash: String?, status: ConversionStatus, 
         /**
          * Best-available total fee, in `asset` base units.
          * Prepare-time estimate while pending, realized fee when Completed.
@@ -43441,7 +43448,7 @@ public struct FfiConverterTypeConversionInfo: FfiConverterRustBuffer {
         case 1: return .amm(poolId: try FfiConverterString.read(from: &buf), conversionId: try FfiConverterString.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), fee: try FfiConverterOptionTypeu128.read(from: &buf), purpose: try FfiConverterOptionTypeConversionPurpose.read(from: &buf), amountAdjustment: try FfiConverterOptionTypeAmountAdjustmentReason.read(from: &buf), degradation: try FfiConverterOptionTypeSwapDegradation.read(from: &buf)
         )
         
-        case 2: return .orchestra(orderId: try FfiConverterString.read(from: &buf), quoteId: try FfiConverterString.read(from: &buf), readToken: try FfiConverterOptionString.read(from: &buf), chain: try FfiConverterString.read(from: &buf), chainId: try FfiConverterOptionString.read(from: &buf), asset: try FfiConverterString.read(from: &buf), recipientAddress: try FfiConverterString.read(from: &buf), assetAmountIn: try FfiConverterOptionTypeu128.read(from: &buf), estimatedOut: try FfiConverterTypeu128.read(from: &buf), deliveredAmount: try FfiConverterOptionTypeu128.read(from: &buf), externalTxHash: try FfiConverterOptionString.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), feeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAsset: try FfiConverterOptionString.read(from: &buf), serviceFeeAssetDecimals: try FfiConverterOptionUInt32.read(from: &buf), assetDecimals: try FfiConverterUInt32.read(from: &buf), assetContract: try FfiConverterOptionString.read(from: &buf)
+        case 2: return .orchestra(orderId: try FfiConverterString.read(from: &buf), quoteId: try FfiConverterString.read(from: &buf), readToken: try FfiConverterOptionString.read(from: &buf), chain: try FfiConverterString.read(from: &buf), chainId: try FfiConverterOptionString.read(from: &buf), asset: try FfiConverterString.read(from: &buf), recipientAddress: try FfiConverterString.read(from: &buf), assetAmountIn: try FfiConverterOptionTypeu128.read(from: &buf), estimatedOut: try FfiConverterTypeu128.read(from: &buf), deliveredAmount: try FfiConverterOptionTypeu128.read(from: &buf), externalTxHash: try FfiConverterOptionString.read(from: &buf), refundTxHash: try FfiConverterOptionString.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), feeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAsset: try FfiConverterOptionString.read(from: &buf), serviceFeeAssetDecimals: try FfiConverterOptionUInt32.read(from: &buf), assetDecimals: try FfiConverterUInt32.read(from: &buf), assetContract: try FfiConverterOptionString.read(from: &buf)
         )
         
         case 3: return .boltz(swapId: try FfiConverterString.read(from: &buf), invoice: try FfiConverterString.read(from: &buf), invoiceAmountSats: try FfiConverterUInt64.read(from: &buf), bridgeRef: try FfiConverterOptionString.read(from: &buf), maxSlippageBps: try FfiConverterUInt32.read(from: &buf), quoteDegraded: try FfiConverterBool.read(from: &buf), chain: try FfiConverterString.read(from: &buf), chainId: try FfiConverterOptionString.read(from: &buf), asset: try FfiConverterString.read(from: &buf), recipientAddress: try FfiConverterString.read(from: &buf), estimatedOut: try FfiConverterTypeu128.read(from: &buf), deliveredAmount: try FfiConverterOptionTypeu128.read(from: &buf), status: try FfiConverterTypeConversionStatus.read(from: &buf), assetAmountIn: try FfiConverterOptionTypeu128.read(from: &buf), feeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAmount: try FfiConverterOptionTypeu128.read(from: &buf), serviceFeeAsset: try FfiConverterOptionString.read(from: &buf), assetDecimals: try FfiConverterUInt32.read(from: &buf), assetContract: try FfiConverterOptionString.read(from: &buf)
@@ -43466,7 +43473,7 @@ public struct FfiConverterTypeConversionInfo: FfiConverterRustBuffer {
             FfiConverterOptionTypeSwapDegradation.write(degradation, into: &buf)
             
         
-        case let .orchestra(orderId,quoteId,readToken,chain,chainId,asset,recipientAddress,assetAmountIn,estimatedOut,deliveredAmount,externalTxHash,status,feeAmount,serviceFeeAmount,serviceFeeAsset,serviceFeeAssetDecimals,assetDecimals,assetContract):
+        case let .orchestra(orderId,quoteId,readToken,chain,chainId,asset,recipientAddress,assetAmountIn,estimatedOut,deliveredAmount,externalTxHash,refundTxHash,status,feeAmount,serviceFeeAmount,serviceFeeAsset,serviceFeeAssetDecimals,assetDecimals,assetContract):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(orderId, into: &buf)
             FfiConverterString.write(quoteId, into: &buf)
@@ -43479,6 +43486,7 @@ public struct FfiConverterTypeConversionInfo: FfiConverterRustBuffer {
             FfiConverterTypeu128.write(estimatedOut, into: &buf)
             FfiConverterOptionTypeu128.write(deliveredAmount, into: &buf)
             FfiConverterOptionString.write(externalTxHash, into: &buf)
+            FfiConverterOptionString.write(refundTxHash, into: &buf)
             FfiConverterTypeConversionStatus.write(status, into: &buf)
             FfiConverterOptionTypeu128.write(feeAmount, into: &buf)
             FfiConverterOptionTypeu128.write(serviceFeeAmount, into: &buf)
@@ -48816,7 +48824,14 @@ public enum ReceivePaymentMethod {
          * When absent, falls back to `CrossChainConfig::default_target_overpay_bps`
          * then the built-in default (15 bps). Ignored when `fee_mode`
          * is `FeesIncluded`.
-         */targetOverpayBps: UInt32?
+         */targetOverpayBps: UInt32?, 
+        /**
+         * The payer's address on the route's chain, where the provider returns
+         * a deposit it can't deliver. Required when the payer sends from an
+         * exchange, and advised for BSC and Tron: unset, the provider refunds
+         * the sending address only when that is safe, and otherwise holds the
+         * deposit for manual recovery. Must not be a token contract.
+         */refundAddress: String?
     )
 }
 
@@ -48846,7 +48861,7 @@ public struct FfiConverterTypeReceivePaymentMethod: FfiConverterRustBuffer {
         case 4: return .bolt11Invoice(description: try FfiConverterString.read(from: &buf), amountSats: try FfiConverterOptionUInt64.read(from: &buf), expirySecs: try FfiConverterOptionUInt32.read(from: &buf), paymentHash: try FfiConverterOptionString.read(from: &buf), receiverIdentityPublicKey: try FfiConverterOptionString.read(from: &buf), preimage: try FfiConverterOptionString.read(from: &buf)
         )
         
-        case 5: return .crossChain(route: try FfiConverterTypeCrossChainRoutePair.read(from: &buf), amount: try FfiConverterTypeu128.read(from: &buf), destination: try FfiConverterOptionTypeSparkAsset.read(from: &buf), feeMode: try FfiConverterOptionTypeCrossChainFeeMode.read(from: &buf), maxSlippageBps: try FfiConverterOptionUInt32.read(from: &buf), targetOverpayBps: try FfiConverterOptionUInt32.read(from: &buf)
+        case 5: return .crossChain(route: try FfiConverterTypeCrossChainRoutePair.read(from: &buf), amount: try FfiConverterTypeu128.read(from: &buf), destination: try FfiConverterOptionTypeSparkAsset.read(from: &buf), feeMode: try FfiConverterOptionTypeCrossChainFeeMode.read(from: &buf), maxSlippageBps: try FfiConverterOptionUInt32.read(from: &buf), targetOverpayBps: try FfiConverterOptionUInt32.read(from: &buf), refundAddress: try FfiConverterOptionString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -48885,7 +48900,7 @@ public struct FfiConverterTypeReceivePaymentMethod: FfiConverterRustBuffer {
             FfiConverterOptionString.write(preimage, into: &buf)
             
         
-        case let .crossChain(route,amount,destination,feeMode,maxSlippageBps,targetOverpayBps):
+        case let .crossChain(route,amount,destination,feeMode,maxSlippageBps,targetOverpayBps,refundAddress):
             writeInt(&buf, Int32(5))
             FfiConverterTypeCrossChainRoutePair.write(route, into: &buf)
             FfiConverterTypeu128.write(amount, into: &buf)
@@ -48893,6 +48908,7 @@ public struct FfiConverterTypeReceivePaymentMethod: FfiConverterRustBuffer {
             FfiConverterOptionTypeCrossChainFeeMode.write(feeMode, into: &buf)
             FfiConverterOptionUInt32.write(maxSlippageBps, into: &buf)
             FfiConverterOptionUInt32.write(targetOverpayBps, into: &buf)
+            FfiConverterOptionString.write(refundAddress, into: &buf)
             
         }
     }
