@@ -1433,6 +1433,13 @@ public protocol BreezSdkProtocol: AnyObject, Sendable {
     func fetchConversionLimits(request: FetchConversionLimitsRequest) async throws  -> FetchConversionLimitsResponse
     
     /**
+     * Fetches the payments locked to a payment hash from the Spark operators, without reading
+     * the local payment history. Covers Spark HTLC payments and Lightning payments this wallet
+     * sent or received.
+     */
+    func fetchHtlcPayments(request: FetchHtlcPaymentsRequest) async throws  -> FetchHtlcPaymentsResponse
+    
+    /**
      * Fetches the status of this wallet's Lightning payment of a Bolt11 invoice from the Spark
      * operators, without reading the local payment history. A payment made by a direct Spark
      * transfer to the invoice's Spark address is not covered.
@@ -2424,6 +2431,28 @@ open func fetchConversionLimits(request: FetchConversionLimitsRequest)async thro
             completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
             freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFetchConversionLimitsResponse_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
+     * Fetches the payments locked to a payment hash from the Spark operators, without reading
+     * the local payment history. Covers Spark HTLC payments and Lightning payments this wallet
+     * sent or received.
+     */
+open func fetchHtlcPayments(request: FetchHtlcPaymentsRequest)async throws  -> FetchHtlcPaymentsResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_breez_sdk_spark_fn_method_breezsdk_fetch_htlc_payments(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeFetchHtlcPaymentsRequest_lower(request)
+                )
+            },
+            pollFunc: ffi_breez_sdk_spark_rust_future_poll_rust_buffer,
+            completeFunc: ffi_breez_sdk_spark_rust_future_complete_rust_buffer,
+            freeFunc: ffi_breez_sdk_spark_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFetchHtlcPaymentsResponse_lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
@@ -15101,10 +15130,16 @@ public struct BridgeRoutePair {
      */
     public var destination: BridgeRoutePairSide
     /**
-     * Bounds on what the payer pays, in `source` base units. Unset when the
-     * provider publishes none.
+     * Bounds on what the payer pays, in `source` base units. On a route
+     * paying Bitcoin on-chain, the minimum is what must reach the recipient.
+     * Unset when the provider publishes none.
      */
     public var limits: CrossChainRouteLimits?
+    /**
+     * The side whose base units [`CreateBridgeRequest::amount`] is in, per
+     * its `decimals`.
+     */
+    public var amountSide: BridgeAmountSide
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -15116,13 +15151,19 @@ public struct BridgeRoutePair {
          * What the recipient receives.
          */destination: BridgeRoutePairSide, 
         /**
-         * Bounds on what the payer pays, in `source` base units. Unset when the
-         * provider publishes none.
-         */limits: CrossChainRouteLimits?) {
+         * Bounds on what the payer pays, in `source` base units. On a route
+         * paying Bitcoin on-chain, the minimum is what must reach the recipient.
+         * Unset when the provider publishes none.
+         */limits: CrossChainRouteLimits?, 
+        /**
+         * The side whose base units [`CreateBridgeRequest::amount`] is in, per
+         * its `decimals`.
+         */amountSide: BridgeAmountSide) {
         self.provider = provider
         self.source = source
         self.destination = destination
         self.limits = limits
+        self.amountSide = amountSide
     }
 }
 
@@ -15145,6 +15186,9 @@ extension BridgeRoutePair: Equatable, Hashable {
         if lhs.limits != rhs.limits {
             return false
         }
+        if lhs.amountSide != rhs.amountSide {
+            return false
+        }
         return true
     }
 
@@ -15153,6 +15197,7 @@ extension BridgeRoutePair: Equatable, Hashable {
         hasher.combine(source)
         hasher.combine(destination)
         hasher.combine(limits)
+        hasher.combine(amountSide)
     }
 }
 
@@ -15168,7 +15213,8 @@ public struct FfiConverterTypeBridgeRoutePair: FfiConverterRustBuffer {
                 provider: FfiConverterTypeCrossChainProvider.read(from: &buf), 
                 source: FfiConverterTypeBridgeRoutePairSide.read(from: &buf), 
                 destination: FfiConverterTypeBridgeRoutePairSide.read(from: &buf), 
-                limits: FfiConverterOptionTypeCrossChainRouteLimits.read(from: &buf)
+                limits: FfiConverterOptionTypeCrossChainRouteLimits.read(from: &buf), 
+                amountSide: FfiConverterTypeBridgeAmountSide.read(from: &buf)
         )
     }
 
@@ -15177,6 +15223,7 @@ public struct FfiConverterTypeBridgeRoutePair: FfiConverterRustBuffer {
         FfiConverterTypeBridgeRoutePairSide.write(value.source, into: &buf)
         FfiConverterTypeBridgeRoutePairSide.write(value.destination, into: &buf)
         FfiConverterOptionTypeCrossChainRouteLimits.write(value.limits, into: &buf)
+        FfiConverterTypeBridgeAmountSide.write(value.amountSide, into: &buf)
     }
 }
 
@@ -15201,20 +15248,22 @@ public func FfiConverterTypeBridgeRoutePair_lower(_ value: BridgeRoutePair) -> R
  */
 public struct BridgeRoutePairSide {
     /**
-     * `"spark"`, `"lightning"`, or another chain, e.g. `"base"` or `"tron"`.
+     * `"spark"`, `"lightning"`, `"bitcoin"`, or another chain, e.g. `"base"`
+     * or `"tron"`.
      */
     public var chain: String
     /**
-     * EVM `chainId` as a decimal string. Unset on chains without one.
+     * The provider's id for the chain: the EVM `chainId` as a decimal string,
+     * or an id such as `"xrp:mainnet"` elsewhere. Unset when it gives none.
      */
     public var chainId: String?
     /**
-     * Asset symbol, e.g. `"USDC"`, `"USDT"`, `"BTC"` or `"USDB"`.
+     * Asset symbol, e.g. `"USDC"`, `"USDT"`, `"BTC"`, `"USDB"` or `"ETH"`.
      */
     public var asset: String
     /**
      * Token contract or mint address, or the token identifier on Spark.
-     * Unset for Bitcoin.
+     * Unset for Bitcoin and for a chain's native coin.
      */
     public var contractAddress: String?
     public var decimals: UInt8
@@ -15223,17 +15272,19 @@ public struct BridgeRoutePairSide {
     // declare one manually.
     public init(
         /**
-         * `"spark"`, `"lightning"`, or another chain, e.g. `"base"` or `"tron"`.
+         * `"spark"`, `"lightning"`, `"bitcoin"`, or another chain, e.g. `"base"`
+         * or `"tron"`.
          */chain: String, 
         /**
-         * EVM `chainId` as a decimal string. Unset on chains without one.
+         * The provider's id for the chain: the EVM `chainId` as a decimal string,
+         * or an id such as `"xrp:mainnet"` elsewhere. Unset when it gives none.
          */chainId: String?, 
         /**
-         * Asset symbol, e.g. `"USDC"`, `"USDT"`, `"BTC"` or `"USDB"`.
+         * Asset symbol, e.g. `"USDC"`, `"USDT"`, `"BTC"`, `"USDB"` or `"ETH"`.
          */asset: String, 
         /**
          * Token contract or mint address, or the token identifier on Spark.
-         * Unset for Bitcoin.
+         * Unset for Bitcoin and for a chain's native coin.
          */contractAddress: String?, decimals: UInt8) {
         self.chain = chain
         self.chainId = chainId
@@ -16846,11 +16897,23 @@ public func FfiConverterTypeClaimDepositResponse_lower(_ value: ClaimDepositResp
 
 public struct ClaimHtlcPaymentRequest {
     public var preimage: String
+    /**
+     * The ID of the payment to claim. When set, the claim fails unless the claimable HTLC
+     * with the preimage's payment hash is this payment. A payment hash can be reused once
+     * an earlier HTLC locked to it was returned.
+     */
+    public var transferId: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(preimage: String) {
+    public init(preimage: String, 
+        /**
+         * The ID of the payment to claim. When set, the claim fails unless the claimable HTLC
+         * with the preimage's payment hash is this payment. A payment hash can be reused once
+         * an earlier HTLC locked to it was returned.
+         */transferId: String? = nil) {
         self.preimage = preimage
+        self.transferId = transferId
     }
 }
 
@@ -16864,11 +16927,15 @@ extension ClaimHtlcPaymentRequest: Equatable, Hashable {
         if lhs.preimage != rhs.preimage {
             return false
         }
+        if lhs.transferId != rhs.transferId {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(preimage)
+        hasher.combine(transferId)
     }
 }
 
@@ -16881,12 +16948,14 @@ public struct FfiConverterTypeClaimHtlcPaymentRequest: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClaimHtlcPaymentRequest {
         return
             try ClaimHtlcPaymentRequest(
-                preimage: FfiConverterString.read(from: &buf)
+                preimage: FfiConverterString.read(from: &buf), 
+                transferId: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: ClaimHtlcPaymentRequest, into buf: inout [UInt8]) {
         FfiConverterString.write(value.preimage, into: &buf)
+        FfiConverterOptionString.write(value.transferId, into: &buf)
     }
 }
 
@@ -19000,10 +19069,11 @@ public struct CreateBridgeRequest {
      */
     public var route: BridgeRoutePair
     /**
-     * Amount in stablecoin base units: the destination asset when the
-     * recipient is paid in a stablecoin, the source asset otherwise, per that
-     * side's `decimals`. At parity this is the USD value: `1_000_000` is 1
-     * USDC at 6 decimals.
+     * Amount in the base units of the route's `amount_side`, per its
+     * `decimals`: the recipient's stablecoin when they are paid in one,
+     * otherwise what the payer pays (sats over Lightning, or their
+     * stablecoin). A stablecoin amount at parity is the USD value:
+     * `1_000_000` is 1 USDC at 6 decimals.
      */
     public var amount: U128
     /**
@@ -19039,10 +19109,11 @@ public struct CreateBridgeRequest {
          * for this recipient.
          */route: BridgeRoutePair, 
         /**
-         * Amount in stablecoin base units: the destination asset when the
-         * recipient is paid in a stablecoin, the source asset otherwise, per that
-         * side's `decimals`. At parity this is the USD value: `1_000_000` is 1
-         * USDC at 6 decimals.
+         * Amount in the base units of the route's `amount_side`, per its
+         * `decimals`: the recipient's stablecoin when they are paid in one,
+         * otherwise what the payer pays (sats over Lightning, or their
+         * stablecoin). A stablecoin amount at parity is the USD value:
+         * `1_000_000` is 1 USDC at 6 decimals.
          */amount: U128, 
         /**
          * The payer's address on the source chain, where the deposit is refunded
@@ -20030,15 +20101,17 @@ public struct CrossChainReceiveInfo {
     /**
      * Amount the receiver will see, net of provider fees, in
      * destination-asset base units. Sats when receiving BTC, token base
-     * units when receiving a Spark token (e.g. USDB), or stablecoin base
-     * units when the receiver is on another chain. The final delivered
-     * amount may move within the slippage tolerance.
+     * units when receiving a Spark token (e.g. USDB), or the stablecoin's or
+     * native coin's base units (e.g. wei for ETH) when the receiver is on
+     * another chain. The final delivered amount may move within the slippage
+     * tolerance.
      */
     public var expectedReceivedAmount: U128
     /**
      * Symbol of the asset `expected_received_amount` is denominated in, as
      * the provider reports it: `"BTC"` for sats, a Spark token symbol (e.g.
-     * `"USDB"`), or the stablecoin when the receiver is on another chain.
+     * `"USDB"`), or the stablecoin or native coin (e.g. `"ETH"`) when the
+     * receiver is on another chain.
      */
     public var destinationAsset: String
     /**
@@ -20086,14 +20159,16 @@ public struct CrossChainReceiveInfo {
         /**
          * Amount the receiver will see, net of provider fees, in
          * destination-asset base units. Sats when receiving BTC, token base
-         * units when receiving a Spark token (e.g. USDB), or stablecoin base
-         * units when the receiver is on another chain. The final delivered
-         * amount may move within the slippage tolerance.
+         * units when receiving a Spark token (e.g. USDB), or the stablecoin's or
+         * native coin's base units (e.g. wei for ETH) when the receiver is on
+         * another chain. The final delivered amount may move within the slippage
+         * tolerance.
          */expectedReceivedAmount: U128, 
         /**
          * Symbol of the asset `expected_received_amount` is denominated in, as
          * the provider reports it: `"BTC"` for sats, a Spark token symbol (e.g.
-         * `"USDB"`), or the stablecoin when the receiver is on another chain.
+         * `"USDB"`), or the stablecoin or native coin (e.g. `"ETH"`) when the
+         * receiver is on another chain.
          */destinationAsset: String, 
         /**
          * Spark token identifier when the destination is a Spark token. Absent
@@ -24790,6 +24865,144 @@ public func FfiConverterTypeFetchConversionLimitsResponse_lower(_ value: FetchCo
 }
 
 
+public struct FetchHtlcPaymentsRequest {
+    /**
+     * The hex-encoded payment hash to look up
+     */
+    public var paymentHash: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The hex-encoded payment hash to look up
+         */paymentHash: String) {
+        self.paymentHash = paymentHash
+    }
+}
+
+#if compiler(>=6)
+extension FetchHtlcPaymentsRequest: Sendable {}
+#endif
+
+
+extension FetchHtlcPaymentsRequest: Equatable, Hashable {
+    public static func ==(lhs: FetchHtlcPaymentsRequest, rhs: FetchHtlcPaymentsRequest) -> Bool {
+        if lhs.paymentHash != rhs.paymentHash {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(paymentHash)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFetchHtlcPaymentsRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FetchHtlcPaymentsRequest {
+        return
+            try FetchHtlcPaymentsRequest(
+                paymentHash: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FetchHtlcPaymentsRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.paymentHash, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFetchHtlcPaymentsRequest_lift(_ buf: RustBuffer) throws -> FetchHtlcPaymentsRequest {
+    return try FfiConverterTypeFetchHtlcPaymentsRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFetchHtlcPaymentsRequest_lower(_ value: FetchHtlcPaymentsRequest) -> RustBuffer {
+    return FfiConverterTypeFetchHtlcPaymentsRequest.lower(value)
+}
+
+
+public struct FetchHtlcPaymentsResponse {
+    /**
+     * The payments this wallet sent or received that are locked to the payment hash, newest
+     * first. Claimed and returned ones are included.
+     */
+    public var payments: [HtlcPayment]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The payments this wallet sent or received that are locked to the payment hash, newest
+         * first. Claimed and returned ones are included.
+         */payments: [HtlcPayment]) {
+        self.payments = payments
+    }
+}
+
+#if compiler(>=6)
+extension FetchHtlcPaymentsResponse: Sendable {}
+#endif
+
+
+extension FetchHtlcPaymentsResponse: Equatable, Hashable {
+    public static func ==(lhs: FetchHtlcPaymentsResponse, rhs: FetchHtlcPaymentsResponse) -> Bool {
+        if lhs.payments != rhs.payments {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(payments)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFetchHtlcPaymentsResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FetchHtlcPaymentsResponse {
+        return
+            try FetchHtlcPaymentsResponse(
+                payments: FfiConverterSequenceTypeHtlcPayment.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FetchHtlcPaymentsResponse, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeHtlcPayment.write(value.payments, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFetchHtlcPaymentsResponse_lift(_ buf: RustBuffer) throws -> FetchHtlcPaymentsResponse {
+    return try FfiConverterTypeFetchHtlcPaymentsResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFetchHtlcPaymentsResponse_lower(_ value: FetchHtlcPaymentsResponse) -> RustBuffer {
+    return FfiConverterTypeFetchHtlcPaymentsResponse.lower(value)
+}
+
+
 public struct FetchLightningSendStatusRequest {
     /**
      * The Bolt11 invoice to look up
@@ -25154,7 +25367,8 @@ public func FfiConverterTypeFreezeIssuerTokenResponse_lower(_ value: FreezeIssue
 public struct GetBridgeRoutesRequest {
     /**
      * Who to pay: a Spark address, a Lightning address (a Cash App
-     * `$cashtag` included), or an EVM/Solana/Tron address or URI.
+     * `$cashtag` included), a Bitcoin address or BIP21 URI, an
+     * EVM/Solana/Tron address or URI, or an XRP or Zcash transparent address.
      */
     public var recipient: String
 
@@ -25163,7 +25377,8 @@ public struct GetBridgeRoutesRequest {
     public init(
         /**
          * Who to pay: a Spark address, a Lightning address (a Cash App
-         * `$cashtag` included), or an EVM/Solana/Tron address or URI.
+         * `$cashtag` included), a Bitcoin address or BIP21 URI, an
+         * EVM/Solana/Tron address or URI, or an XRP or Zcash transparent address.
          */recipient: String) {
         self.recipient = recipient
     }
@@ -26171,6 +26386,121 @@ public func FfiConverterTypeHashedMessageBytes_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeHashedMessageBytes_lower(_ value: HashedMessageBytes) -> RustBuffer {
     return FfiConverterTypeHashedMessageBytes.lower(value)
+}
+
+
+/**
+ * A payment locked to a payment hash, as the Spark operators report it.
+ */
+public struct HtlcPayment {
+    /**
+     * The payment ID, the same one the payment list uses
+     */
+    public var id: String
+    public var paymentType: PaymentType
+    /**
+     * The amount the HTLC locks. For a Lightning send this includes the fee.
+     */
+    public var amountSats: UInt64
+    /**
+     * When the HTLC was created, as a unix timestamp in seconds
+     */
+    public var timestamp: UInt64
+    public var htlcDetails: SparkHtlcDetails
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The payment ID, the same one the payment list uses
+         */id: String, paymentType: PaymentType, 
+        /**
+         * The amount the HTLC locks. For a Lightning send this includes the fee.
+         */amountSats: UInt64, 
+        /**
+         * When the HTLC was created, as a unix timestamp in seconds
+         */timestamp: UInt64, htlcDetails: SparkHtlcDetails) {
+        self.id = id
+        self.paymentType = paymentType
+        self.amountSats = amountSats
+        self.timestamp = timestamp
+        self.htlcDetails = htlcDetails
+    }
+}
+
+#if compiler(>=6)
+extension HtlcPayment: Sendable {}
+#endif
+
+
+extension HtlcPayment: Equatable, Hashable {
+    public static func ==(lhs: HtlcPayment, rhs: HtlcPayment) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.paymentType != rhs.paymentType {
+            return false
+        }
+        if lhs.amountSats != rhs.amountSats {
+            return false
+        }
+        if lhs.timestamp != rhs.timestamp {
+            return false
+        }
+        if lhs.htlcDetails != rhs.htlcDetails {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(paymentType)
+        hasher.combine(amountSats)
+        hasher.combine(timestamp)
+        hasher.combine(htlcDetails)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHtlcPayment: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HtlcPayment {
+        return
+            try HtlcPayment(
+                id: FfiConverterString.read(from: &buf), 
+                paymentType: FfiConverterTypePaymentType.read(from: &buf), 
+                amountSats: FfiConverterUInt64.read(from: &buf), 
+                timestamp: FfiConverterUInt64.read(from: &buf), 
+                htlcDetails: FfiConverterTypeSparkHtlcDetails.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HtlcPayment, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterTypePaymentType.write(value.paymentType, into: &buf)
+        FfiConverterUInt64.write(value.amountSats, into: &buf)
+        FfiConverterUInt64.write(value.timestamp, into: &buf)
+        FfiConverterTypeSparkHtlcDetails.write(value.htlcDetails, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHtlcPayment_lift(_ buf: RustBuffer) throws -> HtlcPayment {
+    return try FfiConverterTypeHtlcPayment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHtlcPayment_lower(_ value: HtlcPayment) -> RustBuffer {
+    return FfiConverterTypeHtlcPayment.lower(value)
 }
 
 
@@ -42321,16 +42651,96 @@ extension BitcoinNetwork: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * The side of a [`BridgeRoutePair`] whose base units an amount is in.
+ */
+
+public enum BridgeAmountSide {
+    
+    /**
+     * What the payer pays.
+     */
+    case source
+    /**
+     * What the recipient receives.
+     */
+    case destination
+}
+
+
+#if compiler(>=6)
+extension BridgeAmountSide: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBridgeAmountSide: FfiConverterRustBuffer {
+    typealias SwiftType = BridgeAmountSide
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BridgeAmountSide {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .source
+        
+        case 2: return .destination
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BridgeAmountSide, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .source:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .destination:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBridgeAmountSide_lift(_ buf: RustBuffer) throws -> BridgeAmountSide {
+    return try FfiConverterTypeBridgeAmountSide.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBridgeAmountSide_lower(_ value: BridgeAmountSide) -> RustBuffer {
+    return FfiConverterTypeBridgeAmountSide.lower(value)
+}
+
+
+extension BridgeAmountSide: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Where a bridge is in its lifecycle.
  */
 
 public enum BridgeStatus {
     
     /**
-     * The bridge was created, and the payer hasn't paid yet. A bridge from
-     * Cash App becomes `Expired` once it can no longer be paid. Other unpaid
-     * bridges stay `Created` after their `expires_at`, and a late deposit on
-     * another chain may still be accepted at a new price.
+     * The bridge was created, and the provider hasn't registered a payment
+     * yet. A payment over Lightning can take several minutes to register. A
+     * bridge from Cash App becomes `Expired` once it can no longer be paid.
+     * Other unpaid bridges stay `Created` after their `expires_at`, and a
+     * late deposit on another chain may still be accepted at a new price.
      */
     case created
     /**
@@ -44324,6 +44734,8 @@ public enum CrossChainAddressFamily {
     case evm
     case solana
     case tron
+    case xrp
+    case zcash
 }
 
 
@@ -44347,6 +44759,10 @@ public struct FfiConverterTypeCrossChainAddressFamily: FfiConverterRustBuffer {
         
         case 3: return .tron
         
+        case 4: return .xrp
+        
+        case 5: return .zcash
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -44365,6 +44781,14 @@ public struct FfiConverterTypeCrossChainAddressFamily: FfiConverterRustBuffer {
         
         case .tron:
             writeInt(&buf, Int32(3))
+        
+        
+        case .xrp:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .zcash:
+            writeInt(&buf, Int32(5))
         
         }
     }
@@ -55982,6 +56406,31 @@ fileprivate struct FfiConverterSequenceTypeFiatCurrency: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeHtlcPayment: FfiConverterRustBuffer {
+    typealias SwiftType = [HtlcPayment]
+
+    public static func write(_ value: [HtlcPayment], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHtlcPayment.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HtlcPayment] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HtlcPayment]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHtlcPayment.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeIdentifierCommitmentPair: FfiConverterRustBuffer {
     typealias SwiftType = [IdentifierCommitmentPair]
 
@@ -57829,6 +58278,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_fetch_conversion_limits() != 50958) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_breez_sdk_spark_checksum_method_breezsdk_fetch_htlc_payments() != 34914) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_breez_sdk_spark_checksum_method_breezsdk_fetch_lightning_send_status() != 52698) {
